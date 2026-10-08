@@ -89,6 +89,47 @@ Las solicitudes nuevas de búsqueda directa entregan al correo válido escrito e
 
 La lectura automática del PDF no inventa el correo del paciente ni marca como verificado el correo del formulario.
 
+## Bot de WhatsApp
+
+El paciente escribe al número de WhatsApp de la clínica y el bot responde automáticamente:
+
+1. Si el mensaje pide la historia clínica (palabras como *historia*, *clínica*, *HC*, *epicrisis* o *copia*), responde con un enlace personal al formulario. Cualquier otro mensaje recibe un menú que indica escribir **HISTORIA**.
+2. El enlace vence en 6 horas (`whatsapp_link_seconds`), solo se usa una vez y se guarda como hash. El formulario muestra «Solicitud iniciada desde WhatsApp».
+3. Al enviar el formulario se aplica la misma búsqueda de siempre:
+   - **Historia encontrada:** se encola el correo (como hoy) y, además, se envían por el chat un mensaje con el radicado y cada PDF como documento.
+   - **Historia no encontrada** (sin coincidencias, paquete no disponible o entrega no habilitada): la solicitud queda registrada con su radicado y se envía por WhatsApp un mensaje con ese número. Aparece en **Solicitudes → Pendientes** para su gestión.
+   - **Varias atenciones:** el paciente elige en la página; al confirmar se envía igual por correo y WhatsApp.
+4. **Historia cargada después:** cuando la persona encargada sube el PDF de un paciente con una solicitud de WhatsApp pendiente (`no_matches` o `unavailable`, creada en los últimos `whatsapp_pending_days` = 30 días), el sistema vuelve a buscar y, si ahora coincide nombre, documento y fecha, la envía sola por WhatsApp y correo con el mismo radicado. Si la fecha indicada por el paciente no coincide con la del PDF, la solicitud sigue pendiente para gestión manual.
+5. **Órdenes médicas:** al importar cada PDF se detectan, por su título al inicio de línea, fórmula médica, orden de laboratorio, de imágenes, de procedimiento, de terapias, remisión/interconsulta e incapacidad (`src/MedicalOrders.php`). Tras los documentos, el bot envía una guía por tipo de orden (por ejemplo, la fórmula sirve para reclamar medicamentos en la farmacia) y la imagen de la página donde está cada una (máximo 6). Los textos de guía son administrativos y se editan en `MedicalOrders::TYPES`. Para convertir páginas en imagen se necesita `pdftoppm` (poppler-utils, ya incluido en el `Dockerfile`), Ghostscript o la extensión Imagick; sin ninguno el bot solo indica el documento y la página. Para historias cargadas antes de esta función: `php bin/detect-orders.php`.
+
+### Gestión de solicitudes (Acceso interno → Solicitudes)
+
+- **Pendientes** (predeterminado) muestra las solicitudes sin historia enviada, de la más antigua a la más reciente, con el plazo informado al paciente (`whatsapp_estimated_hours`, 24 h): *A tiempo*, *Por vencer* (menos de 6 h) o *Vencida*. **Todas** es el buscador general. La pestaña muestra el número de pendientes.
+- En el detalle de una pendiente, **Responder solicitud** permite:
+  - **Enviar esta historia**: se listan las atenciones cargadas del mismo tipo y número de documento. Solo se puede enviar si el nombre coincide, aunque la fecha indicada por el paciente sea otra. Se envía por correo y, si vino de WhatsApp, por el chat.
+  - **Cargar el PDF de esta solicitud**: se guarda en el repositorio y, si documento y nombre coinciden, se envía automáticamente.
+  - **Responder «No registra»**: cierra la solicitud y avisa por correo y WhatsApp, pidiendo verificar el número de documento y volver a solicitar.
+- Queda registrado qué administrador respondió y cuándo.
+
+**Plantillas** (Acceso interno → Plantillas): textos de bienvenida, enlace al formulario, historia encontrada, solicitud con radicado y «No registra». Cada plantilla admite solo sus variables (`{radicado}`, `{nombre}`, `{horas}`, `{enlace}`…). En WhatsApp, `*texto*` se ve en negrita; en el correo se quitan los asteriscos. Se pueden restaurar al texto predeterminado.
+
+Prueba: `php tests/requests-admin.php`.
+
+Los mensajes salen por `whatsapp_outbox` y los procesa el mismo `php bin/worker.php --loop`. En el detalle de cada solicitud se ven el número y el estado de los mensajes de WhatsApp. Con `whatsapp_transport = local` (predeterminado) no se envía nada: cada mensaje se guarda en `storage/wa-outbox/ID.json`.
+
+### Conectar con WhatsApp Cloud API (Meta)
+
+1. En [Meta for Developers](https://developers.facebook.com/) crea una app de tipo *Business* y agrega el producto **WhatsApp**. Registra el número de la clínica (o usa el número de prueba).
+2. Copia el **Phone number ID** y genera un **token permanente** de un usuario del sistema con permisos `whatsapp_business_messaging`. Copia también la **clave secreta de la app** (Configuración → Básica).
+3. Agrega estos valores a `config/local.php` (ver `config/local.example.php`), con `whatsapp_transport => cloud` y un `whatsapp_verify_token` inventado por ti.
+4. El webhook necesita una URL pública HTTPS. En local puedes usar un túnel, por ejemplo `cloudflared tunnel --url http://localhost` o `ngrok http 80`. Pon la URL del túnel hacia `public/` en `public_url`.
+5. En Meta → WhatsApp → Configuración → Webhook: URL de devolución `<public_url>/whatsapp.php`, el mismo token de verificación, y suscríbete al campo **messages**.
+6. Ejecuta `php bin/setup.php` (crea las tablas nuevas sin borrar datos) y reinicia el procesador.
+
+Límites: WhatsApp solo permite responder con mensajes libres durante las 24 horas siguientes al último mensaje del paciente; fuera de ese plazo el mensaje queda en `waiting_window` (conserva lo ya enviado) y sale automáticamente cuando el paciente vuelve a escribir al chat; si no escribe en `whatsapp_window_wait_days` (7) se marca `window_expired` (el correo sí se envió). Para avisarle por WhatsApp aun con la ventana cerrada, crea en Meta una plantilla aprobada con una variable `{{1}}` (radicado), por ejemplo «Tu historia clínica con radicado {{1}} está lista. Responde a este chat para recibirla.», y configura `whatsapp_template_ready` (y `whatsapp_template_lang`). Las firmas `X-Hub-Signature-256` se validan con la clave secreta; sin ella solo se aceptan pruebas en modo local. Igual que el correo, el número de WhatsApp no verifica la identidad del paciente: la entrega depende de la coincidencia de datos con los PDF.
+
+Prueba: `php tests/whatsapp.php` (base temporal, sin envíos externos).
+
 ## Protección y límites
 
 En el estado de una entrega enviada, simulada, fallida o incierta aparece **Reenviar historia clínica**. Reutiliza el paquete original y el correo de la solicitud, con una espera de 60 segundos desde el último intento y hasta tres reenvíos manuales. No permite reenviar mientras un trabajo esté en cola, enviándose o esperando reintento automático. Cada reenvío conserva el historial anterior y tiene un identificador de mensaje nuevo; valida otra vez el paquete. Para resultados inciertos, la pantalla explica que podría llegar una copia adicional. El botón requiere la sesión de la solicitud y CSRF válido. Un formulario antiguo no puede generar otro envío. Los límites se configuran con `history_resend_seconds` y `history_resend_max`.

@@ -1,0 +1,346 @@
+<?php
+declare(strict_types=1);
+namespace App;
+
+/**
+ * Bot de WhatsApp (Cloud API de Meta): recibe mensajes, entrega el enlace del formulario
+ * y envía la historia o el radicado cuando la solicitud se resuelve.
+ * Los mensajes salientes pasan por whatsapp_outbox y los procesa bin/worker.php.
+ */
+final class WhatsApp
+{
+    private const KEYWORDS = ['historia', 'clinica', 'hc', 'epicrisis', 'copia', 'resultado', '1'];
+
+    public function __construct(private readonly Application $app) {}
+
+    public static function validSignature(string $body, string $header, string $secret): bool
+    {
+        return $secret !== '' && hash_equals('sha256=' . hash_hmac('sha256', $body, $secret), $header);
+    }
+
+    public static function maskPhone(string $phone): string
+    {
+        return '••• ' . substr($phone, -4);
+    }
+
+    /** Procesa el JSON del webhook. Devuelve la cantidad de mensajes nuevos atendidos. */
+    public function receive(array $payload): int
+    {
+        $handled = 0;
+        foreach ($payload['entry'] ?? [] as $entry) foreach ($entry['changes'] ?? [] as $change) {
+            foreach ($change['value']['messages'] ?? [] as $message) {
+                $phone = preg_replace('/\D/', '', (string)($message['from'] ?? ''));
+                $id = (string)($message['id'] ?? '');
+                if ($id === '' || strlen($id) > 190 || strlen($phone) < 8 || strlen($phone) > 20) continue;
+                $type = (string)($message['type'] ?? '');
+                $text = $type === 'text' ? (string)($message['text']['body'] ?? '') : '';
+                if ($type === 'interactive') $text = (string)($message['interactive']['button_reply']['id'] ?? '');
+                $intent = $this->intent($text);
+                // Meta reintenta el webhook: el id del mensaje evita respuestas duplicadas.
+                $new = $this->app->db->run('INSERT IGNORE INTO whatsapp_inbound (wa_message_id,phone,intent,created_at) VALUES (?,?,?,?)', [$id, $phone, $intent, $this->app->now()])->rowCount();
+                if (!$new) continue;
+                try { $this->app->limit('whatsapp-phone:' . $phone, 20, 3600); }
+                catch (\DomainException) { continue; }
+                // Si había mensajes esperando porque la ventana de 24 h estaba cerrada, ya pueden salir.
+                $released = $this->app->db->run("UPDATE whatsapp_outbox SET status='queued',last_error=NULL,available_at=? WHERE phone=? AND status='waiting_window'", [$this->app->now(), $phone])->rowCount();
+                if ($released) $this->queueText($phone, 'Gracias por escribirnos. Te estamos enviando ahora tu historia clínica.', 'release:' . $id);
+                if ($intent === 'history') $this->sendFormLink($phone);
+                elseif (!$released) $this->queueText($phone, $this->menu(), 'menu:' . $id);
+                $handled++;
+            }
+        }
+        return $handled;
+    }
+
+    private function intent(string $text): string
+    {
+        $words = preg_split('/[^a-z0-9]+/', strtolower(ClinicalPdfReader::normalize($text)), -1, PREG_SPLIT_NO_EMPTY);
+        return array_intersect($words, self::KEYWORDS) ? 'history' : 'menu';
+    }
+
+    private function menu(): string
+    {
+        return $this->templates()->render('menu');
+    }
+
+    private function templates(): MessageTemplates { return new MessageTemplates($this->app); }
+
+    /** Enlace público al formulario (sin token: para nuevas solicitudes desde un aviso). */
+    public function portalUrl(): string
+    {
+        return rtrim($this->app->config['public_url'], '/') . '/?page=home';
+    }
+
+    public function sendFormLink(string $phone): void
+    {
+        $token = bin2hex(random_bytes(24));
+        $this->app->db->insert('whatsapp_links', [
+            'token_hash' => hash('sha256', $token), 'phone' => $phone, 'created_at' => $this->app->now(),
+            'expires_at' => date('Y-m-d H:i:s', time() + (int)$this->app->config['whatsapp_link_seconds']),
+        ]);
+        $url = rtrim($this->app->config['public_url'], '/') . '/?page=home&wa=' . $token;
+        $hours = max(1, intdiv((int)$this->app->config['whatsapp_link_seconds'], 3600));
+        $this->queueText($phone, $this->templates()->render('form_link', ['enlace' => $url, 'vigencia' => $hours]), 'link:' . hash('sha256', $token));
+    }
+
+    /** Valida un enlace del formulario sin consumirlo. Devuelve su id. */
+    public function findLink(string $token): ?int
+    {
+        if (!preg_match('/^[a-f0-9]{48}$/', $token)) return null;
+        $link = $this->app->db->one('SELECT id FROM whatsapp_links WHERE token_hash=? AND used_at IS NULL AND expires_at>?', [hash('sha256', $token), $this->app->now()]);
+        return $link ? (int)$link['id'] : null;
+    }
+
+    /** Vincula la solicitud al número que pidió el enlace. Debe ejecutarse dentro de la transacción de la solicitud. */
+    public function attachLink(int $linkId, int $requestId): void
+    {
+        $link = $this->app->db->one('SELECT * FROM whatsapp_links WHERE id=? AND used_at IS NULL AND expires_at>? FOR UPDATE', [$linkId, $this->app->now()]);
+        if (!$link) { $this->app->event($requestId, 'whatsapp_link', 'expired'); return; }
+        $this->app->db->run('UPDATE whatsapp_links SET used_at=?,request_id=? WHERE id=?', [$this->app->now(), $requestId, $linkId]);
+        $this->app->db->run('UPDATE requests SET whatsapp_phone=? WHERE id=?', [$link['phone'], $requestId]);
+        $this->app->event($requestId, 'whatsapp_link', 'attached');
+    }
+
+    /** Encola la historia por WhatsApp si la solicitud vino del chat. */
+    public function queueHistory(int $requestId, int $packageId): void
+    {
+        $request = $this->app->request($requestId);
+        if (!$request['whatsapp_phone']) return;
+        $this->queue($request['whatsapp_phone'], 'history', null, $requestId, $packageId, 'wa:history:' . $requestId);
+    }
+
+    /** Informa por WhatsApp el radicado de una solicitud sin historia disponible. */
+    public function queueNotFound(int $requestId): void
+    {
+        $request = $this->app->request($requestId);
+        if (!$request['whatsapp_phone']) return;
+        $body = $this->templates()->render('pending', ['radicado' => $request['reference'], 'nombre' => $request['claimed_name'], 'horas' => (int)$this->app->config['whatsapp_estimated_hours']]);
+        $this->queue($request['whatsapp_phone'], 'notice', $body, $requestId, null, 'wa:notice:' . $requestId);
+    }
+
+    /** Respuesta «No registra» de la persona encargada. Debe ejecutarse dentro de la transacción del cierre. */
+    public function queueNotRegistered(int $requestId): void
+    {
+        $request = $this->app->request($requestId);
+        if (!$request['whatsapp_phone']) return;
+        $body = $this->templates()->render('not_registered', ['radicado' => $request['reference'], 'nombre' => $request['claimed_name'], 'enlace' => $this->portalUrl()]);
+        $this->queue($request['whatsapp_phone'], 'not_registered', $body, $requestId, null, 'wa:not_registered:' . $requestId);
+    }
+
+    private function queueText(string $phone, string $body, string $dedupe): void
+    {
+        $this->queue($phone, 'text', $body, null, null, 'wa:' . hash('sha256', $dedupe));
+    }
+
+    private function queue(string $phone, string $kind, ?string $body, ?int $requestId, ?int $packageId, string $dedupe): void
+    {
+        $this->app->db->run('INSERT IGNORE INTO whatsapp_outbox (request_id,package_id,phone,kind,encrypted_body,available_at,created_at,dedupe_key) VALUES (?,?,?,?,?,?,?,?)', [
+            $requestId, $packageId, $phone, $kind, $body === null ? null : Crypto::seal($body, $this->app->config['app_key']),
+            $this->app->now(), $this->app->now(), $dedupe,
+        ]);
+    }
+
+    /** Procesa un mensaje pendiente. Devuelve false si no había trabajo. */
+    public function tick(): bool
+    {
+        $db = $this->app->db;
+        $db->run("UPDATE whatsapp_outbox SET status='failed',last_error='window_expired',encrypted_body=NULL WHERE status='waiting_window' AND created_at<?", [date('Y-m-d H:i:s', time() - 86400 * (int)$this->app->config['whatsapp_window_wait_days'])]);
+        $db->run("UPDATE whatsapp_outbox SET status='uncertain',last_error='worker_interrupted',encrypted_body=NULL WHERE status='sending' AND locked_at<?", [date('Y-m-d H:i:s', time() - 300)]);
+        $job = $db->transaction(function () use ($db) {
+            $job = $db->one("SELECT * FROM whatsapp_outbox WHERE status IN ('queued','retry') AND available_at<=? ORDER BY id LIMIT 1 FOR UPDATE", [$this->app->now()]);
+            if (!$job) return null;
+            $db->run("UPDATE whatsapp_outbox SET status='sending',attempts=attempts+1,locked_at=? WHERE id=?", [$this->app->now(), $job['id']]);
+            $job['attempts']++;
+            return $job;
+        });
+        if (!$job) return false;
+        try {
+            $messages = $job['kind'] === 'history' ? $this->historyMessages($job) : [['type' => 'text', 'body' => Crypto::open($job['encrypted_body'], $this->app->config['app_key'])]];
+            if ($this->app->config['whatsapp_transport'] === 'local') {
+                $preview = array_map(fn($m) => match ($m['type']) {
+                    'document' => ['type' => 'document', 'filename' => $m['filename'], 'caption' => $m['caption'] ?? null],
+                    'image' => ['type' => 'image', 'page' => $m['page'], 'caption' => $m['caption'] ?? null],
+                    default => $m,
+                }, $messages);
+                $path = $this->app->config['storage_path'] . '/wa-outbox/' . $job['id'] . '.json';
+                if (!is_dir(dirname($path))) mkdir(dirname($path), 0700, true);
+                file_put_contents($path, json_encode(['to' => $job['phone'], 'messages' => $preview], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX);
+                $this->finish($job, 'simulated');
+                return true;
+            }
+            $transport = $this->app->config['whatsapp_transport'];
+            $configured = $transport === 'cloud' ? $this->app->config['whatsapp_token'] && $this->app->config['whatsapp_phone_number_id']
+                : $transport === 'qr' && $this->app->config['whatsapp_app_secret'] && $this->app->config['whatsapp_qr_url'];
+            if (!$configured) throw new \DomainException('whatsapp_not_configured');
+            // progress conserva los documentos ya aceptados para no repetirlos en un reintento.
+            foreach ($messages as $index => $message) {
+                if ($index < (int)$job['progress']) continue;
+                $transport === 'qr' ? $this->deliverQr($job['phone'], $message) : $this->deliver($job['phone'], $message);
+                $db->run('UPDATE whatsapp_outbox SET progress=? WHERE id=?', [$index + 1, $job['id']]);
+            }
+            $this->finish($job, 'sent');
+        } catch (\DomainException $error) {
+            $this->finish($job, 'failed', $error->getMessage());
+        } catch (WhatsAppTransportError $error) {
+            if ($error->getMessage() === 'outside_24h_window') { $this->waitForWindow($job); return true; }
+            $this->finish($job, $error->retry && $job['attempts'] < $this->app->config['mail_attempts'] ? 'retry' : 'failed', $error->getMessage());
+        }
+        return true;
+    }
+
+    private function historyMessages(array $job): array
+    {
+        $request = $this->app->request((int)$job['request_id']);
+        if (!$request['whatsapp_phone'] || !hash_equals($request['whatsapp_phone'], $job['phone'])) throw new \DomainException('recipient_changed');
+        $package = $this->app->db->one('SELECT p.*,e.patient_id FROM packages p JOIN encounters e ON e.id=p.encounter_id WHERE p.id=?', [$job['package_id']]);
+        if (!$package || (int)$package['patient_id'] !== (int)$request['patient_id'] || (int)$package['encounter_id'] !== (int)$request['encounter_id']) throw new \DomainException('package_mismatch');
+        $this->app->requireVerified((int)$request['id']);
+        $files = $this->app->packageFiles((int)$job['package_id']);
+        $messages = [['type' => 'text', 'body' => $this->templates()->render('history_found', ['radicado' => $request['reference'], 'nombre' => $request['claimed_name'], 'documentos' => count($files), 'correo' => $request['contact_email']])]];
+        foreach ($files as $index => $file) {
+            $messages[] = ['type' => 'document', 'path' => $file['path'], 'filename' => sprintf('Historia_%s_%02d.pdf', $request['reference'], $index + 1),
+                'caption' => sprintf('Documento %d de %d', $index + 1, count($files))];
+        }
+        return array_merge($messages, $this->orderMessages($files));
+    }
+
+    /**
+     * Guía para el paciente sobre cada orden detectada en su historia y la imagen de la página.
+     * Los textos de orientación son administrativos: no reemplazan la indicación del especialista.
+     */
+    private function orderMessages(array $files): array
+    {
+        $position = [];
+        foreach ($files as $index => $file) $position[(int)$file['id']] = $index + 1;
+        $orders = $this->app->db->all('SELECT file_id,order_type,page FROM clinical_orders WHERE file_id IN (' . implode(',', array_keys($position)) . ') ORDER BY file_id,page,id');
+        if (!$orders) return [];
+        $byType = []; $pages = [];
+        foreach ($orders as $order) {
+            $where = count($files) > 1 ? 'documento ' . $position[(int)$order['file_id']] . ', pág. ' . $order['page'] : 'pág. ' . $order['page'];
+            $byType[$order['order_type']][] = $where;
+            $pages[$order['file_id'] . ':' . $order['page']][] = MedicalOrders::label($order['order_type']);
+        }
+        $lines = [];
+        foreach ($byType as $type => $places) {
+            $lines[] = '*' . MedicalOrders::label($type) . '* (' . implode('; ', array_slice($places, 0, 4)) . ")\n" . MedicalOrders::guidance($type);
+        }
+        $messages = [['type' => 'text', 'body' => "En tu historia encontramos estas órdenes de tu especialista:\n\n" . implode("\n\n", $lines) . "\n\nSi tienes dudas sobre cómo usarlas, consulta en tu servicio de salud."]];
+        if (PdfPageImage::available() || $this->app->config['whatsapp_transport'] === 'local') {
+            $filesById = array_column($files, null, 'id');
+            foreach (array_slice($pages, 0, 6, true) as $key => $labels) {
+                [$fileId, $page] = array_map('intval', explode(':', (string)$key));
+                $messages[] = ['type' => 'image', 'path' => $filesById[$fileId]['path'], 'page' => $page, 'caption' => implode(' / ', array_unique($labels))];
+            }
+        }
+        return $messages;
+    }
+
+    private function deliver(string $phone, array $message): void
+    {
+        $payload = ['messaging_product' => 'whatsapp', 'recipient_type' => 'individual', 'to' => $phone];
+        if ($message['type'] === 'document') {
+            $media = $this->call('media', [
+                'messaging_product' => 'whatsapp', 'type' => 'application/pdf',
+                'file' => new \CURLFile($message['path'], 'application/pdf', $message['filename']),
+            ]);
+            if (empty($media['id'])) throw new WhatsAppTransportError('media_upload_without_id', true);
+            $payload += ['type' => 'document', 'document' => ['id' => $media['id'], 'filename' => $message['filename'], 'caption' => $message['caption']]];
+        } elseif ($message['type'] === 'image') {
+            // La página se convierte en el momento del envío; si no se puede, la guía ya indica dónde está.
+            $png = PdfPageImage::render($message['path'], $message['page']);
+            if ($png === null) return;
+            try {
+                $media = $this->call('media', ['messaging_product' => 'whatsapp', 'type' => 'image/png', 'file' => new \CURLFile($png, 'image/png', 'orden.png')]);
+            } finally { @unlink($png); }
+            if (empty($media['id'])) throw new WhatsAppTransportError('media_upload_without_id', true);
+            $payload += ['type' => 'image', 'image' => ['id' => $media['id'], 'caption' => $message['caption']]];
+        } else {
+            $payload += ['type' => 'text', 'text' => ['preview_url' => true, 'body' => $message['body']]];
+        }
+        $this->call('messages', $payload);
+    }
+
+    /**
+     * Transporte de pruebas: servicio local tools/whatsapp-qr (WhatsApp Web vinculado por QR a un número secundario).
+     * No es oficial; solo para datos ficticios. La petición va firmada con whatsapp_app_secret.
+     */
+    private function deliverQr(string $phone, array $message): void
+    {
+        $payload = ['to' => $phone, 'type' => $message['type']];
+        if ($message['type'] === 'document') {
+            $payload += ['data' => base64_encode((string)file_get_contents($message['path'])), 'filename' => $message['filename'], 'caption' => $message['caption']];
+        } elseif ($message['type'] === 'image') {
+            $png = PdfPageImage::render($message['path'], $message['page']);
+            if ($png === null) return;
+            try { $payload += ['data' => base64_encode((string)file_get_contents($png)), 'filename' => 'orden.png', 'caption' => $message['caption']]; }
+            finally { @unlink($png); }
+        } else {
+            $payload['body'] = $message['body'];
+        }
+        $body = json_encode($payload, JSON_UNESCAPED_UNICODE);
+        $curl = curl_init(rtrim($this->app->config['whatsapp_qr_url'], '/') . '/send');
+        curl_setopt_array($curl, [
+            CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 90, CURLOPT_POSTFIELDS => $body,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'X-Signature: sha256=' . hash_hmac('sha256', $body, $this->app->config['whatsapp_app_secret'])],
+        ]);
+        $raw = curl_exec($curl);
+        $status = (int)curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+        $errno = curl_errno($curl);
+        curl_close($curl);
+        if ($raw === false) throw new WhatsAppTransportError('qr_service_unreachable_' . $errno, true);
+        if ($status === 200) return;
+        $result = (string)(json_decode((string)$raw, true)['result'] ?? 'http_' . $status);
+        // 503: el teléfono se desconectó; 502: WhatsApp Web falló. Ambos se reintentan.
+        throw new WhatsAppTransportError('qr_' . preg_replace('/[^a-z0-9_]/', '', $result), in_array($status, [502, 503], true));
+    }
+
+    private function call(string $endpoint, array $fields): array
+    {
+        $config = $this->app->config;
+        $url = 'https://graph.facebook.com/' . $config['whatsapp_api_version'] . '/' . rawurlencode($config['whatsapp_phone_number_id']) . '/' . $endpoint;
+        $json = $endpoint === 'messages';
+        $curl = curl_init($url);
+        curl_setopt_array($curl, [
+            CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 60,
+            CURLOPT_HTTPHEADER => array_merge(['Authorization: Bearer ' . $config['whatsapp_token']], $json ? ['Content-Type: application/json'] : []),
+            CURLOPT_POSTFIELDS => $json ? json_encode($fields, JSON_UNESCAPED_UNICODE) : $fields,
+        ]);
+        $raw = curl_exec($curl);
+        $status = (int)curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+        $errno = curl_errno($curl);
+        curl_close($curl);
+        if ($raw === false) throw new WhatsAppTransportError('network_error_' . $errno, true);
+        $response = json_decode((string)$raw, true) ?: [];
+        if ($status >= 200 && $status < 300) return $response;
+        $code = (int)($response['error']['code'] ?? 0);
+        // 131047: pasaron más de 24 horas desde el último mensaje del paciente.
+        if ($code === 131047) throw new WhatsAppTransportError('outside_24h_window', false);
+        throw new WhatsAppTransportError('http_' . $status . '_code_' . $code, $status === 429 || $status >= 500);
+    }
+
+    /**
+     * Pasaron más de 24 h desde el último mensaje del paciente: WhatsApp solo admite plantillas.
+     * El mensaje espera (conservando lo ya enviado) y sale cuando el paciente vuelva a escribir.
+     */
+    private function waitForWindow(array $job): void
+    {
+        $this->finish($job, 'waiting_window', 'outside_24h_window');
+        $template = (string)$this->app->config['whatsapp_template_ready'];
+        if ($template === '' || !$job['request_id'] || !in_array($job['kind'], ['history', 'notice', 'not_registered'], true)) return;
+        try {
+            $this->call('messages', ['messaging_product' => 'whatsapp', 'recipient_type' => 'individual', 'to' => $job['phone'], 'type' => 'template', 'template' => [
+                'name' => $template, 'language' => ['code' => $this->app->config['whatsapp_template_lang']],
+                'components' => [['type' => 'body', 'parameters' => [['type' => 'text', 'text' => $this->app->request((int)$job['request_id'])['reference']]]]],
+            ]]);
+        } catch (WhatsAppTransportError) { $this->app->event((int)$job['request_id'], 'whatsapp_template', 'failed'); }
+    }
+
+    private function finish(array $job, string $status, ?string $error = null): void
+    {
+        $this->app->db->run('UPDATE whatsapp_outbox SET status=?,last_error=?,sent_at=?,available_at=?,encrypted_body=CASE WHEN ?=1 THEN NULL ELSE encrypted_body END WHERE id=?', [
+            $status, $error, in_array($status, ['sent','simulated'], true) ? $this->app->now() : null,
+            date('Y-m-d H:i:s', time() + 60 * (int)$job['attempts']), in_array($status, ['retry', 'waiting_window'], true) ? 0 : 1, $job['id'],
+        ]);
+        if ($job['request_id']) $this->app->event((int)$job['request_id'], 'whatsapp_' . $job['kind'], $status);
+    }
+}

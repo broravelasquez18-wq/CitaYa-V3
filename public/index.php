@@ -36,7 +36,7 @@ function requirePatient(): int {
     return (int) $_SESSION['request_access'];
 }
 if (isset($_SESSION['last_activity']) && time() - $_SESSION['last_activity'] > $app->config['session_seconds']) {
-    if (!empty($_SESSION['request_id'])) $app->db->run("UPDATE requests SET status='expired' WHERE id=? AND status IN ('verified','matched','awaiting_selection','no_matches','unavailable')", [$_SESSION['request_id']]);
+    if (!empty($_SESSION['request_id'])) $app->db->run("UPDATE requests SET status='expired' WHERE id=? AND status IN ('verified','matched','awaiting_selection','no_matches','unavailable') AND NOT (direct_search=1 AND status IN ('no_matches','unavailable'))", [$_SESSION['request_id']]); // Las solicitudes con radicado siguen esperando gestión.
     $_SESSION = [];
     session_regenerate_id(true);
 }
@@ -46,13 +46,19 @@ $page = (string) ($_GET['page'] ?? 'home');
 $error = null;
 $flash = $_SESSION['flash'] ?? null; unset($_SESSION['flash']);
 $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+// Enlace personal enviado por el bot de WhatsApp. Viaja en el formulario como campo oculto.
+$whatsappToken = (string) ($_POST['wa'] ?? $_GET['wa'] ?? '');
+$whatsappLink = $whatsappToken === '' ? null : $app->whatsapp()->findLink($whatsappToken);
+if ($whatsappToken !== '' && !$whatsappLink && $_SERVER['REQUEST_METHOD'] === 'GET') {
+    $flash = 'El enlace de WhatsApp venció o ya fue usado. Escribe HISTORIA al WhatsApp para recibir uno nuevo, o completa el formulario para recibir la historia solo por correo.';
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         if (!hash_equals($_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))) throw new DomainException('La sesión del formulario venció. Recarga la página e inténtalo de nuevo.');
         switch ($_POST['action'] ?? '') {
             case 'request':
                 // PRG plus a consumed form token protects against double submission.
-                $id = $app->createRequest($_POST, $ip, true);
+                $id = $app->createRequest($_POST, $ip, true, $whatsappLink);
                 $_SESSION['request_access'] = $id;
                 $_SESSION['request_id'] = $id;
                 $_SESSION['csrf'] = bin2hex(random_bytes(32));
@@ -89,8 +95,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 requireAdmin();
                 (new App\AdminDeliveries($app->db))->reopen((int)($_POST['request_id'] ?? 0), (int)$_SESSION['admin_id'], (int)($_POST['expected_job_id'] ?? 0));
                 $_SESSION['csrf'] = bin2hex(random_bytes(32));
-                $_SESSION['flash'] = 'Caso reabierto. Está pendiente de gestión en Solicitudes y envíos. No se ha enviado otro correo.';
+                $_SESSION['flash'] = 'Caso reabierto. Está pendiente de gestión en Solicitudes. No se ha enviado otro correo.';
                 go('deliveries');
+            case 'assign-encounter':
+                requireAdmin();
+                $app->assignEncounter((int)($_POST['request_id'] ?? 0), (int)($_POST['encounter_id'] ?? 0), (int)$_SESSION['admin_id']);
+                $_SESSION['csrf'] = bin2hex(random_bytes(32));
+                $_SESSION['flash'] = 'Historia asignada. Se está enviando al paciente por correo' . ($app->request((int)$_POST['request_id'])['whatsapp_phone'] ? ' y WhatsApp.' : '.');
+                go('deliveries');
+            case 'not-registered':
+                requireAdmin();
+                $app->markNotRegistered((int)($_POST['request_id'] ?? 0), (int)$_SESSION['admin_id']);
+                $_SESSION['csrf'] = bin2hex(random_bytes(32));
+                $_SESSION['flash'] = 'Respuesta «No registra» enviada. El paciente recibirá el aviso para verificar su documento.';
+                go('deliveries');
+            case 'request-upload':
+                requireAdmin();
+                $requestId = (int)($_POST['request_id'] ?? 0);
+                $app->request($requestId);
+                $uploads = [];
+                foreach (($_FILES['pdfs']['name'] ?? []) as $i => $name) $uploads[] = ['name' => $name, 'tmp_name' => $_FILES['pdfs']['tmp_name'][$i], 'error' => $_FILES['pdfs']['error'][$i]];
+                $packageId = (new App\Repository($app))->registerPackage($_POST, $uploads);
+                $encounterId = (int)$app->db->one('SELECT encounter_id FROM packages WHERE id=?', [$packageId])['encounter_id'];
+                $_SESSION['csrf'] = bin2hex(random_bytes(32));
+                if ($app->request($requestId)['status'] === 'queued') { $_SESSION['flash'] = 'Historia cargada. Coincidió con la solicitud y ya se está enviando al paciente.'; go('deliveries'); }
+                $candidate = array_values(array_filter($app->candidateEncounters($requestId), fn($row) => (int)$row['id'] === $encounterId))[0] ?? null;
+                if (!$candidate) { $_SESSION['flash'] = 'La historia se guardó en el repositorio, pero pertenece a otro número de documento. No se envió a esta solicitud.'; go('deliveries'); }
+                if (!$candidate['name_matches']) { $_SESSION['flash'] = 'La historia se guardó, pero el nombre del PDF no coincide con el de la solicitud. No se envió; si corresponde, responde «No registra».'; go('deliveries'); }
+                $app->assignEncounter($requestId, $encounterId, (int)$_SESSION['admin_id']);
+                $_SESSION['flash'] = 'Historia cargada y asignada. Se está enviando al paciente.';
+                go('deliveries');
+            case 'save-template':
+                requireAdmin();
+                (new App\MessageTemplates($app))->save((string)($_POST['code'] ?? ''), (string)($_POST['body'] ?? ''), (int)$_SESSION['admin_id']);
+                $_SESSION['flash'] = 'Plantilla guardada. Se usará en los próximos mensajes.';
+                go('templates');
+            case 'reset-template':
+                requireAdmin();
+                (new App\MessageTemplates($app))->reset((string)($_POST['code'] ?? ''), (int)$_SESSION['admin_id']);
+                $_SESSION['flash'] = 'Se restauró el texto predeterminado de la plantilla.';
+                go('templates');
             case 'upload':
                 requireAdmin(); $_SESSION['upload_mode']='single'; $uploads = [];
                 foreach (($_FILES['pdfs']['name'] ?? []) as $i => $name) $uploads[] = ['name' => $name, 'tmp_name' => $_FILES['pdfs']['tmp_name'][$i], 'error' => $_FILES['pdfs']['error'][$i]];
@@ -130,7 +174,8 @@ if ($page === 'delivery' && ($_GET['fragment'] ?? '') === '1' && empty($_SESSION
     header('Content-Type: text/plain; charset=UTF-8');
     exit('La sesión administrativa venció. Inicia sesión nuevamente.');
 }
-if (in_array($page, ['admin','inbox','mail','deliveries','delivery','history','analytics'], true)) requireAdmin();
+if (in_array($page, ['admin','inbox','mail','deliveries','delivery','history','analytics','templates'], true)) requireAdmin();
+$pendingCount = !empty($_SESSION['admin_id']) ? (new App\AdminDeliveries($app->db))->pendingCount() : 0;
 $analytics = null;
 if ($page === 'analytics') {
     $service = new App\AppointmentAnalytics($app->db);
@@ -145,8 +190,9 @@ if (in_array($page, ['deliveries','delivery','history'], true)) {
     if ($page === 'delivery') {
         $deliveryDetail = $adminDeliveries->detail((int)($_GET['id'] ?? 0));
         if (!$deliveryDetail) http_response_code(404);
+        elseif ($deliveryDetail['request']['awaiting']) $deliveryDetail['candidates'] = $app->candidateEncounters((int)$deliveryDetail['request']['id']);
     } else {
-        $deliverySearch = $adminDeliveries->search((string)($_GET['q'] ?? ''), (int)($_GET['p'] ?? 1), $page==='history');
+        $deliverySearch = $adminDeliveries->search((string)($_GET['q'] ?? ''), (int)($_GET['p'] ?? 1), $page==='history', $page === 'deliveries' && ($_GET['f'] ?? 'pending') !== 'all');
     }
 }
 if ($page === 'mail') {
@@ -173,7 +219,7 @@ if (in_array($page, ['appointments','status'], true)) {
     } catch (DomainException $e) { unset($_SESSION['request_access']); $_SESSION['flash'] = $e->getMessage(); go('home'); }
 }
 $steps = ['home' => 1, 'verify' => 2, 'appointments' => 2, 'status' => 3];
-$labels = ['matched'=>'Datos coincidentes','no_matches'=>'Sin coincidencias','awaiting_selection'=>'Selecciona una atención','not_eligible'=>'Entrega no habilitada','pending_verification'=>'Pendiente de verificación','verified'=>'Verificada','queued'=>'En cola de envío','sending'=>'Preparando el envío','retry'=>'Reintento programado','sent'=>'Correo enviado','simulated'=>'Entrega simulada','failed'=>'No se pudo enviar','uncertain'=>'Resultado por confirmar','unavailable'=>'Historia no disponible','expired'=>'Solicitud vencida','cancelled'=>'Cancelado'];
+$labels = ['matched'=>'Datos coincidentes','no_matches'=>'Sin coincidencias','awaiting_selection'=>'Selecciona una atención','not_eligible'=>'Entrega no habilitada','pending_verification'=>'Pendiente de verificación','verified'=>'Verificada','queued'=>'En cola de envío','sending'=>'Preparando el envío','retry'=>'Reintento programado','sent'=>'Correo enviado','simulated'=>'Entrega simulada','failed'=>'No se pudo enviar','uncertain'=>'Resultado por confirmar','unavailable'=>'Historia no disponible','expired'=>'Solicitud vencida','cancelled'=>'Cancelado','waiting_window'=>'Esperando que el paciente escriba','not_registered'=>'No registra'];
 if ($recentSuggestion && $request['approximate_date'] === null) $labels['no_matches'] = 'Consulta más reciente encontrada';
 if ($page === 'delivery' && ($_GET['fragment'] ?? '') === '1') {
     header('Content-Type: text/html; charset=UTF-8');

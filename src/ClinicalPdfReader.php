@@ -73,7 +73,7 @@ final class ClinicalPdfReader
         return ['document_type'=>$type,'document_number'=>$number,'full_name'=>$name,
             'attended_at'=>$day->format('Y-m-d') . sprintf(' %02d:%02d:%02d',$hour,$minute,$second),
             'admission'=>$admission[1],'folio'=>isset($folio[1]) ? mb_substr(self::clean($folio[1]),0,60) : null,
-            'specialty'=>$specialtyName,'location'=>mb_substr(self::clean(explode("\n",$first)[0]),0,160), 'page_count'=>count($texts)];
+            'specialty'=>$specialtyName,'orders'=>MedicalOrders::detect($texts),'location'=>mb_substr(self::clean(explode("\n",$first)[0]),0,160), 'page_count'=>count($texts)];
     }
 
     private static function parseDate(string $value): ?\DateTimeImmutable

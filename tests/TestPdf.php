@@ -1,11 +1,11 @@
 <?php
 declare(strict_types=1);
 // Synthetic, text-based PDF fixture. No real patient data.
-function testPdf(string $number, string $admission, string $suffix = ''): string
+function testPdf(string $number, string $admission, string $suffix = '', array $extraLines = []): string
 {
     $lines=['CEDIM - PRUEBA FICTICIA','Ingreso: '.$admission,'Fecha historia:'.date('d/m/Y').' 08:00:00 a. m.',
         'Identificacion: '.$number.' Nombres: Paciente ficticio Apellidos: de prueba de carga',
-        'Tipo documento:CC Numero: '.$number,'Especialidad:ORTOPEDIA Y TRAUMATOLOGIA','DOCUMENTO SIN VALIDEZ MEDICA '.$suffix];
+        'Tipo documento:CC Numero: '.$number,'Especialidad:ORTOPEDIA Y TRAUMATOLOGIA','DOCUMENTO SIN VALIDEZ MEDICA '.$suffix,...$extraLines];
     $stream="BT /F1 11 Tf 40 780 Td ";
     foreach($lines as $i=>$line) $stream.=($i ? '0 -24 Td ' : '').'('.str_replace(['\\','(',')'],['\\\\','\\(','\\)'],$line).') Tj ';
     $stream.='ET';

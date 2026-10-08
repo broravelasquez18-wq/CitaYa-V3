@@ -27,12 +27,12 @@ final class Repository
                 foreach (['document_type','document_number','admission'] as $key) if ($metadata[$key] !== $current[$key]) throw new \DomainException('Los PDF pertenecen a pacientes o ingresos diferentes. Carga cada atención por separado.');
                 if (substr($metadata['attended_at'],0,10) !== substr($current['attended_at'],0,10) || self::key($metadata['specialty']) !== self::key($current['specialty']) || self::key($metadata['full_name']) !== self::key($current['full_name'])) throw new \DomainException('Los datos de los PDF no coinciden. No se creó un paquete mezclado.');
             } else { $metadata = $current; }
-            $files[] = $source + ['sha256'=>$hash,'page_count'=>$current['page_count']];
+            $files[] = $source + ['sha256'=>$hash,'page_count'=>$current['page_count'],'orders'=>$current['orders']];
         }
         $this->app->identity($metadata);
         $paths = [];
         try {
-            return $this->app->db->transaction(function () use ($metadata,$files,&$paths) {
+            $packageId = $this->app->db->transaction(function () use ($metadata,$files,&$paths) {
                 $db=$this->app->db;
                 // Index the patient from the document without certifying an email address.
                 $db->run("INSERT IGNORE INTO patients (document_type,document_number,full_name,email,active) VALUES (?,?,?,'',1)",[$metadata['document_type'],$metadata['document_number'],$metadata['full_name']]);
@@ -68,7 +68,8 @@ final class Repository
                     if (!copy($file['path'],$target)) throw new \RuntimeException('No se pudo guardar el PDF.');
                     $paths[]=$target;
                     if (!hash_equals($file['sha256'],hash_file('sha256',$target))) throw new \DomainException('No se pudo conservar la integridad del PDF.');
-                    $db->insert('clinical_files',['package_id'=>$packageId,'storage_name'=>$name,'original_name'=>mb_substr(basename($file['name']),0,190),'category'=>'historia_completa','sort_order'=>$i+1,'size_bytes'=>filesize($target),'sha256'=>$file['sha256'],'page_count'=>$file['page_count']]);
+                    $fileId=$db->insert('clinical_files',['package_id'=>$packageId,'storage_name'=>$name,'original_name'=>mb_substr(basename($file['name']),0,190),'category'=>'historia_completa','sort_order'=>$i+1,'size_bytes'=>filesize($target),'sha256'=>$file['sha256'],'page_count'=>$file['page_count']]);
+                    foreach($file['orders'] as $order) $db->insert('clinical_orders',['file_id'=>$fileId,'order_type'=>$order['type'],'page'=>$order['page']]);
                 }
                 $db->run("UPDATE packages SET status='withdrawn' WHERE encounter_id=? AND status='available'",[$encounterId]);
                 $db->run("UPDATE packages SET status='available',published_at=? WHERE id=?",[$this->app->now(),$packageId]);
@@ -77,6 +78,10 @@ final class Repository
                 return $packageId;
             });
         } catch(\Throwable $error) { foreach($paths as $path) if(is_file($path)) unlink($path); throw $error; }
+        // La historia ya quedó guardada: un fallo al reprocesar solicitudes pendientes no debe deshacer la carga.
+        try { $this->app->resolveWaitingRequests($packageId); }
+        catch (\Throwable) { $this->app->event(null,'waiting_requests','error'); }
+        return $packageId;
     }
 
     private static function key(string $value): string { return mb_strtoupper(ClinicalPdfReader::normalize(trim($value)),'UTF-8'); }

@@ -153,3 +153,20 @@ body.upload-result-open{overflow:hidden}
 
 .activity-card{margin-bottom:28px}.activity-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin:26px 0}.activity-period{padding:22px;background:#f5fafb;border:1px solid var(--line);border-radius:14px}.activity-period h3{margin:8px 0 20px;text-transform:capitalize}.activity-period dl{margin:0}.activity-period dl>div{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:14px 0}.activity-period dt{font-size:13px;color:var(--muted)}.activity-period dd{margin:0;font-size:28px;color:var(--teal);font-weight:700;overflow-wrap:anywhere}.activity-period .activity-simulated{border-top:1px solid var(--line);padding-top:14px}.activity-simulated dd{font-size:20px;color:var(--muted)}
 @media(max-width:800px){.activity-grid{grid-template-columns:1fr}.activity-card{padding:22px 18px}}
+/* Solicitudes: contador, filtro, plazo de 24 h y acciones de respuesta */
+.tab-count{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:4px;border-radius:9px;background:#c0392b;color:#fff;font-size:10px;font-weight:700;line-height:1}
+.segmented{display:inline-flex;gap:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:6px 0 18px}
+.segmented a{padding:8px 16px;font-size:12px;font-weight:650;color:var(--muted);background:#fff}
+.segmented a+a{border-left:1px solid var(--line)}
+.segmented a[aria-current="page"]{background:var(--soft);color:var(--teal)}
+.pill.sla-ok{background:#e6f6ec;color:#1e7a46}
+.pill.sla-soon{background:#fff4dc;color:#8a5a00}
+.pill.sla-late{background:#fde8e6;color:#b3261e}
+.pill.channel{background:#e7f8ee;color:#127a3e;margin-right:4px}
+td small,.respond-form small{display:block}
+.respond-request .candidate{margin-top:12px}
+.respond-form{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.respond-form label:not(.check){flex-basis:100%}
+.button.danger{background:#b3261e;color:#fff;border-color:#b3261e}
+.template-card textarea{width:100%;font:inherit;font-weight:400;padding:10px;border:1px solid var(--line);border-radius:10px;resize:vertical;margin:6px 0 10px}
+.template-preview{white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px;font:inherit;margin:8px 0 0}

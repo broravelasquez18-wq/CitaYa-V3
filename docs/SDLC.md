@@ -124,3 +124,75 @@ Acceso interno → Análisis mensual muestra un pastel de porcentajes por especi
 ## Totales de solicitudes y envíos
 
 Análisis mensual incorpora tarjetas de día, mes y año según una fecha de referencia (hoy por defecto, hora de Colombia). Cada período completo cuenta solicitudes por created_at sin filtrar estado, envíos reales de historias por sent_at y status=sent, y simulaciones separadas. Los reenvíos exitosos cuentan individualmente; no se cuentan códigos OTP, trabajos pendientes, fallidos ni cantidad de anexos. El filtro conserva el mes del gráfico de especialidades y viceversa. Pruebas ampliadas en php tests/analytics.php: límites de día/mes/año, bisiestos, períodos vacíos, reenvíos, separación de simulaciones y exclusión de OTP/fallos. Revisión visual con cifras ficticias. No requiere migración.
+
+## Canal de WhatsApp y órdenes médicas
+
+**Fase 1 · Alcance.** El paciente inicia la solicitud desde WhatsApp. El bot responde con un enlace al formulario; el sistema busca la historia en los PDF cargados y la envía al chat si existe. Si no existe, registra un radicado, informa una espera estimada y la envía sola cuando la persona encargada carga el PDF. Además, el bot detecta las órdenes del especialista y orienta al paciente sobre qué hacer con cada una. Fuera de alcance: verificar la identidad por el número de teléfono, conversación libre e interpretación clínica del contenido.
+
+**Fase 2 · Requisitos.**
+
+| Requisito | Descripción |
+|---|---|
+| RF-14 Entrada por WhatsApp | Un mensaje con intención de historia (*historia*, *clínica*, *HC*, *epicrisis*, *copia*) recibe un enlace personal; otro mensaje recibe el menú |
+| RF-15 Enlace seguro | Vence en 6 h, se usa una sola vez, se guarda como hash y vincula el número a la solicitud |
+| RF-16 Historia encontrada | Se envían por el chat el radicado y cada PDF como documento, además del correo |
+| RF-17 Radicado | Sin historia, se informa el radicado por WhatsApp con un tiempo estimado de 24 h (`whatsapp_estimated_hours`) y la solicitud queda en Solicitudes y envíos |
+| RF-18 Envío diferido | Al cargar el PDF del paciente, las solicitudes pendientes de WhatsApp de los últimos 30 días se reprocesan y se envían solas |
+| RF-19 Órdenes médicas | Se detectan fórmula, laboratorio, imágenes, procedimiento, terapias, remisión e incapacidad, con una guía por tipo y la imagen de su página |
+| RF-20 Ventana de 24 h | Fuera de la ventana el mensaje espera sin perder lo enviado y sale cuando el paciente vuelve a escribir; opcionalmente se avisa con una plantilla aprobada |
+| RNF | Firma `X-Hub-Signature-256`, deduplicación de reintentos de Meta, límite de 20 mensajes por número/hora, cuerpos cifrados en la cola y modo local sin envíos |
+
+**Fase 3 · Diseño.** Webhook `public/whatsapp.php` → `WhatsApp::receive` → tablas `whatsapp_inbound` (deduplicación), `whatsapp_links` y `whatsapp_outbox`, procesadas por `bin/worker.php`. La búsqueda reutiliza `Application::processSearch`, sin un flujo paralelo. Las órdenes se detectan al importar (`MedicalOrders::detect` sobre el texto de cada página, solo por títulos al inicio de línea para no confundirlas con menciones en notas) y se guardan en `clinical_orders` (archivo, tipo, página). La imagen de la página se genera en el momento del envío con Imagick, pdftoppm o Ghostscript, y el PNG temporal se borra después; sin conversor, la guía indica documento y página. `Repository::importPackage` llama a `Application::resolveWaitingRequests` después de confirmar la transacción: un fallo al reprocesar no deshace la carga. Estado `waiting_window` en `whatsapp_outbox`, con vencimiento a los 7 días.
+
+**Fase 4 · Implementación.** Nuevos: `src/WhatsApp.php`, `src/WhatsAppTransportError.php`, `src/MedicalOrders.php`, `src/PdfPageImage.php`, `public/whatsapp.php`, `bin/detect-orders.php` (órdenes en historias ya cargadas). Modificados: `Application` (vínculo del enlace, envío diferido), `Repository` y `ClinicalPdfReader` (órdenes), `schema.sql` y `setup.php` (tablas y columna `requests.whatsapp_phone`), `worker.php`, configuración, etiquetas de estado, `Dockerfile` (`poppler-utils`) y README. Los textos de guía son administrativos y editables en `MedicalOrders::TYPES`; no sustituyen la indicación del especialista.
+
+**Fase 5 · Validación.** `php tests/whatsapp.php`: 32 comprobaciones en base temporal y transporte local (firma, menú, enlace, reintentos de webhook, enlace vencido y reutilizado, historia encontrada y no encontrada, envío diferido al cargar el PDF, órdenes con tildes y falsos positivos en notas, guía e imagen por página, no duplicación al recargar, espera, liberación y vencimiento de la ventana de 24 h). Regresión: `tests/run.php` 155, `tests/pdf-reader.php` 17, `tests/analytics.php` correcto. Migración aplicada en la base local; `bin/detect-orders.php` revisó 10 archivos de demostración, sin órdenes. Sin envíos a Meta ni datos reales.
+
+**Planificación.** Seguimiento en Jira: https://citaya.atlassian.net, proyecto CitaYa (clave SCRUM), épica SCRUM-5. Requisitos RF-14 a RF-20 = SCRUM-6 a SCRUM-12 (finalizados). Pendientes = SCRUM-13 a SCRUM-18. SCRUM-19 (tiempo estimado de 24 h en el radicado) se corrigió durante la planificación: faltaba en el mensaje.
+
+**Pendiente antes de producción.**
+- Calibrar los títulos de órdenes con PDF reales anonimizados de CEDIM/Indigo; solo se probaron PDF sintéticos.
+- Probar en Meta: webhook, envío de documentos e imágenes, y la plantilla de aviso (requiere aprobación).
+- Verificar la conversión de páginas a imagen en el contenedor; en el equipo local no hay conversor instalado.
+- Exponer en `docker-compose.yml` las variables `WHATSAPP_*` y `PUBLIC_URL`; hoy solo se configuran con `config/local.php`, que no entra en la imagen.
+- Decidir la gestión cuando la fecha indicada por el paciente no coincide con la del PDF: hoy la solicitud queda pendiente para revisión manual.
+- Validar con la política de privacidad (`docs/politica-privacidad.md`) el envío de documentos clínicos por WhatsApp, porque el número no prueba la identidad del titular.
+
+## Gestión de solicitudes por la persona encargada
+
+**Fase 1 · Alcance.** Completar el flujo «la persona encargada responde el radicado». Ver las solicitudes pendientes con su plazo de 24 h y resolverlas desde el panel: asignar una historia ya cargada, cargar el PDF desde la solicitud o responder «No registra». Los mensajes al paciente se manejan con plantillas editables. Planificación en Jira: épica SCRUM-23.
+
+**Fase 2 · Requisitos y decisiones del titular.**
+
+| Requisito | Jira | Descripción |
+|---|---|---|
+| RF-22 | SCRUM-24 | Pestaña única «Solicitudes» (reemplaza «Solicitudes y envíos»), filtro Pendientes / Todas, contador y plazo: a tiempo, por vencer (menos de 6 h), vencida |
+| RF-23 | SCRUM-25 | Asignar una atención cargada del mismo documento aunque la fecha no coincida; solo si el nombre coincide. Resuelve SCRUM-17 |
+| RF-24 | SCRUM-26 | Cargar el PDF desde la solicitud; si documento y nombre coinciden, se asigna y se envía |
+| RF-25 | SCRUM-27 | «No registra»: si el nombre no coincide con el documento o el paciente no existe, se pide verificar el número de documento. Aviso por WhatsApp (si aplica) y correo |
+| RF-26 | SCRUM-28 | Plantillas de mensajes editables, con variables permitidas, vista previa y opción de restaurar |
+
+Por ahora, «No registra» es el único motivo de cierre sin historia.
+
+**Fase 3 · Diseño.**
+- Columnas `requests.resolved_by`, `resolved_at` y `resolution`, y estado `not_registered`.
+- Tabla `message_templates`; los textos predeterminados viven en `MessageTemplates::DEFINITIONS`.
+- `Application::assignEncounter()` valida documento, nombre normalizado e integridad del paquete. Reutiliza `confirm()`, que encola correo y WhatsApp. Si el envío no se prepara, la solicitud vuelve a pendiente.
+- `Application::markNotRegistered()` encola WhatsApp (`not_registered`) y correo (nuevo trabajo `notice`, solo texto, sin adjuntos y sin exigir paciente en el repositorio).
+- Pendiente = búsqueda directa en `no_matches`, `unavailable` o `not_eligible`, o caso reabierto. Plazo = creación + `whatsapp_estimated_hours`.
+- Corrección: el vencimiento de la sesión del paciente ya no marca como `expired` las solicitudes con radicado que esperan gestión.
+
+**Fase 4 · Implementación.**
+- Nuevos: `src/MessageTemplates.php`, `templates/templates.php`, `tests/requests-admin.php`.
+- Modificados: `Application`, `WhatsApp` (textos desde plantillas), `MailWorker` (tipo `notice`), `AdminDeliveries` (pendientes, orden por antigüedad, contador, quién respondió), `public/index.php` (acciones `assign-encounter`, `not-registered`, `request-upload`, `save-template` y `reset-template`), plantillas `admin`, `deliveries`, `delivery` y `layout`, `app.css`, `schema.sql` y `setup.php`.
+- Todas las acciones exigen administrador y CSRF, son transaccionales y quedan auditadas en `events`.
+
+**Fase 5 · Validación.**
+- `php tests/requests-admin.php`: 25 comprobaciones en base temporal. Cubre orden de pendientes, plantilla con 24 h, candidatas con nombre igual y distinto, rechazo por nombre, asignación con auditoría, envío por correo y WhatsApp, solicitud web solo por correo, doble gestión, paquete alterado que vuelve a pendiente, «No registra» con aviso sin adjuntos ni asteriscos (también para documentos inexistentes), validación de variables, plantilla personalizada y restaurada, y versión de correo.
+- Regresión: `run` 155, `whatsapp` 32, `whatsapp-qr` 8, `pdf-reader` 17, `analytics`, `upload-http` y `resend-ui` 19, todas correctas.
+- `tests/http.php` y `tests/admin-http.php` apuntan al proyecto CitaYaV2.
+- `tests/upload.php` exige correo local; la configuración actual usa SMTP.
+- Prueba HTTP con sesión administrativa sobre CitaYaV3: Solicitudes (Pendientes / Todas), Plantillas, Historial, Repositorio y detalle cargan sin errores. Revisión visual con capturas.
+- Migración aplicada en la base local: 6 solicitudes pendientes de 10, todas vencidas (septiembre de 2026).
+
+**Pendiente:** aceptación del titular en uso real, y decidir si las solicitudes antiguas sin documento conservado se responden con «No registra».

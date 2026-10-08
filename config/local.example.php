@@ -10,4 +10,11 @@ return [
     'smtp_password' => 'YOUR_PROVIDER_APP_PASSWORD',
     'mail_from' => 'YOUR_SMTP_ACCOUNT',
     'test_recipient' => 'broravelasquez18@gmail.com',
+    // WhatsApp Cloud API (Meta for Developers → WhatsApp → Configuración de la API)
+    'whatsapp_transport' => 'cloud',
+    'whatsapp_phone_number_id' => 'ID_DEL_NUMERO',
+    'whatsapp_token' => 'TOKEN_PERMANENTE_DEL_USUARIO_DEL_SISTEMA',
+    'whatsapp_verify_token' => 'UNA_CADENA_ALEATORIA_QUE_TU_ELIJAS',
+    'whatsapp_app_secret' => 'CLAVE_SECRETA_DE_LA_APP',
+    'public_url' => 'https://tu-dominio-o-tunel/CitaYaV3/public',
 ];

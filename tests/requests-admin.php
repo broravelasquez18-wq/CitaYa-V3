@@ -1,0 +1,114 @@
+<?php
+declare(strict_types=1);
+// Gestión de solicitudes por la persona encargada (SCRUM-23): pendientes, asignar, «No registra» y plantillas.
+if (PHP_SAPI !== 'cli') exit;
+require dirname(__DIR__) . '/vendor/autoload.php';
+date_default_timezone_set('America/Bogota');
+$root = dirname(__DIR__);
+$config = array_replace(require $root . '/config/default.php', require $root . '/config/local.php');
+$databaseName = 'citaya_test_' . bin2hex(random_bytes(5));
+$server = new PDO(preg_replace('/;dbname=[^;]+/', '', $config['db_dsn']), $config['db_user'], $config['db_password'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+$server->exec("CREATE DATABASE `$databaseName` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+$config['db_dsn'] = preg_replace('/dbname=[^;]+/', 'dbname=' . $databaseName, $config['db_dsn']);
+$config['storage_path'] = $root . '/.runtime/' . $databaseName;
+$config['mail_transport'] = 'local';
+$config['whatsapp_transport'] = 'local';
+$config['public_url'] = 'https://portal.example.test';
+foreach (['histories', 'outbox', 'wa-outbox'] as $dir) mkdir($config['storage_path'] . '/' . $dir, 0700, true);
+$db = new App\Database($config);
+$app = new App\Application($db, $config);
+$bot = $app->whatsapp();
+$admin = new App\AdminDeliveries($db);
+$templates = new App\MessageTemplates($app);
+$checks = 0;
+function check(bool $condition, string $label): void { global $checks; if (!$condition) throw new RuntimeException('FAIL: ' . $label); $checks++; echo "OK $label\n"; }
+function rejects(callable $fn, string $label, string $contains = ''): void {
+    try { $fn(); } catch (DomainException $e) { check($contains === '' || str_contains($e->getMessage(), $contains), $label); return; }
+    throw new RuntimeException('FAIL (no rechazó): ' . $label);
+}
+function waText(int $requestId, string $kind): string { global $db, $config; $row = $db->one('SELECT encrypted_body FROM whatsapp_outbox WHERE request_id=? AND kind=?', [$requestId, $kind]); return $row ? App\Crypto::open($row['encrypted_body'], $config['app_key']) : ''; }
+function inbound(string $id, string $phone, string $text): array {
+    return ['entry' => [['changes' => [['value' => ['messages' => [['id' => $id, 'from' => $phone, 'type' => 'text', 'text' => ['body' => $text]]]]]]]]];
+}
+function viaWhatsApp(array $form, string $phone, string $id): int {
+    global $app, $bot, $db, $config;
+    $bot->receive(inbound($id, $phone, 'historia'));
+    $row = $db->one("SELECT encrypted_body FROM whatsapp_outbox WHERE kind='text' ORDER BY id DESC LIMIT 1");
+    preg_match('/wa=([a-f0-9]{48})/', App\Crypto::open($row['encrypted_body'], $config['app_key']), $m);
+    return $app->createRequest($form, 'ip-' . $id, true, $bot->findLink($m[1]));
+}
+try {
+    $db->pdo->exec(file_get_contents($root . '/database/schema.sql'));
+    $specialty = $db->insert('specialties', ['name' => 'Ortopedia']);
+    $patient = $db->insert('patients', ['document_type' => 'CC', 'document_number' => '1012345678', 'full_name' => 'Ana María Pérez', 'email' => '', 'active' => 1]);
+    $encounter = $db->insert('encounters', ['patient_id' => $patient, 'specialty_id' => $specialty, 'attended_at' => date('Y-m-d 08:00:00', strtotime('-20 days')), 'admission' => 'ING-1', 'location' => 'Sede de prueba']);
+    $package = $db->insert('packages', ['encounter_id' => $encounter, 'version' => 1, 'status' => 'available', 'published_at' => $app->now()]);
+    $name = bin2hex(random_bytes(16)) . '.pdf'; $path = $config['storage_path'] . '/histories/' . $name;
+    file_put_contents($path, "%PDF-1.4\nPDF ficticio\n%%EOF");
+    $db->insert('clinical_files', ['package_id' => $package, 'storage_name' => $name, 'original_name' => 'doc.pdf', 'sort_order' => 1, 'size_bytes' => filesize($path), 'sha256' => hash_file('sha256', $path)]);
+    $form = ['document_type' => 'CC', 'document_number' => '1012345678', 'full_name' => 'ana maria perez', 'approximate_date' => date('Y-m-d', strtotime('-2 days')), 'specialty_id' => 0, 'email' => 'paciente@example.test'];
+
+    // --- Cola de pendientes ---
+    $wrongDate = viaWhatsApp($form, '573001112233', 'w1');
+    $web = $app->createRequest(['email' => 'web@example.test', 'approximate_date' => date('Y-m-d', strtotime('-3 days'))] + $form, 'ip-web', true);
+    $mismatch = viaWhatsApp(['full_name' => 'Ana Pérez Otra'] + $form, '573004445566', 'w2');
+    check($app->request($wrongDate)['status'] === 'no_matches' && $admin->pendingCount() === 3, 'Las solicitudes sin historia aparecen como pendientes');
+    $pending = $admin->search('', 1, false, true);
+    check(array_column($pending['rows'], 'id') === [$wrongDate, $web, $mismatch], 'Pendientes ordenadas de la más antigua a la más reciente');
+    check(str_contains(waText($wrongDate, 'notice'), '24 horas'), 'El radicado usa la plantilla con el tiempo estimado');
+
+    // --- Candidatas y asignación ---
+    $candidates = $app->candidateEncounters($wrongDate);
+    check(count($candidates) === 1 && $candidates[0]['name_matches'] && (int)$candidates[0]['id'] === $encounter, 'Se ofrece la atención del mismo documento aunque la fecha no coincida');
+    check(!$app->candidateEncounters($mismatch)[0]['name_matches'], 'Con otro nombre la atención aparece marcada como «Nombre distinto»');
+    rejects(fn() => $app->assignEncounter($mismatch, $encounter, 1), 'No se puede enviar si el nombre no coincide', 'No registra');
+    check($app->request($mismatch)['status'] === 'no_matches', 'El rechazo no cambia la solicitud');
+    $app->assignEncounter($wrongDate, $encounter, 1);
+    $assigned = $app->request($wrongDate);
+    check($assigned['status'] === 'queued' && $assigned['resolution'] === 'assigned' && (int)$assigned['resolved_by'] === 1 && (int)$assigned['encounter_id'] === $encounter, 'Asignar deja la solicitud en cola y registra quién respondió');
+    check((bool)$db->one("SELECT id FROM jobs WHERE request_id=? AND kind='history' AND recipient='paciente@example.test'", [$wrongDate]) && (bool)$db->one("SELECT id FROM whatsapp_outbox WHERE request_id=? AND kind='history'", [$wrongDate]), 'La historia asignada se encola por correo y WhatsApp');
+    rejects(fn() => $app->assignEncounter($wrongDate, $encounter, 1), 'Una solicitud ya gestionada no se asigna dos veces', 'ya fue gestionada');
+    $app->assignEncounter($web, $encounter, 1);
+    check($app->request($web)['status'] === 'queued' && !$db->one('SELECT id FROM whatsapp_outbox WHERE request_id=?', [$web]), 'Una solicitud web asignada se envía solo por correo');
+    check($admin->pendingCount() === 1, 'Las solicitudes asignadas salen de Pendientes');
+
+    // --- Paquete dañado: la solicitud vuelve a la cola ---
+    $broken = viaWhatsApp($form, '573007778899', 'w3');
+    file_put_contents($path, 'alterado');
+    rejects(fn() => $app->assignEncounter($broken, $encounter, 1), 'Un paquete alterado impide asignar');
+    check($app->request($broken)['status'] === 'no_matches' && $app->request($broken)['resolution'] === null, 'Si el envío no se prepara, la solicitud sigue pendiente');
+    file_put_contents($path, "%PDF-1.4\nPDF ficticio\n%%EOF");
+
+    // --- «No registra» ---
+    $app->markNotRegistered($mismatch, 1);
+    $closed = $app->request($mismatch);
+    check($closed['status'] === 'not_registered' && $closed['resolution'] === 'not_registered', '«No registra» cierra la solicitud');
+    check(str_contains(waText($mismatch, 'not_registered'), $closed['reference']) && str_contains(waText($mismatch, 'not_registered'), 'número de documento') && str_contains(waText($mismatch, 'not_registered'), 'https://portal.example.test/?page=home'), 'El WhatsApp «No registra» incluye radicado, instrucción y enlace');
+    $notice = $db->one("SELECT * FROM jobs WHERE request_id=? AND kind='notice'", [$mismatch]);
+    check($notice && $notice['recipient'] === 'paciente@example.test' && !$notice['package_id'], 'Se encola el aviso por correo sin documentos');
+    rejects(fn() => $app->markNotRegistered($mismatch, 1), 'No se responde dos veces', 'ya fue gestionada');
+    $worker = new App\MailWorker($app);
+    while ($worker->tick());
+    $eml = quoted_printable_decode(file_get_contents($config['storage_path'] . '/outbox/' . $notice['id'] . '.eml'));
+    check($db->one('SELECT status FROM jobs WHERE id=?', [$notice['id']])['status'] === 'simulated' && str_contains($eml, 'No encontramos una historia') && !str_contains($eml, '*') && !str_contains($eml, 'application/pdf'), 'El correo «No registra» sale sin asteriscos ni adjuntos');
+    $unknownPatient = viaWhatsApp(['document_number' => '55555555'] + $form, '573001231234', 'w4');
+    $app->markNotRegistered($unknownPatient, 1);
+    while ($worker->tick());
+    check($db->one("SELECT status FROM jobs WHERE request_id=? AND kind='notice'", [$unknownPatient])['status'] === 'simulated', 'El aviso llega aunque el documento no exista en el repositorio');
+
+    // --- Plantillas ---
+    rejects(fn() => $templates->save('pending', 'Radicado {radicado} y {clave}', 1), 'Rechaza variables no permitidas', '{clave}');
+    rejects(fn() => $templates->save('not_registered', 'Tu solicitud {radicado} no registra.', 1), 'La plantilla «No registra» exige el enlace', '{enlace}');
+    $templates->save('pending', 'Tu radicado es *{radicado}*. Respuesta en {horas} h.', 1);
+    $custom = viaWhatsApp(['document_number' => '66666666'] + $form, '573009990000', 'w5');
+    check(waText($custom, 'notice') === 'Tu radicado es *' . $app->request($custom)['reference'] . '*. Respuesta en 24 h.' && $templates->isCustom('pending'), 'Los mensajes usan la plantilla personalizada');
+    $templates->reset('pending', 1);
+    check(!$templates->isCustom('pending') && str_contains($templates->render('pending', ['horas' => 24]), 'tiempo estimado'), 'Restaurar vuelve al texto predeterminado');
+    check($templates->renderPlain('history_found', ['radicado' => 'HC-1', 'documentos' => 2, 'correo' => 'a@b.c']) === "Encontramos tu historia clínica. Radicado HC-1.\n\nTe enviamos 2 documento(s) por este chat y también al correo a@b.c. Consérvalos en un lugar privado.", 'La versión de correo quita la negrita de WhatsApp');
+    echo "\nPASS: $checks comprobaciones. Sin envíos externos.\n";
+} finally {
+    if (!preg_match('/^citaya_test_[a-f0-9]{10}$/', $databaseName)) throw new RuntimeException('Invalid test database name');
+    $server->exec("DROP DATABASE `$databaseName`");
+    foreach (['histories', 'outbox', 'wa-outbox'] as $dir) { foreach (glob($config['storage_path'] . '/' . $dir . '/*') as $file) unlink($file); rmdir($config['storage_path'] . '/' . $dir); }
+    rmdir($config['storage_path']);
+}

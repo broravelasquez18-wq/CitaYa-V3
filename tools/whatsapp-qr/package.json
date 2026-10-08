@@ -1,0 +1,9 @@
+{
+  "name": "citaya-whatsapp-qr-test",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Prueba aislada de vinculación de WhatsApp por QR",
+  "scripts": { "start": "node --env-file-if-exists=.env server.cjs", "check": "node --check server.cjs" },
+  "engines": { "node": ">=22" },
+  "dependencies": { "whatsapp-web.js": "1.34.7", "qrcode": "1.5.4" }
+}

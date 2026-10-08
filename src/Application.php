@@ -75,7 +75,7 @@ final class Application
         return [$date, $specialty];
     }
 
-    public function createRequest(array $data, string $ip, bool $directSearch = false): int
+    public function createRequest(array $data, string $ip, bool $directSearch = false, ?int $whatsappLinkId = null): int
     {
         [$type, $number] = $this->identity($data);
         [$date, $specialty] = $this->filters($data, $directSearch);
@@ -86,7 +86,7 @@ final class Application
         // Do not persist unverified contact updates in the patient record.
         $this->limit('request-ip:' . $ip, 20, 3600);
         $this->limit('request-patient:' . $type . ':' . $number, 5, 3600);
-        $id = $this->db->transaction(function () use ($type, $number, $name, $date, $specialty, $email, $directSearch) {
+        $id = $this->db->transaction(function () use ($type, $number, $name, $date, $specialty, $email, $directSearch, $whatsappLinkId) {
             $patient = $this->db->one('SELECT * FROM patients WHERE document_type=? AND document_number=? AND active=1', [$type, $number]);
             if ($directSearch && $patient && self::nameKey($patient['full_name']) !== self::nameKey($name)) $patient=null;
             $id = $this->db->insert('requests', [
@@ -97,11 +97,109 @@ final class Application
                 'direct_search' => $directSearch ? 1 : 0,
             ]);
             if (!$directSearch) $this->issueCode($id, $this->verificationRecipient($patient, $email));
+            if ($whatsappLinkId !== null) $this->whatsapp()->attachLink($whatsappLinkId, $id);
             $this->event($id, 'request_created', 'ok');
             return $id;
         });
         if ($directSearch) $this->processSearch($id);
         return $id;
+    }
+
+    public function whatsapp(): WhatsApp { return new WhatsApp($this); }
+
+    /** Estados en que una solicitud espera que la persona encargada la gestione. */
+    public const PENDING_STATUSES = ['no_matches', 'unavailable', 'not_eligible'];
+
+    /**
+     * Atenciones con historia disponible del mismo documento que declaró el paciente.
+     * name_matches indica si el nombre del PDF coincide con el nombre escrito en la solicitud.
+     */
+    public function candidateEncounters(int $requestId): array
+    {
+        $request = $this->request($requestId);
+        if (!$request['claimed_document_type'] || !$request['claimed_document_number']) return [];
+        $rows = $this->db->all("SELECT e.*,s.name specialty,p.full_name patient_name,k.id package_id,
+                (SELECT COUNT(*) FROM clinical_files f WHERE f.package_id=k.id) file_count
+            FROM patients p JOIN encounters e ON e.patient_id=p.id JOIN specialties s ON s.id=e.specialty_id
+            JOIN packages k ON k.encounter_id=e.id AND k.status='available'
+            WHERE p.document_type=? AND p.document_number=? AND p.active=1 ORDER BY e.attended_at DESC LIMIT 50",
+            [$request['claimed_document_type'], $request['claimed_document_number']]);
+        foreach ($rows as &$row) $row['name_matches'] = self::nameKey($row['patient_name']) === self::nameKey($request['claimed_name']);
+        return $rows;
+    }
+
+    /**
+     * La persona encargada elige la atención que corresponde a una solicitud pendiente.
+     * Solo con el mismo documento y nombre; el envío reutiliza confirm() y sus validaciones.
+     */
+    public function assignEncounter(int $requestId, int $encounterId, int $adminId): void
+    {
+        $before = $this->db->transaction(function () use ($requestId, $encounterId, $adminId) {
+            $request = $this->db->one('SELECT * FROM requests WHERE id=? FOR UPDATE', [$requestId]);
+            if (!$request || !$request['direct_search'] || !in_array($request['status'], self::PENDING_STATUSES, true)) throw new \DomainException('La solicitud ya fue gestionada o no admite esta acción. Actualiza la página.');
+            $candidate = null;
+            foreach ($this->candidateEncounters($requestId) as $row) if ((int)$row['id'] === $encounterId) $candidate = $row;
+            if (!$candidate) throw new \DomainException('La atención no corresponde al documento de la solicitud o ya no está disponible.');
+            if (!$candidate['name_matches']) throw new \DomainException('El nombre de la solicitud no coincide con el del documento. Responde «No registra» para que el paciente verifique sus datos.');
+            $this->packageFiles((int)$candidate['package_id']);
+            $this->db->run("UPDATE requests SET patient_id=?,matched_at=COALESCE(matched_at,?),approximate_date=?,specialty_id=NULL,status='matched',
+                resolved_by=?,resolved_at=?,resolution='assigned' WHERE id=?",
+                [$candidate['patient_id'], $this->now(), substr($candidate['attended_at'], 0, 10), $adminId, $this->now(), $requestId]);
+            $this->event($requestId, 'request_assigned', 'admin_' . $adminId);
+            return $request;
+        });
+        // confirm() vuelve a validar pertenencia, integridad y destinatario, y encola correo y WhatsApp.
+        try { $this->confirm($requestId, $encounterId); }
+        catch (\Throwable $error) { $this->restorePending($before); throw $error; }
+        if ($this->request($requestId)['status'] !== 'queued') {
+            $this->restorePending($before);
+            throw new \DomainException('No se pudo preparar el envío de esa atención. Revisa que el paquete esté completo.');
+        }
+    }
+
+    /** Si el envío no se pudo preparar, la solicitud vuelve a la cola de pendientes tal como estaba. */
+    private function restorePending(array $before): void
+    {
+        $this->db->run('UPDATE requests SET patient_id=?,matched_at=?,approximate_date=?,specialty_id=?,encounter_id=?,status=?,resolved_by=NULL,resolved_at=NULL,resolution=NULL WHERE id=?',
+            [$before['patient_id'], $before['matched_at'], $before['approximate_date'], $before['specialty_id'], $before['encounter_id'], $before['status'], $before['id']]);
+        $this->event((int)$before['id'], 'request_assigned', 'reverted');
+    }
+
+    /** Respuesta «No registra»: cierra la solicitud y avisa al paciente por WhatsApp (si aplica) y correo. */
+    public function markNotRegistered(int $requestId, int $adminId): void
+    {
+        $this->db->transaction(function () use ($requestId, $adminId) {
+            $request = $this->db->one('SELECT * FROM requests WHERE id=? FOR UPDATE', [$requestId]);
+            if (!$request || !$request['direct_search'] || !in_array($request['status'], self::PENDING_STATUSES, true)) throw new \DomainException('La solicitud ya fue gestionada o no admite esta acción. Actualiza la página.');
+            $this->db->run("UPDATE requests SET status='not_registered',resolved_by=?,resolved_at=?,resolution='not_registered' WHERE id=?", [$adminId, $this->now(), $requestId]);
+            $body = (new MessageTemplates($this))->renderPlain('not_registered', ['radicado' => $request['reference'], 'nombre' => $request['claimed_name'], 'enlace' => $this->whatsapp()->portalUrl()]);
+            if ($request['contact_email'] && filter_var($request['contact_email'], FILTER_VALIDATE_EMAIL)) {
+                $this->queue($requestId, 'notice', $request['contact_email'], null, null, Crypto::seal($body, $this->config['app_key']), 'notice:not_registered:' . $requestId);
+            }
+            $this->whatsapp()->queueNotRegistered($requestId);
+            $this->event($requestId, 'request_not_registered', 'admin_' . $adminId);
+        });
+    }
+
+    /**
+     * Cuando se carga una historia, reprocesa las solicitudes de WhatsApp que quedaron sin historia
+     * (radicado ya informado) para ese mismo paciente. Si ahora hay coincidencia se envía sola.
+     */
+    public function resolveWaitingRequests(int $packageId): void
+    {
+        $patient = $this->db->one('SELECT p.* FROM packages k JOIN encounters e ON e.id=k.encounter_id JOIN patients p ON p.id=e.patient_id WHERE k.id=?', [$packageId]);
+        if (!$patient) return;
+        $since = date('Y-m-d H:i:s', time() - 86400 * (int)$this->config['whatsapp_pending_days']);
+        $waiting = $this->db->all("SELECT id,claimed_name,patient_id FROM requests WHERE direct_search=1 AND whatsapp_phone IS NOT NULL
+            AND status IN ('no_matches','unavailable') AND claimed_document_type=? AND claimed_document_number=? AND created_at>=? ORDER BY id",
+            [$patient['document_type'], $patient['document_number'], $since]);
+        foreach ($waiting as $request) {
+            if (self::nameKey($patient['full_name']) !== self::nameKey($request['claimed_name'])) continue;
+            // La solicitud pudo crearse antes de que el paciente existiera en el repositorio.
+            if ($request['patient_id'] === null) $this->db->run('UPDATE requests SET patient_id=? WHERE id=? AND patient_id IS NULL', [$patient['id'], $request['id']]);
+            $this->processSearch((int)$request['id']);
+            $this->event((int)$request['id'], 'whatsapp_pending_resolved', $this->request((int)$request['id'])['status']);
+        }
     }
 
     private static function nameKey(string $name): string
@@ -115,15 +213,15 @@ final class Application
         if (!$request['direct_search'] || !in_array($request['status'],['pending_verification','matched','no_matches','unavailable','awaiting_selection'],true)) return;
         $patient=$this->db->one('SELECT * FROM patients WHERE id=? AND active=1',[$request['patient_id']]);
         if (!$patient || self::nameKey($patient['full_name'])!==self::nameKey($request['claimed_name'])) {
-            $this->db->run("UPDATE requests SET status='no_matches' WHERE id=?",[$id]); return;
+            $this->db->run("UPDATE requests SET status='no_matches' WHERE id=?",[$id]); $this->whatsapp()->queueNotFound($id); return;
         }
         if (!$this->canUseRecipient($patient,$request['contact_email'],true)) {
-            $this->db->run("UPDATE requests SET status='not_eligible' WHERE id=?",[$id]); return;
+            $this->db->run("UPDATE requests SET status='not_eligible' WHERE id=?",[$id]); $this->whatsapp()->queueNotFound($id); return;
         }
         // Matching data is not identity/email verification. Keep verified_at/email empty.
         $this->db->run("UPDATE requests SET status='matched',matched_at=? WHERE id=?",[$this->now(),$id]);
         $matches=$this->search($id);
-        if (!$matches) $this->db->run("UPDATE requests SET status='no_matches' WHERE id=?",[$id]);
+        if (!$matches) { $this->db->run("UPDATE requests SET status='no_matches' WHERE id=?",[$id]); $this->whatsapp()->queueNotFound($id); }
         elseif(count($matches)===1) $this->confirm($id,(int)$matches[0]['id']);
         else $this->db->run("UPDATE requests SET status='awaiting_selection' WHERE id=?",[$id]);
         $this->event($id,'pdf_search',count($matches)===1?'single_match':(count($matches)>1?'multiple_matches':'no_matches'));
@@ -276,16 +374,20 @@ final class Application
             $packages = $this->db->all("SELECT * FROM packages WHERE encounter_id=? AND status='available' FOR UPDATE", [$encounterId]);
             if (count($packages) !== 1) {
                 $this->db->run("UPDATE requests SET status='unavailable',encounter_id=? WHERE id=?", [$encounterId, $id]);
+                $this->whatsapp()->queueNotFound($id);
                 return;
             }
             try { $this->packageFiles((int) $packages[0]['id']); }
             catch (\DomainException) {
                 $this->db->run("UPDATE requests SET status='unavailable',encounter_id=? WHERE id=?", [$encounterId, $id]);
                 $this->event($id, 'package_validation', 'unavailable');
+                $this->whatsapp()->queueNotFound($id);
                 return;
             }
             $this->queue($id, 'history', $request['direct_search'] ? $request['contact_email'] : $request['verified_email'], (int) $packages[0]['id']);
             $this->db->run("UPDATE requests SET status='queued',encounter_id=? WHERE id=?", [$encounterId, $id]);
+            // Si la solicitud llegó por WhatsApp, la misma historia se envía también al chat.
+            $this->whatsapp()->queueHistory($id, (int) $packages[0]['id']);
             $this->event($id, 'delivery_requested', 'queued');
         });
     }

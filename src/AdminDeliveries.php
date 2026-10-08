@@ -31,7 +31,18 @@ final class AdminDeliveries
         });
     }
 
-    public function search(string $query, int $page = 1, bool $history = false): array
+    /** Solicitudes que esperan gestión de la persona encargada (sin historia enviada ni respuesta de cierre). */
+    private function awaitingSql(): string
+    {
+        return "((r.direct_search=1 AND r.status IN ('" . implode("','", Application::PENDING_STATUSES) . "')) OR " . $this->pendingSql() . ")";
+    }
+
+    public function pendingCount(): int
+    {
+        return (int)$this->db->one('SELECT COUNT(*) n FROM requests r WHERE ' . $this->awaitingSql())['n'];
+    }
+
+    public function search(string $query, int $page = 1, bool $history = false, bool $pendingOnly = false): array
     {
         $query = mb_substr(trim($query), 0, 160);
         $where = '';
@@ -45,6 +56,7 @@ final class AdminDeliveries
             $where .= ($where === '' ? ' WHERE ' : ' AND ') . "(r.matched_at IS NOT NULL OR r.verified_at IS NOT NULL)
                 AND EXISTS (SELECT 1 FROM jobs delivered WHERE delivered.request_id=r.id AND delivered.kind='history' AND delivered.status='sent' AND delivered.sent_at IS NOT NULL AND delivered.id>COALESCE(r.case_reopened_after_job_id,0))";
         }
+        if ($pendingOnly && !$history) $where .= ($where === '' ? ' WHERE ' : ' AND ') . $this->awaitingSql();
         $from = ' FROM requests r LEFT JOIN patients p ON p.id=r.patient_id';
         $total = (int)$this->db->one('SELECT COUNT(*) n' . $from . $where, $params)['n'];
         $pages = max(1, (int)ceil($total / 20));
@@ -53,21 +65,21 @@ final class AdminDeliveries
         $rows = $this->db->all("SELECT r.*,COALESCE(r.claimed_document_type,p.document_type) document_type,
             COALESCE(r.claimed_document_number,p.document_number) document_number,
             j.id last_job_id,j.status delivery_status,j.sent_at,j.recipient,j.last_error,e.attended_at,s.name specialty,
-            " . $this->pendingSql() . " case_pending,
+            " . $this->pendingSql() . " case_pending," . $this->awaitingSql() . " awaiting,
             (SELECT MIN(done.sent_at) FROM jobs done WHERE done.request_id=r.id AND done.kind='history' AND done.status='sent' AND done.id>COALESCE(r.case_reopened_after_job_id,0)) closed_at,
             (SELECT COUNT(*) FROM jobs n WHERE n.request_id=r.id AND n.kind='history') deliveries"
             . $from . " LEFT JOIN encounters e ON e.id=r.encounter_id LEFT JOIN specialties s ON s.id=e.specialty_id
                 LEFT JOIN jobs j ON j.id=(SELECT MAX(last.id) FROM jobs last WHERE last.request_id=r.id AND last.kind='history')"
-            . $where . ($history ? ' ORDER BY closed_at DESC,r.id DESC' : ' ORDER BY case_pending DESC,r.id DESC') . " LIMIT 20 OFFSET $offset", $params);
-        return compact('query','total','page','pages','rows','history');
+            . $where . ($history ? ' ORDER BY closed_at DESC,r.id DESC' : ($pendingOnly ? ' ORDER BY r.created_at ASC,r.id ASC' : ' ORDER BY awaiting DESC,case_pending DESC,r.id DESC')) . " LIMIT 20 OFFSET $offset", $params);
+        return compact('query','total','page','pages','rows','history','pendingOnly');
     }
 
     public function detail(int $id): ?array
     {
-        $request = $this->db->one('SELECT r.*,' . $this->pendingSql() . ' case_pending,COALESCE(r.claimed_document_type,p.document_type) document_type,
+        $request = $this->db->one('SELECT r.*,' . $this->pendingSql() . ' case_pending,' . $this->awaitingSql() . ' awaiting,COALESCE(r.claimed_document_type,p.document_type) document_type,
             COALESCE(r.claimed_document_number,p.document_number) document_number,
-            p.full_name indexed_name,e.attended_at,s.name specialty
-            FROM requests r LEFT JOIN patients p ON p.id=r.patient_id
+            p.full_name indexed_name,e.attended_at,s.name specialty,a.name resolved_by_name
+            FROM requests r LEFT JOIN patients p ON p.id=r.patient_id LEFT JOIN admins a ON a.id=r.resolved_by
             LEFT JOIN encounters e ON e.id=r.encounter_id LEFT JOIN specialties s ON s.id=COALESCE(e.specialty_id,r.specialty_id)
             WHERE r.id=?', [$id]);
         if (!$request) return null;
@@ -77,6 +89,8 @@ final class AdminDeliveries
         foreach ($deliveries as &$delivery) {
             $delivery['files'] = $this->db->all('SELECT original_name,page_count,size_bytes FROM clinical_files WHERE package_id=? ORDER BY sort_order,id', [$delivery['package_id']]);
         }
-        return compact('request','deliveries');
+        // Solo metadatos: el texto cifrado del mensaje no se expone.
+        $whatsapp = $this->db->all("SELECT id,phone,kind,status,attempts,progress,created_at,sent_at,last_error FROM whatsapp_outbox WHERE request_id=? ORDER BY id DESC", [$id]);
+        return compact('request','deliveries','whatsapp');
     }
 }

@@ -27,4 +27,24 @@ return [
     'mail_attempts' => 3,
     'history_resend_seconds' => 60,
     'history_resend_max' => 3,
+    // WhatsApp Cloud API (Meta). local: guarda los mensajes en storage/wa-outbox sin enviarlos.
+    'whatsapp_transport' => 'local', // local | cloud | qr (pruebas con número secundario vía tools/whatsapp-qr)
+    'whatsapp_qr_url' => 'http://127.0.0.1:3218',
+    'whatsapp_api_version' => 'v21.0',
+    'whatsapp_phone_number_id' => '',
+    'whatsapp_token' => '',
+    'whatsapp_verify_token' => '',
+    'whatsapp_app_secret' => '',
+    'whatsapp_link_seconds' => 6 * 3600,
+    // Días que una solicitud sin historia espera a que se cargue el PDF para enviarse sola.
+    'whatsapp_pending_days' => 30,
+    // Días que un mensaje espera (waiting_window) a que el paciente escriba de nuevo con la ventana de 24 h cerrada.
+    'whatsapp_window_wait_days' => 7,
+    // Plantilla aprobada por Meta (opcional) con una variable {{1}} = radicado, para avisar con la ventana cerrada.
+    'whatsapp_template_ready' => '',
+    'whatsapp_template_lang' => 'es',
+    // Tiempo estimado que se informa al paciente cuando su solicitud queda con radicado.
+    'whatsapp_estimated_hours' => 24,
+    // URL pública del portal (por ejemplo, el túnel HTTPS hacia public/).
+    'public_url' => 'http://localhost/CitaYaV3/public',
 ];

@@ -3,7 +3,7 @@ FROM php:8.2-apache
 
 # Extensiones: pdo_mysql (MariaDB/MySQL) y mbstring (lectura de PDF y normalización).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libonig-dev unzip \
+        libonig-dev unzip poppler-utils \
     && docker-php-ext-install -j"$(nproc)" pdo_mysql mbstring \
     && rm -rf /var/lib/apt/lists/*
 

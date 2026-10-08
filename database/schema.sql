@@ -60,11 +60,15 @@ CREATE TABLE IF NOT EXISTS requests (
  claimed_document_type VARCHAR(8) NULL,
  claimed_document_number VARCHAR(24) NULL,
  contact_email VARCHAR(190) NULL,
+ whatsapp_phone VARCHAR(20) NULL,
  direct_search TINYINT NOT NULL DEFAULT 0,
  matched_at DATETIME NULL,
  case_reopened_at DATETIME NULL,
  case_reopened_by BIGINT UNSIGNED NULL,
  case_reopened_after_job_id BIGINT UNSIGNED NULL,
+ resolved_by BIGINT UNSIGNED NULL,
+ resolved_at DATETIME NULL,
+ resolution VARCHAR(20) NULL,
  approximate_date DATE NULL,
  specialty_id BIGINT UNSIGNED NULL,
  encounter_id BIGINT UNSIGNED NULL,
@@ -134,4 +138,59 @@ CREATE TABLE IF NOT EXISTS admins (
  name VARCHAR(120) NOT NULL,
  password_hash VARCHAR(255) NOT NULL,
  active TINYINT NOT NULL DEFAULT 1
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS whatsapp_inbound (
+ wa_message_id VARCHAR(190) PRIMARY KEY,
+ phone VARCHAR(20) NOT NULL,
+ intent VARCHAR(20) NOT NULL,
+ created_at DATETIME NOT NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS whatsapp_links (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ token_hash CHAR(64) NOT NULL UNIQUE,
+ phone VARCHAR(20) NOT NULL,
+ expires_at DATETIME NOT NULL,
+ used_at DATETIME NULL,
+ request_id BIGINT UNSIGNED NULL,
+ created_at DATETIME NOT NULL,
+ FOREIGN KEY (request_id) REFERENCES requests(id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS whatsapp_outbox (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ request_id BIGINT UNSIGNED NULL,
+ package_id BIGINT UNSIGNED NULL,
+ phone VARCHAR(20) NOT NULL,
+ kind VARCHAR(16) NOT NULL,
+ encrypted_body TEXT NULL,
+ status VARCHAR(24) NOT NULL DEFAULT 'queued',
+ attempts INT NOT NULL DEFAULT 0,
+ progress INT NOT NULL DEFAULT 0,
+ available_at DATETIME NOT NULL,
+ locked_at DATETIME NULL,
+ sent_at DATETIME NULL,
+ dedupe_key VARCHAR(100) NOT NULL UNIQUE,
+ last_error VARCHAR(120) NULL,
+ created_at DATETIME NOT NULL,
+ FOREIGN KEY (request_id) REFERENCES requests(id),
+ FOREIGN KEY (package_id) REFERENCES packages(id),
+ INDEX whatsapp_ready (status, available_at)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS clinical_orders (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ file_id BIGINT UNSIGNED NOT NULL,
+ order_type VARCHAR(20) NOT NULL,
+ page INT NOT NULL,
+ FOREIGN KEY (file_id) REFERENCES clinical_files(id),
+ INDEX order_file (file_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS message_templates (
+ code VARCHAR(40) PRIMARY KEY,
+ body TEXT NOT NULL,
+ updated_by BIGINT UNSIGNED NULL,
+ updated_at DATETIME NOT NULL
 ) ENGINE=InnoDB;

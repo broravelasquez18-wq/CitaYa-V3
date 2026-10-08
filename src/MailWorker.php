@@ -37,9 +37,14 @@ final class MailWorker
         try {
             $request = $this->app->request((int) $job['request_id']);
             $patient = $db->one('SELECT * FROM patients WHERE id=? AND active=1', [$request['patient_id']]);
-            $directDelivery = (bool)$request['direct_search'] && $job['kind'] === 'history';
-            if (!$patient || !$this->app->canUseRecipient($patient, $job['recipient'], $directDelivery) || !hash_equals($request['contact_email'] ?? '', $job['recipient'])) throw new \DomainException('recipient_changed_or_untrusted');
-            if (!$directDelivery && $config['mail_transport'] === 'smtp' && $config['mode'] === 'demo' && strcasecmp($job['recipient'], $config['test_recipient']) !== 0) throw new \DomainException('test_recipient_not_allowed');
+            if ($job['kind'] === 'notice') {
+                // Aviso sin documentos clínicos (p. ej. «No registra»): el paciente puede no existir en el repositorio.
+                if (!$request['direct_search'] || !hash_equals($request['contact_email'] ?? '', $job['recipient']) || !filter_var($job['recipient'], FILTER_VALIDATE_EMAIL)) throw new \DomainException('recipient_changed_or_untrusted');
+            } else {
+                $directDelivery = (bool)$request['direct_search'] && $job['kind'] === 'history';
+                if (!$patient || !$this->app->canUseRecipient($patient, $job['recipient'], $directDelivery) || !hash_equals($request['contact_email'] ?? '', $job['recipient'])) throw new \DomainException('recipient_changed_or_untrusted');
+                if (!$directDelivery && $config['mail_transport'] === 'smtp' && $config['mode'] === 'demo' && strcasecmp($job['recipient'], $config['test_recipient']) !== 0) throw new \DomainException('test_recipient_not_allowed');
+            }
             $mail = new PHPMailer(true);
             $mail->CharSet = 'UTF-8';
             $mail->setFrom($config['mail_from'], $config['mail_from_name']);
@@ -54,6 +59,9 @@ final class MailWorker
                 $code = Crypto::open($job['encrypted_payload'], $config['app_key']);
                 $mail->Subject = 'Código de verificación · ' . $request['reference'];
                 $mail->Body = "Tu código de verificación es: $code\n\nVence en 10 minutos y solo puede usarse una vez.\nSi no solicitaste este código, ignora este mensaje.\n\nCitaYa";
+            } elseif ($job['kind'] === 'notice') {
+                $mail->Subject = 'Respuesta a tu solicitud ' . $request['reference'];
+                $mail->Body = Crypto::open($job['encrypted_payload'], $config['app_key']) . "\n\nCitaYa";
             } else {
                 if ($request['direct_search']) $this->app->requireVerified((int)$request['id']);
                 elseif (!hash_equals($request['verified_email'] ?? '', $job['recipient'])) throw new \DomainException('verification_required');

@@ -3,6 +3,7 @@ declare(strict_types=1);
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 $app = require dirname(__DIR__) . '/src/bootstrap.php';
 $worker = new App\MailWorker($app);
+$whatsapp = $app->whatsapp();
 $loop = in_array('--loop', $argv, true);
 $jobId = null;
 foreach (array_slice($argv, 1) as $argument) {
@@ -21,6 +22,7 @@ if ($jobId !== null) {
 do {
     $processed = 0;
     while ($processed < 50 && $worker->tick()) $processed++;
+    while ($processed < 100 && $whatsapp->tick()) $processed++;
     if ($processed) echo date('c') . " Procesados: $processed\n";
     if ($loop) sleep(3);
 } while ($loop);

@@ -10,3 +10,4 @@ config/local.php
 tests/
 docs/
 *.md
+tools/whatsapp-qr/
