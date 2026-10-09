@@ -27,8 +27,9 @@ if [ "${RUN_SETUP:-1}" = "1" ]; then
     echo "────────────────────────────────────────────────"
   fi
   # 4) Con Zernio, registra el webhook <PUBLIC_URL>/whatsapp.php (no lo duplica si ya existe).
+  #    En segundo plano y con espera: la entrega de prueba necesita que Apache ya esté atendiendo.
   if [ "${WHATSAPP_TRANSPORT:-local}" = "zernio" ]; then
-    php bin/zernio.php webhook || echo "Aviso: no se registró el webhook de Zernio (revisa ZERNIO_* y PUBLIC_URL)."
+    (sleep 20; php bin/zernio.php webhook || echo "Aviso: no se registró el webhook de Zernio (revisa ZERNIO_* y PUBLIC_URL).") &
   fi
 fi
 
