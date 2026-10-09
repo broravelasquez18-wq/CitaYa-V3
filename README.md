@@ -117,6 +117,21 @@ Prueba: `php tests/requests-admin.php`.
 
 Los mensajes salen por `whatsapp_outbox` y los procesa el mismo `php bin/worker.php --loop`. En el detalle de cada solicitud se ven el número y el estado de los mensajes de WhatsApp. Con `whatsapp_transport = local` (predeterminado) no se envía nada: cada mensaje se guarda en `storage/wa-outbox/ID.json`.
 
+### Conectar con Zernio (recomendado)
+
+[Zernio](https://docs.zernio.com/platforms/whatsapp) ofrece una API unificada sobre la Cloud API de Meta: conecta el número desde su panel y CitaYa envía y recibe por su API.
+
+1. Crea la cuenta en Zernio, conecta el número de WhatsApp (uno propio o comprado en Zernio) y genera una **API key** en su panel.
+2. En `config/local.php` define `whatsapp_transport => zernio`, `zernio_api_key` y un `zernio_webhook_secret` aleatorio de al menos 32 caracteres. Por ejemplo: `php -r "echo bin2hex(random_bytes(24));"`.
+3. `php bin/zernio.php accounts` lista los números conectados. Copia el id en `zernio_account_id`.
+4. Pon en `public_url` la URL pública HTTPS hacia `public/` (en local, un túnel como `cloudflared tunnel --url http://localhost`).
+5. `php bin/setup.php` (crea la tabla `whatsapp_conversations`) y luego `php bin/zernio.php webhook`: registra `<public_url>/whatsapp.php` para `message.received`, solo de esa cuenta, y envía una entrega de prueba.
+6. Reinicia `php bin/worker.php --loop`.
+
+Funcionamiento: el webhook valida la firma `X-Zernio-Signature` (HMAC-SHA256 con `zernio_webhook_secret`), guarda la conversación de cada número y responde enseguida (Zernio exige respuesta en menos de 5 s). El procesador responde en esa conversación: el texto como mensaje, y cada PDF y la imagen de la página de una orden como adjuntos. Cada mensaje lleva una clave `Idempotency-Key` para no duplicarse si se pierde la respuesta. Solo se puede escribir a un número que antes escribió al chat. La ventana de 24 h funciona igual que con Meta: la plantilla de `whatsapp_template_ready` se envía con Zernio y debe estar aprobada en la WABA conectada.
+
+**En Docker/Dokploy** (`docker-compose.yml`, aparte de V2: base, procesador y rutas `citayav3` propios), WhatsApp se configura en *Environment* con `WHATSAPP_TRANSPORT=zernio`, `ZERNIO_API_KEY`, `ZERNIO_ACCOUNT_ID`, `ZERNIO_WEBHOOK_SECRET`, `DOMAIN` (la URL pública queda en `https://${DOMAIN}`) y, si hay plantilla aprobada, `WHATSAPP_TEMPLATE_READY`. El servicio `worker` es el procesador; el contenedor `app` registra el webhook al arrancar si no existe.
+
 ### Conectar con WhatsApp Cloud API (Meta)
 
 1. En [Meta for Developers](https://developers.facebook.com/) crea una app de tipo *Business* y agrega el producto **WhatsApp**. Registra el número de la clínica (o usa el número de prueba).
@@ -128,7 +143,7 @@ Los mensajes salen por `whatsapp_outbox` y los procesa el mismo `php bin/worker.
 
 Límites: WhatsApp solo permite responder con mensajes libres durante las 24 horas siguientes al último mensaje del paciente; fuera de ese plazo el mensaje queda en `waiting_window` (conserva lo ya enviado) y sale automáticamente cuando el paciente vuelve a escribir al chat; si no escribe en `whatsapp_window_wait_days` (7) se marca `window_expired` (el correo sí se envió). Para avisarle por WhatsApp aun con la ventana cerrada, crea en Meta una plantilla aprobada con una variable `{{1}}` (radicado), por ejemplo «Tu historia clínica con radicado {{1}} está lista. Responde a este chat para recibirla.», y configura `whatsapp_template_ready` (y `whatsapp_template_lang`). Las firmas `X-Hub-Signature-256` se validan con la clave secreta; sin ella solo se aceptan pruebas en modo local. Igual que el correo, el número de WhatsApp no verifica la identidad del paciente: la entrega depende de la coincidencia de datos con los PDF.
 
-Prueba: `php tests/whatsapp.php` (base temporal, sin envíos externos).
+Pruebas: `php tests/whatsapp.php` y `php tests/whatsapp-zernio.php` (base temporal y API de Zernio simulada, sin envíos externos).
 
 ## Protección y límites
 
@@ -149,6 +164,8 @@ En XAMPP, `.htaccess` permite solo `public/` y bloquea configuración, almacenam
 ```powershell
 php tests/pdf-reader.php
 php tests/run.php
+php tests/whatsapp.php
+php tests/whatsapp-zernio.php
 php tests/http.php
 php tests/upload.php
 php tests/resend-ui.php

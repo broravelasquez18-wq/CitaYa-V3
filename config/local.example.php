@@ -10,8 +10,13 @@ return [
     'smtp_password' => 'YOUR_PROVIDER_APP_PASSWORD',
     'mail_from' => 'YOUR_SMTP_ACCOUNT',
     'test_recipient' => 'broravelasquez18@gmail.com',
-    // WhatsApp Cloud API (Meta for Developers → WhatsApp → Configuración de la API)
-    'whatsapp_transport' => 'cloud',
+    // WhatsApp por Zernio (ver README → «Conectar con Zernio»)
+    'whatsapp_transport' => 'zernio',
+    'zernio_api_key' => 'API_KEY_DE_ZERNIO',
+    'zernio_account_id' => 'ID_DE_LA_CUENTA (php bin/zernio.php accounts)',
+    'zernio_webhook_secret' => 'CADENA_ALEATORIA_DE_32_O_MAS_CARACTERES',
+    // Alternativa: WhatsApp Cloud API directa (Meta for Developers → WhatsApp → Configuración de la API)
+    // con 'whatsapp_transport' => 'cloud' y estos valores:
     'whatsapp_phone_number_id' => 'ID_DEL_NUMERO',
     'whatsapp_token' => 'TOKEN_PERMANENTE_DEL_USUARIO_DEL_SISTEMA',
     'whatsapp_verify_token' => 'UNA_CADENA_ALEATORIA_QUE_TU_ELIJAS',

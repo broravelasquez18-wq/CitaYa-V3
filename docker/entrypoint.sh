@@ -26,6 +26,10 @@ if [ "${RUN_SETUP:-1}" = "1" ]; then
     cat .runtime/first-login.txt
     echo "────────────────────────────────────────────────"
   fi
+  # 4) Con Zernio, registra el webhook <PUBLIC_URL>/whatsapp.php (no lo duplica si ya existe).
+  if [ "${WHATSAPP_TRANSPORT:-local}" = "zernio" ]; then
+    php bin/zernio.php webhook || echo "Aviso: no se registró el webhook de Zernio (revisa ZERNIO_* y PUBLIC_URL)."
+  fi
 fi
 
 exec "$@"

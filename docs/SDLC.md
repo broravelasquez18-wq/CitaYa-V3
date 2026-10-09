@@ -158,6 +158,63 @@ Análisis mensual incorpora tarjetas de día, mes y año según una fecha de ref
 - Decidir la gestión cuando la fecha indicada por el paciente no coincide con la del PDF: hoy la solicitud queda pendiente para revisión manual.
 - Validar con la política de privacidad (`docs/politica-privacidad.md`) el envío de documentos clínicos por WhatsApp, porque el número no prueba la identidad del titular.
 
+## Transporte de WhatsApp por Zernio
+
+**Fase 1 · Alcance.** Enviar y recibir los mensajes del bot a través de [Zernio](https://docs.zernio.com/platforms/whatsapp), una API unificada sobre la Cloud API de Meta, como alternativa a la cuenta de Meta restringida (SCRUM-20). El flujo del bot no cambia: menú, enlace, historia, radicado, «No registra», órdenes y ventana de 24 h. Siguen disponibles los transportes `local`, `cloud` y `qr`. Fuera de alcance: estados de entrega (`message.delivered`/`read`), mensajes de voz y conexión del número desde CitaYa (se hace en el panel de Zernio). Jira: SCRUM-29, dentro de la épica SCRUM-5. La investigación previa está en SCRUM-22.
+
+**Fase 2 · Requisitos.**
+
+| Requisito | Descripción |
+|---|---|
+| RF-27 Transporte Zernio | Con `whatsapp_transport = zernio` los mensajes entran por el webhook de Zernio y salen por su API, con el mismo comportamiento que con Meta |
+| RNF | Firma `X-Zernio-Signature` obligatoria, respuesta del webhook en menos de 5 s (solo registra y encola), deduplicación por `platformMessageId`, `Idempotency-Key` por mensaje, solo la cuenta configurada, credenciales únicamente en `config/local.php` |
+
+**Fase 3 · Diseño.**
+- Para responder, Zernio exige la conversación, no el número. La tabla `whatsapp_conversations` (teléfono → `conversationId`) se llena con cada `message.received`.
+- `public/whatsapp.php` deriva a `WhatsApp::receiveZernio` cuando llega la cabecera de Zernio o el transporte es `zernio`. Solo atiende mensajes entrantes de WhatsApp de `zernio_account_id`, e ignora usuarios sin teléfono (solo BSUID), estados y `webhook.test`. La lógica común (deduplicación, límite por número, liberar la ventana, menú o enlace) quedó en `handleInbound`, compartida con Meta.
+- Envío: `POST /v1/inbox/conversations/{id}/messages`. El texto va en JSON. El PDF y la imagen de la orden van en multipart (`attachment`, con el nombre del archivo que ve el paciente).
+- Clave de idempotencia: `citaya-<huella de app_key>-<id de cola>-<índice>`, para que otra instalación con la misma cuenta no choque.
+- Errores: Meta 131047 → `waiting_window`. 409, 429 y 5xx → reintento. Otros 4xx → fallo. Sin conversación previa → `zernio_no_conversation`.
+- Ventana cerrada: la plantilla `whatsapp_template_ready` se envía con `POST /v1/inbox/conversations` (`templateName`, `templateParams` = radicado).
+- `bin/zernio.php`: `accounts` lista los números conectados; `webhook` registra `<public_url>/whatsapp.php` (solo `message.received` y la cuenta configurada) y lanza la prueba de entrega.
+
+**Fase 4 · Implementación.**
+- Nuevos: `bin/zernio.php` y `tests/whatsapp-zernio.php`.
+- Modificados: `src/WhatsApp.php`, `public/whatsapp.php`, `config/default.php` (`zernio_api_url`, `zernio_api_key`, `zernio_account_id`, `zernio_webhook_secret`), `config/local.example.php`, `database/schema.sql` (tabla `whatsapp_conversations`) y README («Conectar con Zernio»).
+- Se usó la especificación OpenAPI oficial de Zernio (v1.244.2).
+
+**Fase 5 · Validación.**
+- `php tests/whatsapp-zernio.php`: 22 comprobaciones contra una API de Zernio simulada (servidor PHP local), en base temporal. Cubre:
+  - firma válida, alterada y sin secreto;
+  - registro de la conversación y deduplicación de reintentos;
+  - eventos ignorados: otra cuenta, mensajes salientes, otras redes, estados, BSUID y `webhook.test`;
+  - menú con token, cuenta y clave de idempotencia;
+  - historia completa con el PDF íntegro y su nombre, y claves distintas por mensaje;
+  - reintento ante un 500, fallo definitivo ante un 400 (con borrado del texto cifrado);
+  - ventana de 24 h con plantilla y liberación cuando el paciente vuelve a escribir;
+  - número sin conversación previa, token inválido y configuración incompleta.
+- Regresión: `whatsapp` 32, `whatsapp-qr` 8, `requests-admin` 25, `run` 155, `pdf-reader` 17 y `analytics`, todas correctas.
+- Migración aplicada en `citaya_v3` (tabla creada).
+- HTTP sobre Apache local: el webhook responde 401 a firmas inválidas y cuando no hay secreto configurado.
+- Sin envíos a Zernio ni a WhatsApp reales.
+
+**Fases 6–7 · Pendiente para el despliegue.**
+- El titular debe crear la cuenta en Zernio, conectar el número y configurar `config/local.php`. Después: `php bin/zernio.php accounts`, `php bin/setup.php` y `php bin/zernio.php webhook` con un túnel HTTPS.
+- Prueba real de punta a punta con datos ficticios (SCRUM-14).
+- Confirmar al conectar si la restricción de la cuenta de Meta (SCRUM-20) también afecta la WABA que se conecte por Zernio.
+- Aprobar la plantilla «historia lista» en esa WABA (SCRUM-15).
+- Docker/Dokploy preparado (SCRUM-16, sin desplegar todavía):
+  - `docker/configure.php` lee `WHATSAPP_TRANSPORT`, `ZERNIO_*`, `WHATSAPP_TEMPLATE_*` y `PUBLIC_URL`.
+  - `docker-compose.yml` las pasa a `app` y `worker`, con `PUBLIC_URL=https://${DOMAIN}`.
+  - Las rutas de Traefik se renombraron de `citayav2` a `citayav3` para no chocar con V2 en el mismo servidor.
+  - `entrypoint.sh` registra el webhook al arrancar si el transporte es `zernio`.
+  - Se validó la generación de la configuración con variables de ejemplo, en una copia aparte, y la estructura del compose.
+- Configuración local (2026-10-08):
+  - Número «Citas Ya» conectado a Zernio en modo coexistencia con la app WhatsApp Business, en el porfolio de Meta «Cita Ya», sin verificación del negocio.
+  - `whatsapp_transport = zernio` en `config/local.php`.
+  - Procesador propio de V3 en ejecución, separado del de V2.
+  - Falta un túnel HTTPS para registrar el webhook local.
+
 ## Gestión de solicitudes por la persona encargada
 
 **Fase 1 · Alcance.** Completar el flujo «la persona encargada responde el radicado». Ver las solicitudes pendientes con su plazo de 24 h y resolverlas desde el panel: asignar una historia ya cargada, cargar el PDF desde la solicitud o responder «No registra». Los mensajes al paciente se manejan con plantillas editables. Planificación en Jira: épica SCRUM-23.

@@ -23,33 +23,67 @@ final class WhatsApp
         return '••• ' . substr($phone, -4);
     }
 
-    /** Procesa el JSON del webhook. Devuelve la cantidad de mensajes nuevos atendidos. */
+    /** Firma de Zernio: HMAC-SHA256 del cuerpo en hexadecimal, sin prefijo (cabecera X-Zernio-Signature). */
+    public static function validZernioSignature(string $body, string $header, string $secret): bool
+    {
+        return $secret !== '' && hash_equals(hash_hmac('sha256', $body, $secret), strtolower(trim($header)));
+    }
+
+    /** Procesa el JSON del webhook de Meta. Devuelve la cantidad de mensajes nuevos atendidos. */
     public function receive(array $payload): int
     {
         $handled = 0;
         foreach ($payload['entry'] ?? [] as $entry) foreach ($entry['changes'] ?? [] as $change) {
             foreach ($change['value']['messages'] ?? [] as $message) {
-                $phone = preg_replace('/\D/', '', (string)($message['from'] ?? ''));
-                $id = (string)($message['id'] ?? '');
-                if ($id === '' || strlen($id) > 190 || strlen($phone) < 8 || strlen($phone) > 20) continue;
                 $type = (string)($message['type'] ?? '');
                 $text = $type === 'text' ? (string)($message['text']['body'] ?? '') : '';
                 if ($type === 'interactive') $text = (string)($message['interactive']['button_reply']['id'] ?? '');
-                $intent = $this->intent($text);
-                // Meta reintenta el webhook: el id del mensaje evita respuestas duplicadas.
-                $new = $this->app->db->run('INSERT IGNORE INTO whatsapp_inbound (wa_message_id,phone,intent,created_at) VALUES (?,?,?,?)', [$id, $phone, $intent, $this->app->now()])->rowCount();
-                if (!$new) continue;
-                try { $this->app->limit('whatsapp-phone:' . $phone, 20, 3600); }
-                catch (\DomainException) { continue; }
-                // Si había mensajes esperando porque la ventana de 24 h estaba cerrada, ya pueden salir.
-                $released = $this->app->db->run("UPDATE whatsapp_outbox SET status='queued',last_error=NULL,available_at=? WHERE phone=? AND status='waiting_window'", [$this->app->now(), $phone])->rowCount();
-                if ($released) $this->queueText($phone, 'Gracias por escribirnos. Te estamos enviando ahora tu historia clínica.', 'release:' . $id);
-                if ($intent === 'history') $this->sendFormLink($phone);
-                elseif (!$released) $this->queueText($phone, $this->menu(), 'menu:' . $id);
-                $handled++;
+                $handled += (int)$this->handleInbound((string)($message['id'] ?? ''), (string)($message['from'] ?? ''), $text);
             }
         }
         return $handled;
+    }
+
+    /**
+     * Procesa un evento del webhook de Zernio. Solo atiende message.received entrante de WhatsApp;
+     * guarda la conversación del número porque las respuestas se envían a ella.
+     */
+    public function receiveZernio(array $payload): int
+    {
+        $message = $payload['message'] ?? null;
+        if (($payload['event'] ?? '') !== 'message.received' || !is_array($message)) return 0;
+        if (($message['platform'] ?? '') !== 'whatsapp' || ($message['direction'] ?? '') !== 'incoming') return 0;
+        // Otros números conectados a la misma cuenta de Zernio no son el canal de CitaYa.
+        $account = (string)($payload['account']['accountId'] ?? '');
+        if ($account !== '' && $account !== (string)$this->app->config['zernio_account_id']) return 0;
+        // sender.id es el teléfono sin «+» o, si el usuario lo oculta, su BSUID (no sirve como teléfono).
+        $sender = $message['sender'] ?? [];
+        $phone = (string)($sender['phoneNumber'] ?? '');
+        if ($phone === '' && ctype_digit((string)($sender['id'] ?? ''))) $phone = (string)$sender['id'];
+        $phone = preg_replace('/\D/', '', $phone);
+        $conversation = (string)($payload['conversation']['id'] ?? $message['conversationId'] ?? '');
+        if ($conversation === '' || strlen($conversation) > 190 || strlen($phone) < 8 || strlen($phone) > 20) return 0;
+        $this->app->db->run('INSERT INTO whatsapp_conversations (phone,conversation_id,updated_at) VALUES (?,?,?) ON DUPLICATE KEY UPDATE conversation_id=VALUES(conversation_id),updated_at=VALUES(updated_at)', [$phone, $conversation, $this->app->now()]);
+        $text = (string)($payload['metadata']['interactiveId'] ?? '') ?: (string)($message['text'] ?? '');
+        return (int)$this->handleInbound((string)($message['platformMessageId'] ?? $message['id'] ?? ''), $phone, $text);
+    }
+
+    private function handleInbound(string $id, string $from, string $text): bool
+    {
+        $phone = preg_replace('/\D/', '', $from);
+        if ($id === '' || strlen($id) > 190 || strlen($phone) < 8 || strlen($phone) > 20) return false;
+        $intent = $this->intent($text);
+        // Meta y Zernio reintentan el webhook: el id del mensaje evita respuestas duplicadas.
+        $new = $this->app->db->run('INSERT IGNORE INTO whatsapp_inbound (wa_message_id,phone,intent,created_at) VALUES (?,?,?,?)', [$id, $phone, $intent, $this->app->now()])->rowCount();
+        if (!$new) return false;
+        try { $this->app->limit('whatsapp-phone:' . $phone, 20, 3600); }
+        catch (\DomainException) { return false; }
+        // Si había mensajes esperando porque la ventana de 24 h estaba cerrada, ya pueden salir.
+        $released = $this->app->db->run("UPDATE whatsapp_outbox SET status='queued',last_error=NULL,available_at=? WHERE phone=? AND status='waiting_window'", [$this->app->now(), $phone])->rowCount();
+        if ($released) $this->queueText($phone, 'Gracias por escribirnos. Te estamos enviando ahora tu historia clínica.', 'release:' . $id);
+        if ($intent === 'history') $this->sendFormLink($phone);
+        elseif (!$released) $this->queueText($phone, $this->menu(), 'menu:' . $id);
+        return true;
     }
 
     private function intent(string $text): string
@@ -169,13 +203,23 @@ final class WhatsApp
                 return true;
             }
             $transport = $this->app->config['whatsapp_transport'];
-            $configured = $transport === 'cloud' ? $this->app->config['whatsapp_token'] && $this->app->config['whatsapp_phone_number_id']
-                : $transport === 'qr' && $this->app->config['whatsapp_app_secret'] && $this->app->config['whatsapp_qr_url'];
+            $config = $this->app->config;
+            $configured = match ($transport) {
+                'cloud' => $config['whatsapp_token'] && $config['whatsapp_phone_number_id'],
+                'zernio' => $config['zernio_api_key'] && $config['zernio_account_id'] && $config['zernio_api_url'],
+                'qr' => $config['whatsapp_app_secret'] && $config['whatsapp_qr_url'],
+                default => false,
+            };
             if (!$configured) throw new \DomainException('whatsapp_not_configured');
             // progress conserva los documentos ya aceptados para no repetirlos en un reintento.
             foreach ($messages as $index => $message) {
                 if ($index < (int)$job['progress']) continue;
-                $transport === 'qr' ? $this->deliverQr($job['phone'], $message) : $this->deliver($job['phone'], $message);
+                match ($transport) {
+                    'qr' => $this->deliverQr($job['phone'], $message),
+                    // La clave incluye la instalación: otra base con el mismo id de cola no choca en Zernio.
+                    'zernio' => $this->deliverZernio($job['phone'], $message, 'citaya-' . substr(hash('sha256', (string)$config['app_key']), 0, 8) . '-' . $job['id'] . '-' . $index),
+                    default => $this->deliver($job['phone'], $message),
+                };
                 $db->run('UPDATE whatsapp_outbox SET progress=? WHERE id=?', [$index + 1, $job['id']]);
             }
             $this->finish($job, 'sent');
@@ -294,6 +338,55 @@ final class WhatsApp
         throw new WhatsAppTransportError('qr_' . preg_replace('/[^a-z0-9_]/', '', $result), in_array($status, [502, 503], true));
     }
 
+    /**
+     * Transporte Zernio: responde en la conversación que abrió el paciente. Los archivos van como
+     * multipart (el nombre del CURLFile es el que ve el paciente). La clave de idempotencia evita
+     * duplicados si se pierde la respuesta de un envío que sí salió.
+     */
+    private function deliverZernio(string $phone, array $message, string $idempotencyKey): void
+    {
+        $conversation = $this->app->db->one('SELECT conversation_id FROM whatsapp_conversations WHERE phone=?', [$phone]);
+        if (!$conversation) throw new \DomainException('zernio_no_conversation');
+        $path = '/v1/inbox/conversations/' . rawurlencode($conversation['conversation_id']) . '/messages';
+        $account = $this->app->config['zernio_account_id'];
+        if ($message['type'] === 'document') {
+            $this->zernioCall($path, ['accountId' => $account, 'message' => $message['caption'], 'attachment' => new \CURLFile($message['path'], 'application/pdf', $message['filename'])], $idempotencyKey);
+        } elseif ($message['type'] === 'image') {
+            $png = PdfPageImage::render($message['path'], $message['page']);
+            if ($png === null) return;
+            try { $this->zernioCall($path, ['accountId' => $account, 'message' => $message['caption'], 'attachment' => new \CURLFile($png, 'image/png', 'orden.png')], $idempotencyKey); }
+            finally { @unlink($png); }
+        } else {
+            $this->zernioCall($path, ['accountId' => $account, 'message' => $message['body']], $idempotencyKey, true);
+        }
+    }
+
+    private function zernioCall(string $path, array $fields, ?string $idempotencyKey = null, bool $json = false): array
+    {
+        $config = $this->app->config;
+        $curl = curl_init(rtrim($config['zernio_api_url'], '/') . $path);
+        $headers = ['Authorization: Bearer ' . $config['zernio_api_key'], 'Accept: application/json'];
+        if ($json) $headers[] = 'Content-Type: application/json';
+        if ($idempotencyKey !== null) $headers[] = 'Idempotency-Key: ' . $idempotencyKey;
+        curl_setopt_array($curl, [
+            CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 90, CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_POSTFIELDS => $json ? json_encode($fields, JSON_UNESCAPED_UNICODE) : $fields,
+        ]);
+        $raw = curl_exec($curl);
+        $status = (int)curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+        $errno = curl_errno($curl);
+        curl_close($curl);
+        if ($raw === false) throw new WhatsAppTransportError('zernio_network_error_' . $errno, true);
+        $response = json_decode((string)$raw, true) ?: [];
+        if ($status >= 200 && $status < 300) return $response;
+        // Zernio reenvía el código de Meta en platformError; 131047 = ventana de 24 h cerrada.
+        $metaCode = (int)($response['platformError']['code'] ?? 0);
+        if ($metaCode === 131047) throw new WhatsAppTransportError('outside_24h_window', false);
+        $code = preg_replace('/[^A-Za-z0-9_]/', '', (string)($response['code'] ?? '')) ?: 'error';
+        // 409: la misma clave de idempotencia sigue en proceso; 429 y 5xx: límite o falla temporal.
+        throw new WhatsAppTransportError(substr('zernio_' . $status . '_' . $code . ($metaCode ? '_' . $metaCode : ''), 0, 120), in_array($status, [409, 429], true) || $status >= 500);
+    }
+
     private function call(string $endpoint, array $fields): array
     {
         $config = $this->app->config;
@@ -327,11 +420,20 @@ final class WhatsApp
         $this->finish($job, 'waiting_window', 'outside_24h_window');
         $template = (string)$this->app->config['whatsapp_template_ready'];
         if ($template === '' || !$job['request_id'] || !in_array($job['kind'], ['history', 'notice', 'not_registered'], true)) return;
+        $reference = $this->app->request((int)$job['request_id'])['reference'];
         try {
-            $this->call('messages', ['messaging_product' => 'whatsapp', 'recipient_type' => 'individual', 'to' => $job['phone'], 'type' => 'template', 'template' => [
-                'name' => $template, 'language' => ['code' => $this->app->config['whatsapp_template_lang']],
-                'components' => [['type' => 'body', 'parameters' => [['type' => 'text', 'text' => $this->app->request((int)$job['request_id'])['reference']]]]],
-            ]]);
+            if ($this->app->config['whatsapp_transport'] === 'zernio') {
+                // Con una conversación existente, Zernio envía la plantilla dentro de ella.
+                $this->zernioCall('/v1/inbox/conversations', [
+                    'accountId' => $this->app->config['zernio_account_id'], 'participantId' => $job['phone'],
+                    'templateName' => $template, 'templateLanguage' => $this->app->config['whatsapp_template_lang'], 'templateParams' => [$reference],
+                ], 'citaya-template-' . substr(hash('sha256', (string)$this->app->config['app_key']), 0, 8) . '-' . $job['id'], true);
+            } else {
+                $this->call('messages', ['messaging_product' => 'whatsapp', 'recipient_type' => 'individual', 'to' => $job['phone'], 'type' => 'template', 'template' => [
+                    'name' => $template, 'language' => ['code' => $this->app->config['whatsapp_template_lang']],
+                    'components' => [['type' => 'body', 'parameters' => [['type' => 'text', 'text' => $reference]]]],
+                ]]);
+            }
         } catch (WhatsAppTransportError) { $this->app->event((int)$job['request_id'], 'whatsapp_template', 'failed'); }
     }
 

@@ -1,4 +1,4 @@
-# ── CitaYa V2 · PHP 8.2 + Apache ─────────────────────────────
+# ── CitaYa V3 · PHP 8.2 + Apache ─────────────────────────────
 FROM php:8.2-apache
 
 # Extensiones: pdo_mysql (MariaDB/MySQL) y mbstring (lectura de PDF y normalización).

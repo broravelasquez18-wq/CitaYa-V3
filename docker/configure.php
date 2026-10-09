@@ -35,6 +35,14 @@ $settings = [
     'smtp_password'   => $env('MAIL_PASSWORD'),
     'mail_from'       => $env('MAIL_FROM', $env('MAIL_USER', 'historias@example.test')),
     'mail_from_name'  => $env('MAIL_FROM_NAME', 'CitaYa · Historias clínicas'),
+    // WhatsApp: local (sin envíos) | zernio | cloud. Zernio necesita además la URL pública HTTPS.
+    'whatsapp_transport'    => $env('WHATSAPP_TRANSPORT', 'local'),
+    'zernio_api_key'        => $env('ZERNIO_API_KEY'),
+    'zernio_account_id'     => $env('ZERNIO_ACCOUNT_ID'),
+    'zernio_webhook_secret' => $env('ZERNIO_WEBHOOK_SECRET'),
+    'whatsapp_template_ready' => $env('WHATSAPP_TEMPLATE_READY'),
+    'whatsapp_template_lang'  => $env('WHATSAPP_TEMPLATE_LANG', 'es'),
+    'public_url'      => $env('PUBLIC_URL', 'http://localhost'),
 ];
 
 file_put_contents($root . '/config/local.php', "<?php\nreturn " . var_export($settings, true) . ";\n");

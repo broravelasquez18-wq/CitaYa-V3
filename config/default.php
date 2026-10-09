@@ -28,13 +28,18 @@ return [
     'history_resend_seconds' => 60,
     'history_resend_max' => 3,
     // WhatsApp Cloud API (Meta). local: guarda los mensajes en storage/wa-outbox sin enviarlos.
-    'whatsapp_transport' => 'local', // local | cloud | qr (pruebas con número secundario vía tools/whatsapp-qr)
+    'whatsapp_transport' => 'local', // local | cloud | zernio | qr (pruebas con número secundario vía tools/whatsapp-qr)
     'whatsapp_qr_url' => 'http://127.0.0.1:3218',
     'whatsapp_api_version' => 'v21.0',
     'whatsapp_phone_number_id' => '',
     'whatsapp_token' => '',
     'whatsapp_verify_token' => '',
     'whatsapp_app_secret' => '',
+    // Zernio (https://docs.zernio.com): API unificada sobre la Cloud API de Meta. Ver bin/zernio.php.
+    'zernio_api_url' => 'https://zernio.com/api',
+    'zernio_api_key' => '',
+    'zernio_account_id' => '',
+    'zernio_webhook_secret' => '',
     'whatsapp_link_seconds' => 6 * 3600,
     // Días que una solicitud sin historia espera a que se cargue el PDF para enviarse sola.
     'whatsapp_pending_days' => 30,

@@ -147,6 +147,13 @@ CREATE TABLE IF NOT EXISTS whatsapp_inbound (
  created_at DATETIME NOT NULL
 ) ENGINE=InnoDB;
 
+-- Conversación del proveedor (Zernio) por número: sus respuestas se envían a esa conversación.
+CREATE TABLE IF NOT EXISTS whatsapp_conversations (
+ phone VARCHAR(20) PRIMARY KEY,
+ conversation_id VARCHAR(190) NOT NULL,
+ updated_at DATETIME NOT NULL
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS whatsapp_links (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
  token_hash CHAR(64) NOT NULL UNIQUE,

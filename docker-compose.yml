@@ -1,5 +1,5 @@
-# ── CitaYa V2 · Stack para Dokploy ───────────────────────────
-# Servicios: app (PHP/Apache) + worker (cola de correo) + db (MariaDB).
+# ── CitaYa V3 · Stack para Dokploy (aparte de V2: su propia base, procesador y rutas) ───────────────────────────
+# Servicios: app (PHP/Apache y webhook de WhatsApp) + worker (cola de correo y WhatsApp) + db (MariaDB).
 # Las variables ${...} se definen en Dokploy → pestaña "Environment".
 services:
   app:
@@ -24,6 +24,12 @@ services:
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
       MAIL_FROM: ${MAIL_FROM:-}
       MAIL_TEST_RECIPIENT: ${MAIL_TEST_RECIPIENT:-}
+      WHATSAPP_TRANSPORT: ${WHATSAPP_TRANSPORT:-local}
+      ZERNIO_API_KEY: ${ZERNIO_API_KEY:-}
+      ZERNIO_ACCOUNT_ID: ${ZERNIO_ACCOUNT_ID:-}
+      ZERNIO_WEBHOOK_SECRET: ${ZERNIO_WEBHOOK_SECRET:-}
+      WHATSAPP_TEMPLATE_READY: ${WHATSAPP_TEMPLATE_READY:-}
+      PUBLIC_URL: https://${DOMAIN}
       RUN_SETUP: "1"
     volumes:
       - app_storage:/var/www/html/storage
@@ -33,15 +39,15 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=dokploy-network
-      - traefik.http.routers.citayav2.rule=Host(`${DOMAIN}`)
-      - traefik.http.routers.citayav2.entrypoints=websecure
-      - traefik.http.routers.citayav2.tls.certresolver=letsencrypt
-      - traefik.http.services.citayav2.loadbalancer.server.port=80
-      - traefik.http.routers.citayav2-web.rule=Host(`${DOMAIN}`)
-      - traefik.http.routers.citayav2-web.entrypoints=web
-      - traefik.http.routers.citayav2-web.middlewares=citayav2-https
-      - traefik.http.middlewares.citayav2-https.redirectscheme.scheme=https
-      - traefik.http.middlewares.citayav2-https.redirectscheme.permanent=true
+      - traefik.http.routers.citayav3.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.citayav3.entrypoints=websecure
+      - traefik.http.routers.citayav3.tls.certresolver=letsencrypt
+      - traefik.http.services.citayav3.loadbalancer.server.port=80
+      - traefik.http.routers.citayav3-web.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.citayav3-web.entrypoints=web
+      - traefik.http.routers.citayav3-web.middlewares=citayav3-https
+      - traefik.http.middlewares.citayav3-https.redirectscheme.scheme=https
+      - traefik.http.middlewares.citayav3-https.redirectscheme.permanent=true
 
   worker:
     build:
@@ -64,6 +70,12 @@ services:
       MAIL_USER: ${MAIL_USER:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
       MAIL_FROM: ${MAIL_FROM:-}
+      WHATSAPP_TRANSPORT: ${WHATSAPP_TRANSPORT:-local}
+      ZERNIO_API_KEY: ${ZERNIO_API_KEY:-}
+      ZERNIO_ACCOUNT_ID: ${ZERNIO_ACCOUNT_ID:-}
+      ZERNIO_WEBHOOK_SECRET: ${ZERNIO_WEBHOOK_SECRET:-}
+      WHATSAPP_TEMPLATE_READY: ${WHATSAPP_TEMPLATE_READY:-}
+      PUBLIC_URL: https://${DOMAIN}
       RUN_SETUP: "0"
     volumes:
       - app_storage:/var/www/html/storage
