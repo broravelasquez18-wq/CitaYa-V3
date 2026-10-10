@@ -33,6 +33,7 @@ const rememberChat = (phone, jid) => {
 };
 
 let sock = null;
+let pairingRequested = false;
 
 // Bandeja persistente (inbox.mjs): cada mensaje se guarda antes de entregarse al webhook y se reintenta si falla.
 const inbox = createInbox({
@@ -76,6 +77,18 @@ async function connect() {
   sock = makeWASocket({ auth, logger, browser: Browsers.windows('CitaYa'), markOnlineOnConnect: false, syncFullHistory: false, ...(version ? { version } : {}) });
   sock.ev.on('creds.update', saveCreds);
   sock.ev.on('connection.update', async update => {
+    // Vinculación con código (sin escanear): con WA_PAIR_PHONE, WhatsApp entrega un código de 8 caracteres que se
+    // escribe en el teléfono (Dispositivos vinculados → Vincular con el número de teléfono). Útil en el VPS.
+    const pairPhone = (process.env.WA_PAIR_PHONE || '').replace(/\D/g, '');
+    if (update.qr && pairPhone && !auth.creds.registered && !pairingRequested) {
+      pairingRequested = true;
+      try {
+        const code = await sock.requestPairingCode(pairPhone);
+        state.pairingCode = code;
+        state.status = 'Escribe el código ' + code + ' en WhatsApp → Dispositivos vinculados → Vincular con el número de teléfono.';
+        console.log('CÓDIGO DE VINCULACIÓN: ' + code + '  (WhatsApp → Dispositivos vinculados → Vincular un dispositivo → Vincular con el número de teléfono)');
+      } catch (error) { console.error('No se pudo pedir el código de vinculación:', String(error?.message || error).slice(0, 160)); }
+    }
     if (update.qr) {
       state.qr = await QRCode.toDataURL(update.qr, { margin: 1, width: 300 });
       // En el VPS el panel no es público: el QR también se imprime en los registros del contenedor.
@@ -83,12 +96,13 @@ async function connect() {
       state.status = 'Escanea el QR desde WhatsApp → Dispositivos vinculados.';
     }
     if (update.connection === 'open') {
-      state.qr = null; state.connected = true;
+      state.qr = null; state.connected = true; state.pairingCode = null; pairingRequested = false;
       state.status = secret ? 'Conectado al bot de CitaYa. Escribe «historia» desde tu otro teléfono.' : 'Conectado, pero falta WA_SECRET: el bot no recibirá mensajes.';
       console.log('Conectado a WhatsApp.');
     }
     if (update.connection === 'close') {
       state.connected = false;
+      pairingRequested = false; // al reconectar se pide un código nuevo
       const code = update.lastDisconnect?.error?.output?.statusCode;
       if (code === DisconnectReason.loggedOut) {
         // La sesión se cerró desde el teléfono: se borra y se pide un QR nuevo.

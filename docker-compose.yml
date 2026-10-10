@@ -108,6 +108,8 @@ services:
       WA_SECRET: ${WA_SECRET:-}
       WA_WEBHOOK_URL: ${WA_WEBHOOK_URL:-http://app/whatsapp.php}
       WA_ALLOWED: ${WA_ALLOWED:-}
+      # Con el número del bot, en los registros sale un código para vincular sin escanear el QR.
+      WA_PAIR_PHONE: ${WHATSAPP_BOT_NUMBER:-}
     volumes:
       - whatsapp_session:/app/.session
     networks:
