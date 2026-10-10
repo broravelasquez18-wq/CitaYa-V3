@@ -1,4 +1,4 @@
 <form method="post" enctype="multipart/form-data"><?= csrf() ?><input type="hidden" name="action" value="upload">
 <label class="upload-zone">Selecciona los PDF de esta atención<input name="pdfs[]" type="file" accept="application/pdf,.pdf" multiple required><small>Selecciona el paquete completo de una sola atención. Máximo 15 PDF. Hasta <?= h(round($uploadLimits['file_bytes']/1024**2,1)) ?> MB por archivo.</small></label>
-<div class="notice"><p>Compatible con los PDF con texto de CEDIM. Se conservan todas las páginas y anexos. Si el texto no es legible o hay datos de pacientes diferentes, el sistema te lo indicará.</p></div>
-<label class="check"><input type="checkbox" name="complete" value="1" required><span>Estos archivos componen la historia completa de una misma atención.</span></label><button class="button primary spaced">Guardar historia clínica</button></form>
+<div class="notice"><p>Se conservan todas las páginas tal cual. Si vuelves a cargar los mismos archivos, no se duplican. Si cargas una versión distinta de la misma atención, la nueva reemplaza a la anterior en las próximas entregas.</p></div>
+<label class="check"><input type="checkbox" name="complete" value="1" required><span>Estos archivos componen la historia completa de una misma atención.</span></label><button class="button primary spaced">Leer y guardar historia</button></form>

@@ -253,3 +253,211 @@ Por ahora, «No registra» es el único motivo de cierre sin historia.
 - Migración aplicada en la base local: 6 solicitudes pendientes de 10, todas vencidas (septiembre de 2026).
 
 **Pendiente:** aceptación del titular en uso real, y decidir si las solicitudes antiguas sin documento conservado se responden con «No registra».
+
+## Carga de historias clínicas más clara (RF-28)
+
+**Fase 1 · Alcance.** La pantalla de carga no explicaba qué hace el sistema con los PDF, y el resultado solo decía cuántos se recibieron. Se agrega la explicación previa y un resultado detallado. Las reglas de lectura y de validación no cambian. Jira: SCRUM-34, dentro de la épica SCRUM-23.
+
+**Fase 2 · Requisitos.**
+- **RF-28.** Antes de cargar, se explican en cinco pasos: lectura, identificación de la atención, verificación, detección de órdenes, y publicación y entrega automática a las solicitudes pendientes.
+- El resultado individual muestra:
+  - lo leído: paciente, documento, ingreso, fecha, especialidad, PDF, páginas y versión;
+  - lo hecho: si la historia es nueva, reemplaza a una versión anterior o ya estaba registrada, y qué órdenes se detectaron;
+  - a qué solicitudes pendientes se envió la historia (con su radicado), cuáles quedaron por revisar, o que no había ninguna.
+- La carga masiva agrega, por cada atención guardada, la especialidad, el ingreso, las páginas, las órdenes y los envíos.
+
+**Fase 3 · Diseño.**
+- `Application::resolveWaitingRequests` devuelve `[radicado, enviada]` por cada solicitud reprocesada.
+- `Repository` recuerda si la última importación reutilizó un paquete y qué resolvió. `Repository::summary(paquete)` arma el resumen.
+- La sesión guarda el resumen en lugar del número de PDF. Si encuentra un resultado anterior que solo tiene el número, lo sigue mostrando.
+- El bloque reutilizable `templates/upload-summary.php` muestra el resumen.
+
+**Fase 4 · Implementación.**
+- Nuevo: `templates/upload-summary.php`.
+- Modificados:
+  - `src/Application.php`, `src/Repository.php` y `src/BulkImport.php`;
+  - `public/index.php` (acción `upload`);
+  - las plantillas `upload-center`, `single-upload`, `upload-result`, `bulk-report` y `admin` (singular «página»);
+  - `public/assets/app.css` (clases `upload-flow` y `load-*`, responsive);
+  - `tests/whatsapp.php`.
+
+**Fase 5 · Validación.**
+- `php tests/whatsapp.php`: 36 comprobaciones, 4 nuevas. El resumen trae el paciente, el ingreso y los archivos, las órdenes detectadas y la solicitud pendiente enviada. Recargar los mismos archivos se informa como ya registrada, sin nuevos envíos.
+- Regresión: `run` 155, `whatsapp-qr` 8, `whatsapp-zernio` 22, `requests-admin` 25, `pdf-reader` 17, `analytics` y `upload-http`, todas correctas.
+- Prueba en el navegador sobre V3 local: se cargó un PDF ficticio (CC 1099000333) y el modal mostró los datos leídos, las órdenes detectadas (fórmula médica e imágenes diagnósticas) y el aviso de que no había solicitudes pendientes.
+
+## Número de WhatsApp en el formulario (RF-29)
+
+**Fase 1 · Alcance.** El formulario no mostraba ni pedía el número de WhatsApp. Si el paciente llega desde el bot, el número ya está vinculado al enlace; si llega por la web, la historia solo salía por correo. Jira: SCRUM-35, dentro de la épica SCRUM-5. Decisión del titular: mostrarlo si viene del bot y pedirlo, opcional y confirmado, si viene de la web. No se agregan otros campos.
+
+**Fase 2 · Requisitos.**
+- **RF-29.**
+  - Desde el enlace del bot: se muestra el número vinculado, enmascarado.
+  - Desde la web: campo opcional. Un celular de 10 dígitos que empieza por 3 recibe el indicativo 57; un número inválido muestra un error.
+  - Nada se envía por WhatsApp a un número escrito en la web hasta confirmarlo con «CONFIRMAR código» desde ese chat.
+  - Al confirmar:
+    - si la historia ya salió por correo, se envía también por WhatsApp;
+    - si está pendiente, se envía el radicado, y la historia llega sola al cargarse el PDF;
+    - si hay varias atenciones, el bot indica que se elija en la página.
+- **RNF.** El código es de 6 caracteres sin ambigüedades, de un solo uso, vence según `whatsapp_link_seconds` (6 h) y se guarda como hash. Límite de 10 intentos de confirmación por número y hora.
+
+**Fase 3 · Diseño.**
+- Columnas `requests.whatsapp_claimed`, `whatsapp_code_hash` y `whatsapp_code_expires`.
+- Métodos en `WhatsApp`: `normalizePhone`, `claimNumber` y `confirmNumber`. Este último lo llama `handleInbound` cuando el texto trae «confirmar XXXXXX», antes del menú.
+- Al confirmar, el chat que envía el código queda como `whatsapp_phone`, que funciona también con contactos `@lid` del transporte QR.
+- La página del radicado muestra el código y un botón `wa.me` hacia `whatsapp_bot_number`. Nueva variable `WHATSAPP_BOT_NUMBER` en Docker.
+
+**Fase 4 · Implementación.** Modificados: `src/WhatsApp.php`, `public/index.php` (acción `request`), `templates/layout.php` (formulario y página de estado), `public/assets/app.css`, `database/schema.sql`, `bin/setup.php`, `config/default.php`, `docker/configure.php`, `docker-compose.yml` y `tests/whatsapp.php`. Migración aplicada en `citaya_v3`.
+
+**Fase 5 · Validación.**
+- `php tests/whatsapp.php`: 44 comprobaciones, 8 nuevas. Cubren:
+  - normalización y rechazo de números inválidos;
+  - que no se envíe nada antes de confirmar y que el código se guarde como hash;
+  - código incorrecto, reutilizado o vencido;
+  - confirmación con historia ya enviada, que sale por WhatsApp;
+  - confirmación con solicitud pendiente, que envía el radicado.
+- Regresión: `run` 155, `whatsapp-qr` 8, `whatsapp-zernio` 22, `requests-admin` 25, `pdf-reader` 17 y `analytics`, todas correctas.
+- Revisión visual del formulario web en V3 local.
+- Pendiente: probarlo con WhatsApp real por QR (dentro de SCRUM-32).
+
+## Bot QR con Baileys y prueba real de punta a punta
+
+**Contexto.** Durante la prueba real con el bot QR (SCRUM-32, radicado HC-261009-E3FFA0F9F1) aparecieron varios fallos. Se registraron en SCRUM-21 y SCRUM-36:
+- Algunos mensajes llegaban sin identificador y los contactos `@lid` traían un identificador interno en lugar del número.
+- Con whatsapp-web.js 1.34.7, que era la versión más reciente, **ningún adjunto se podía enviar** («Data passed to getter must include an id property»).
+- Además, Gmail rechaza las credenciales SMTP locales.
+
+**Decisión del titular.** Cambiar el servicio QR a Baileys (opción A de SCRUM-36).
+
+**Diseño e implementación.**
+- `tools/whatsapp-qr/server.mjs` (ESM) usa `@whiskeysockets/baileys` 7.0.0-rc14 y `pino`, y reemplaza a `server.cjs` y a whatsapp-web.js. Ya no hay Chrome oculto y npm no reporta vulnerabilidades.
+- El contrato con CitaYa no cambia: webhook con firma de Meta y `POST /send` firmado. No hay cambios en PHP.
+- El número real se toma de `remoteJid`, `remoteJidAlt` o del mapeo LID→número. Las respuestas van al chat de origen (`.session/chats.json`).
+- Se reconecta solo; si la sesión se cierra desde el teléfono, pide un QR nuevo.
+- `bin/start-whatsapp-qr.ps1` arranca el servicio sin duplicarlo.
+- `bin/install-worker-task.ps1` crea su propia tarea de Windows, «CitaYaV3 - Procesador y WhatsApp QR». Antes usaba el mismo nombre que la de V2 y la habría reemplazado. Esta instalación la ejecuta el titular.
+
+**Validación.**
+- Prueba real: «hola» recibe el menú, «historia» recibe el enlace, el formulario muestra el número real enmascarado, y la historia llega por WhatsApp con texto y **PDF** (confirmado por el titular el 2026-10-09).
+- `tests/whatsapp-qr.php`: 8 comprobaciones correctas.
+
+**Pendiente.**
+- Correo SMTP: el titular debe renovar la contraseña de aplicación de Gmail en `config/local.php`.
+- Llevar el servicio QR al VPS como contenedor.
+
+## Automatización con n8n y WhatsApp por QR (épica SCRUM-37)
+
+Plan del titular «Plan secuencial CitaYa n8n WhatsApp QR» (10 de octubre de 2026). El flujo es WhatsApp ↔ servicio QR ↔ n8n ↔ CitaYa, en 7 fases: SCRUM-38 a SCRUM-44.
+
+### Fase 1 · Dónde se ejecuta cada componente (SCRUM-38)
+
+Decisiones del titular: todo corre en el VPS, y las excepciones las atiende el titular en su WhatsApp personal.
+
+| Componente | Ubicación | Acceso |
+|---|---|---|
+| n8n | VPS, proyecto Dokploy «CitaYa-n8n», `https://n8n.broa18.online` (n8n 2.41.6) | Webhooks públicos protegidos con firma HMAC |
+| CitaYa V3 | VPS, `https://citaya-v3.broa18.online` | Panel y formulario públicos; interfaz privada `/n8n.php` con firma HMAC (`N8N_SECRET`) |
+| Servicio QR (Baileys) | VPS, servicio `whatsapp-qr` del mismo compose de CitaYa V3 | **Sin puerto ni dominio públicos**; solo en la red interna del compose (`http://whatsapp-qr:3218`) |
+
+Rutas autenticadas:
+- **Entrada:** el QR reenvía cada mensaje al webhook de n8n (`https://n8n.broa18.online/webhook/citaya-whatsapp`), firmado con `WA_SECRET`, que comparten el QR y n8n.
+- **n8n → CitaYa:** HTTPS a `/n8n.php` con la cabecera `X-CitaYa-Signature` (HMAC-SHA256 del cuerpo con `N8N_SECRET`).
+- **Salida:** n8n pide los envíos a CitaYa, y CitaYa los hace llegar al QR por la red interna, firmados. Así el QR nunca queda expuesto y CitaYa sigue autorizando cada envío.
+- **CitaYa → n8n (eventos):** HTTPS al webhook de eventos de n8n, firmado con `N8N_SECRET`.
+- **QR inicial:** se escanea desde los registros del contenedor en Dokploy, que lo imprimen en texto.
+
+Ruta de regreso: con `WA_WEBHOOK_URL` apuntando al webhook de CitaYa (`/whatsapp.php`), el bot vuelve a funcionar sin n8n. Responsable de las excepciones: el titular, en su WhatsApp personal (`ADMIN_WHATSAPP`).
+
+### Fase 2 · Interfaz privada de CitaYa para n8n (SCRUM-39)
+
+**Diseño.**
+- `public/n8n.php` recibe peticiones POST en JSON con `action` y `ts`, firmadas con `X-CitaYa-Signature: sha256=HMAC(cuerpo, n8n_secret)`. Rechaza las peticiones sin firma válida y las que tienen más de 5 minutos.
+- `src/N8nApi.php` implementa las operaciones:
+
+| Acción | Qué hace |
+|---|---|
+| `inbound.register` | Registra el mensaje recibido antes de procesarlo; `new=false` si es un reintento. Aplica el límite de 20 por hora y libera los mensajes que esperaban la ventana |
+| `link.create` | Crea el enlace personal de un solo uso (6 h) para ese chat; solo guarda el hash |
+| `code.confirm` | Valida «CONFIRMAR código», vincula el chat y encola la historia o el radicado. Responde `next`: history, notice, select o none |
+| `requests.list` | Consulta de estado: solo las solicitudes vinculadas a ese chat, con estados en lenguaje claro |
+| `template.render` | Textos editables del panel (`menu` y `form_link`) |
+| `message.send` | Respuesta de texto del bot. Solo a chats que escribieron en las últimas 24 h o a `admin_whatsapp`; la clave `key` evita duplicados |
+| `delivery.pending` / `delivery.send` | Mensajes listos para salir y envío de uno concreto por el QR. CitaYa arma y autoriza el contenido y conserva el progreso por archivo |
+
+- **Eventos hacia n8n** (`src/Automation.php`, tabla `automation_events`). Eventos: `historia.disponible`, `solicitud.pendiente`, `solicitud.no_registra`, `whatsapp.mensaje` y `envio.fallido` (WhatsApp y correo).
+  - Solo llevan el radicado y los identificadores, sin nombres ni documentos.
+  - El procesador los entrega a `n8n_events_url` con firma y los reintenta con espera creciente (hasta 6 intentos).
+  - Sin URL configurada no se registran.
+- `whatsapp_dispatch` (worker | n8n) define quién procesa la cola de WhatsApp, para que haya un solo responsable (se usa en la fase 5).
+- Refactor de `WhatsApp`: `createFormLink`, `confirmCode`, `queueText` pública y `tick(jobId)`. El bot propio de CitaYa usa las mismas funciones.
+- Configuración nueva: `n8n_secret`, `n8n_events_url`, `whatsapp_dispatch` y `admin_whatsapp`. En Docker: `N8N_SECRET`, `N8N_EVENTS_URL`, `WHATSAPP_DISPATCH`, `ADMIN_WHATSAPP`, `WA_SECRET` y `WHATSAPP_QR_URL`.
+
+**Validación.**
+- `php tests/n8n-api.php`: 23 comprobaciones contra un QR y un n8n simulados. Cubren:
+  - firma, acciones y números inválidos, y duplicados de recepción;
+  - plantillas y respuestas: destinatarios permitidos, clave idempotente y aviso al responsable;
+  - envío de un mensaje concreto sin tocar otros;
+  - enlace y consulta de estado;
+  - entrega de la historia con el PDF íntegro, sin repetirla;
+  - código inválido y válido;
+  - eventos sin datos personales, su entrega firmada, el reintento y el modo sin n8n.
+- Esta prueba encontró y corrigió un error: `tick(jobId)` procesaba el siguiente mensaje de la cola en lugar del indicado.
+- Regresión: `whatsapp` 44, `run` 155, `whatsapp-qr` 8, `whatsapp-zernio` 22, `requests-admin` 25, `pdf-reader` 17 y `analytics`, todas correctas.
+- Migración aplicada en `citaya_v3`. `/n8n.php` responde 401 sin firma válida y 405 con GET.
+
+### Fase 3 · Entrada del QR hacia n8n (SCRUM-40)
+
+**Diseño e implementación.**
+- **Destino configurable:** el servicio QR reenvía cada mensaje a `WA_WEBHOOK_URL`, firmado con `X-Hub-Signature-256` (HMAC con `WA_SECRET`). En el VPS apuntará al webhook de n8n. El valor por defecto es `/whatsapp.php` de CitaYa, que sirve como ruta de regreso. La firma la valida n8n como primer paso del flujo (fase 4).
+- **Guardar antes de procesar:** `tools/whatsapp-qr/inbox.mjs` es una bandeja persistente en `.session/inbox.json`, con escritura atómica. Cada mensaje se guarda, una sola vez por id, antes de entregarse.
+- **Recuperación:** si el webhook no responde, se reintenta cada 10 s, 20 s, 40 s… hasta 10 minutos entre intentos, durante 24 h, también después de reiniciar el servicio. `/status` informa los pendientes. Antes había un solo intento.
+- **Contenedor:** `tools/whatsapp-qr/Dockerfile` (Node 22 alpine, usuario sin privilegios) y el servicio `whatsapp-qr` en `docker-compose.yml`.
+  - Solo red interna, sin puertos ni dominio.
+  - Volumen `whatsapp_session` para la sesión, la bandeja y los chats.
+  - Con `WA_PRINT_QR=1` el QR se imprime en los registros.
+  - La aplicación lo usa en `http://whatsapp-qr:3218`, y las variables nuevas pasan a `app` y `worker`.
+
+**Validación.**
+- `node --test tools/whatsapp-qr/inbox.test.mjs`: 5 pruebas correctas (guarda sin duplicar, reintenta con espera creciente, sobrevive a un reinicio, descarta a las 24 h y tolera errores de red).
+- El servicio local se reinició con la bandeja y se reconectó solo.
+- `npm ci --omit=dev` es válido.
+- La imagen Docker no se construyó en este equipo porque no tiene Docker; se verifica al desplegar (fase 7).
+
+### Fase 5 · Salida coordinada por n8n (SCRUM-42)
+
+**Diseño e implementación.**
+- **Un solo responsable de la cola de WhatsApp.** Con `WHATSAPP_DISPATCH=n8n`, `bin/worker.php` ya no envía WhatsApp. Sigue entregando correos y eventos.
+- **Flujo «CitaYa · Eventos»** (`n8n/citaya-events.js`, webhook `citaya-eventos`): valida `X-CitaYa-Signature` y la antigüedad del evento. Para historia.disponible, solicitud.pendiente, solicitud.no_registra y whatsapp.mensaje pide `delivery.send` con el `job_id`.
+  - CitaYa arma y autoriza el contenido y lo pasa al QR por la red interna: **los PDF nunca pasan por n8n**.
+  - Se conserva el progreso por archivo, y un evento repetido no reenvía nada.
+  - Si CitaYa no responde, devuelve 503 y CitaYa reintenta el evento.
+- **Flujo «CitaYa · Recuperación de envíos»** (cada 5 minutos): `delivery.pending` → `delivery.send`, para lo que no salió porque n8n o el QR estaban caídos.
+- **Registros de n8n:** no se guardan los datos de las ejecuciones correctas. Los fallos solo registran el radicado y el código de error.
+- Eventos con espera de hasta 120 s, porque n8n responde después de pedir el envío.
+- Se corrigió un error de esta fase: un comentario anulaba `CURLOPT_POSTFIELDS` en `Automation::tick`.
+
+**Validación.** `node --test n8n/citaya-events.test.js`: 7 pruebas. Cubren la firma, el vencimiento, la entrega por `job_id`, el aviso al responsable, el reintento con 503, la recuperación y que no haya bucle de avisos.
+
+### Fase 6 · Seguimiento administrativo (SCRUM-43)
+
+**Diseño e implementación.**
+- **Consulta de estado:** el bot reconoce «ESTADO» y responde con `requests.list`, que CitaYa limita a las solicitudes vinculadas a ese chat, con estados en lenguaje claro.
+- **Avisos al responsable** (`CITAYA_ADMIN_WHATSAPP`, por WhatsApp):
+  - solicitud pendiente nueva, con radicado y plazo;
+  - envío fallido por WhatsApp o correo. Los fallos de textos sueltos no se avisan, para evitar bucles.
+- **Flujo «CitaYa · Seguimiento»** (cada hora, al minuto 5):
+  - `system.health`: aviso si el procesador no da latido desde hace más de 5 minutos, si el QR está desconectado o si hay eventos que no llegaron a n8n;
+  - `requests.overdue`: aviso por radicado cuando la solicitud está por vencer (desde 3/4 del plazo) o vencida;
+  - a las 7:00, hora de Colombia, `stats.summary` del día anterior: solicitudes (cuántas por WhatsApp), historias entregadas, pendientes y vencidas.
+  - Cada aviso lleva una clave, así que no se repite.
+- **En CitaYa:**
+  - tabla `system_state`, con el latido del procesador como máximo una vez por minuto;
+  - operaciones `system.health`, `stats.summary` y `requests.overdue`, sin nombres ni documentos;
+  - `GET /health` del servicio QR, que devuelve solo `connected` y `pending`.
+- **Limitación conocida:** si el QR está desconectado, el aviso «QR desconectado» no puede salir por WhatsApp. Queda registrado en CitaYa y en n8n.
+
+**Validación.**
+- `node --test n8n`: 23 pruebas en total (bot 11, eventos 7, seguimiento 5).
+- `php tests/n8n-api.php`: 27 comprobaciones (4 nuevas: salud, latido, vencidas y resumen).
+- Regresión completa correcta. Migración aplicada en `citaya_v3`.
+- Los cuatro flujos importables están en `n8n/*.json`, generados con `python n8n/build-workflows.py`.

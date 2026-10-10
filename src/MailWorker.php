@@ -125,5 +125,7 @@ final class MailWorker
             if ($job['kind'] === 'history') $db->run('UPDATE requests SET status=? WHERE id=?', [$status, $job['request_id']]);
             $this->app->event((int) $job['request_id'], 'mail_' . $job['kind'], $status);
         });
+        if (in_array($status, ['failed', 'uncertain'], true)) (new Automation($this->app))->emit('envio.fallido', ['canal' => 'correo', 'job_id' => (int) $job['id'], 'kind' => $job['kind'],
+            'reference' => $this->app->request((int) $job['request_id'])['reference'], 'error' => $error], 'mail-fail:' . $job['id'] . ':' . $job['attempts']);
     }
 }

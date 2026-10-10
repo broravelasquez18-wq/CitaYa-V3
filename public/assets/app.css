@@ -100,6 +100,25 @@
 .upload-panel .check{margin-bottom:16px;font-size:13px}
 .upload-panel .button.spaced{margin-top:0}
 .upload-panel form>p.muted{font-size:12px}
+.upload-flow{list-style:none;counter-reset:flow;display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:0 0 24px;padding:0}
+.upload-flow li{counter-increment:flow;position:relative;background:#f7fbfc;border:1px solid var(--line);border-radius:12px;padding:14px 14px 13px}
+.upload-flow li::before{content:counter(flow);display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--soft);color:var(--teal);font-size:11px;font-weight:700;margin-bottom:8px}
+.upload-flow li:last-child{background:#effafa;border-color:#bfe4e3}
+.upload-flow strong{display:block;font-size:12.5px;font-weight:650;margin-bottom:3px}
+.upload-flow span{display:block;color:#607786;font-size:11.5px;line-height:1.45}
+.load-summary{margin-top:14px}
+.load-data{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:0 0 16px}
+.load-data>div{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:#fafcfd}
+.load-data dt{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+.load-data dd{margin:4px 0 0;font-weight:650;font-size:13px}
+.load-actions{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.load-actions li{position:relative;padding:10px 14px 10px 38px;border-radius:10px;font-size:13px;background:#f5f9fa;color:#3b5060}
+.load-actions li::before{position:absolute;left:14px;top:10px;font-weight:700}
+.load-actions li.done{background:#e9f7ef;color:#225e45}.load-actions li.done::before{content:"✓";color:#1e7a46}
+.load-actions li.info::before{content:"i";color:var(--teal);font-style:italic}
+.load-actions li.warn{background:#fff6e2;color:#7a5200}.load-actions li.warn::before{content:"!";color:#8a5a00}
+.load-sent{color:#1e7a46!important}.load-held{color:#8a5a00!important}
+@media(max-width:900px){.upload-flow{grid-template-columns:1fr 1fr}.upload-flow li:last-child{grid-column:1/-1}.load-data{grid-template-columns:1fr}}
 @media(max-width:650px){.upload-center{padding:22px 18px}.upload-heading{align-items:flex-start}.upload-format{display:none}.upload-options{grid-template-columns:1fr;gap:10px;margin-bottom:20px}.upload-option{padding:14px;gap:12px}.upload-panel{padding-top:18px}.upload-panel .upload-zone{padding:14px}.upload-panel .button{width:100%}}
 
 /* Ventana de seguimiento de la cola de correo. */
@@ -170,3 +189,4 @@ td small,.respond-form small{display:block}
 .button.danger{background:#b3261e;color:#fff;border-color:#b3261e}
 .template-card textarea{width:100%;font:inherit;font-weight:400;padding:10px;border:1px solid var(--line);border-radius:10px;resize:vertical;margin:6px 0 10px}
 .template-preview{white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px;font:inherit;margin:8px 0 0}
+.wa-confirm{align-items:flex-start}.wa-confirm>div{flex:1}.wa-confirm p{margin:0 0 10px}.wa-code{font-size:22px;font-weight:700;letter-spacing:3px;color:var(--teal);background:#fff;border:1px dashed #9fd3d5;border-radius:10px;padding:10px 14px;display:inline-block}.wa-confirm .button{margin:4px 0 8px}.field-help{margin:-12px 0 18px}

@@ -29,6 +29,13 @@ services:
       ZERNIO_ACCOUNT_ID: ${ZERNIO_ACCOUNT_ID:-}
       ZERNIO_WEBHOOK_SECRET: ${ZERNIO_WEBHOOK_SECRET:-}
       WHATSAPP_TEMPLATE_READY: ${WHATSAPP_TEMPLATE_READY:-}
+      WHATSAPP_BOT_NUMBER: ${WHATSAPP_BOT_NUMBER:-}
+      N8N_SECRET: ${N8N_SECRET:-}
+      N8N_EVENTS_URL: ${N8N_EVENTS_URL:-}
+      WHATSAPP_DISPATCH: ${WHATSAPP_DISPATCH:-worker}
+      ADMIN_WHATSAPP: ${ADMIN_WHATSAPP:-}
+      WA_SECRET: ${WA_SECRET:-}
+      WHATSAPP_QR_URL: http://whatsapp-qr:3218
       PUBLIC_URL: https://${DOMAIN}
       RUN_SETUP: "1"
     volumes:
@@ -75,6 +82,13 @@ services:
       ZERNIO_ACCOUNT_ID: ${ZERNIO_ACCOUNT_ID:-}
       ZERNIO_WEBHOOK_SECRET: ${ZERNIO_WEBHOOK_SECRET:-}
       WHATSAPP_TEMPLATE_READY: ${WHATSAPP_TEMPLATE_READY:-}
+      WHATSAPP_BOT_NUMBER: ${WHATSAPP_BOT_NUMBER:-}
+      N8N_SECRET: ${N8N_SECRET:-}
+      N8N_EVENTS_URL: ${N8N_EVENTS_URL:-}
+      WHATSAPP_DISPATCH: ${WHATSAPP_DISPATCH:-worker}
+      ADMIN_WHATSAPP: ${ADMIN_WHATSAPP:-}
+      WA_SECRET: ${WA_SECRET:-}
+      WHATSAPP_QR_URL: http://whatsapp-qr:3218
       PUBLIC_URL: https://${DOMAIN}
       RUN_SETUP: "0"
     volumes:
@@ -82,6 +96,22 @@ services:
     networks:
       - internal
     command: php bin/worker.php --loop
+
+  # WhatsApp por QR (Baileys). Sin dominio ni puertos públicos: CitaYa lo usa por la red interna
+  # (http://whatsapp-qr:3218) y él reenvía los mensajes a WA_WEBHOOK_URL (n8n, o /whatsapp.php de CitaYa como respaldo).
+  # El QR para vincular el número se imprime en los registros de este contenedor.
+  whatsapp-qr:
+    build:
+      context: ./tools/whatsapp-qr
+    restart: unless-stopped
+    environment:
+      WA_SECRET: ${WA_SECRET:-}
+      WA_WEBHOOK_URL: ${WA_WEBHOOK_URL:-http://app/whatsapp.php}
+      WA_ALLOWED: ${WA_ALLOWED:-}
+    volumes:
+      - whatsapp_session:/app/.session
+    networks:
+      - internal
 
   db:
     image: mariadb:11
@@ -104,3 +134,4 @@ networks:
 volumes:
   db_data:
   app_storage:
+  whatsapp_session:

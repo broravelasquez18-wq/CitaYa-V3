@@ -185,10 +185,12 @@ final class Application
      * Cuando se carga una historia, reprocesa las solicitudes de WhatsApp que quedaron sin historia
      * (radicado ya informado) para ese mismo paciente. Si ahora hay coincidencia se envía sola.
      */
-    public function resolveWaitingRequests(int $packageId): void
+    /** Reprocesa las solicitudes de WhatsApp que esperaban este PDF. Devuelve [radicado, enviada] de cada una. */
+    public function resolveWaitingRequests(int $packageId): array
     {
         $patient = $this->db->one('SELECT p.* FROM packages k JOIN encounters e ON e.id=k.encounter_id JOIN patients p ON p.id=e.patient_id WHERE k.id=?', [$packageId]);
-        if (!$patient) return;
+        if (!$patient) return [];
+        $resolved = [];
         $since = date('Y-m-d H:i:s', time() - 86400 * (int)$this->config['whatsapp_pending_days']);
         $waiting = $this->db->all("SELECT id,claimed_name,patient_id FROM requests WHERE direct_search=1 AND whatsapp_phone IS NOT NULL
             AND status IN ('no_matches','unavailable') AND claimed_document_type=? AND claimed_document_number=? AND created_at>=? ORDER BY id",
@@ -198,8 +200,11 @@ final class Application
             // La solicitud pudo crearse antes de que el paciente existiera en el repositorio.
             if ($request['patient_id'] === null) $this->db->run('UPDATE requests SET patient_id=? WHERE id=? AND patient_id IS NULL', [$patient['id'], $request['id']]);
             $this->processSearch((int)$request['id']);
-            $this->event((int)$request['id'], 'whatsapp_pending_resolved', $this->request((int)$request['id'])['status']);
+            $after = $this->request((int)$request['id']);
+            $this->event((int)$request['id'], 'whatsapp_pending_resolved', $after['status']);
+            $resolved[] = ['reference' => $after['reference'], 'sent' => $after['status'] === 'queued'];
         }
+        return $resolved;
     }
 
     private static function nameKey(string $name): string

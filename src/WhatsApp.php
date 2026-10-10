@@ -68,10 +68,84 @@ final class WhatsApp
         return (int)$this->handleInbound((string)($message['platformMessageId'] ?? $message['id'] ?? ''), $phone, $text);
     }
 
+    /** Número escrito en el formulario web: solo dígitos; un celular colombiano de 10 dígitos recibe el indicativo 57. */
+    public static function normalizePhone(string $value): string
+    {
+        $digits = preg_replace('/\D/', '', $value);
+        if (strlen($digits) === 10 && $digits[0] === '3') $digits = '57' . $digits;
+        if (strlen($digits) < 10 || strlen($digits) > 15) throw new \DomainException('Escribe un número de WhatsApp válido, con indicativo si no es de Colombia.');
+        return $digits;
+    }
+
+    /** Número de un enlace del formulario (para mostrarlo al paciente). */
+    public function linkPhone(int $linkId): ?string
+    {
+        return $this->app->db->one('SELECT phone FROM whatsapp_links WHERE id=?', [$linkId])['phone'] ?? null;
+    }
+
+    /**
+     * El paciente escribió su WhatsApp en el formulario web. No se le envía nada hasta que lo confirme
+     * escribiendo al bot «CONFIRMAR código» desde ese WhatsApp. Devuelve el código (solo se guarda su hash).
+     */
+    public function claimNumber(int $requestId, string $phone): string
+    {
+        $alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+        $code = '';
+        for ($i = 0; $i < 6; $i++) $code .= $alphabet[random_int(0, strlen($alphabet) - 1)];
+        $this->app->db->run('UPDATE requests SET whatsapp_claimed=?,whatsapp_code_hash=?,whatsapp_code_expires=? WHERE id=? AND whatsapp_phone IS NULL', [
+            $phone, hash('sha256', $code), date('Y-m-d H:i:s', time() + (int)$this->app->config['whatsapp_link_seconds']), $requestId,
+        ]);
+        $this->app->event($requestId, 'whatsapp_claimed', 'pending_confirmation');
+        return $code;
+    }
+
+    /**
+     * Valida «CONFIRMAR código» enviado desde un chat: vincula la solicitud a ese chat y encola lo que corresponda
+     * (historia o radicado). Devuelve null si el código no es válido; si lo es, el radicado y el siguiente paso:
+     * history (se encoló la historia), notice (se encoló el radicado), select (debe elegir atención en la página) o none.
+     */
+    public function confirmCode(string $phone, string $code): ?array
+    {
+        $request = $this->app->db->transaction(function () use ($phone, $code) {
+            $request = $this->app->db->one('SELECT * FROM requests WHERE whatsapp_code_hash=? AND whatsapp_code_expires>? AND whatsapp_phone IS NULL FOR UPDATE', [hash('sha256', strtoupper($code)), $this->app->now()]);
+            if (!$request) return null;
+            $this->app->db->run('UPDATE requests SET whatsapp_phone=?,whatsapp_code_hash=NULL,whatsapp_code_expires=NULL WHERE id=?', [$phone, $request['id']]);
+            $this->app->event((int)$request['id'], 'whatsapp_claimed', 'confirmed');
+            return $this->app->request((int)$request['id']);
+        });
+        if (!$request) return null;
+        $next = 'none';
+        $delivered = $this->app->db->one("SELECT package_id FROM jobs WHERE request_id=? AND kind='history' ORDER BY id DESC LIMIT 1", [$request['id']]);
+        if ($delivered && $delivered['package_id']) { $this->queueHistory((int)$request['id'], (int)$delivered['package_id']); $next = 'history'; }
+        elseif (in_array($request['status'], Application::PENDING_STATUSES, true)) { $this->queueNotFound((int)$request['id']); $next = 'notice'; }
+        elseif ($request['status'] === 'awaiting_selection') $next = 'select';
+        return ['reference' => $request['reference'], 'next' => $next];
+    }
+
+    /** Respuesta del bot propio de CitaYa (sin n8n) a «CONFIRMAR código». */
+    private function confirmNumber(string $phone, string $code, string $messageId): void
+    {
+        $result = $this->confirmCode($phone, $code);
+        if (!$result) {
+            $this->queueText($phone, 'El código no es válido o ya venció. Revisa el código de la página de tu solicitud, o escribe *HISTORIA* para iniciar una nueva.', 'confirm-fail:' . $messageId);
+            return;
+        }
+        $this->queueText($phone, 'Listo, confirmamos este WhatsApp para tu solicitud con radicado *' . $result['reference'] . '*.', 'confirm-ok:' . $messageId);
+        if ($result['next'] === 'select') $this->queueText($phone, 'Encontramos varias atenciones con tus datos. Elige la que necesitas en la página de tu solicitud y te la enviaremos por aquí.', 'confirm-select:' . $messageId);
+    }
+
     private function handleInbound(string $id, string $from, string $text): bool
     {
         $phone = preg_replace('/\D/', '', $from);
         if ($id === '' || strlen($id) > 190 || strlen($phone) < 8 || strlen($phone) > 20) return false;
+        if (preg_match('/\bconfirmar\s+([a-z0-9]{6})\b/i', $text, $match)) {
+            $new = $this->app->db->run('INSERT IGNORE INTO whatsapp_inbound (wa_message_id,phone,intent,created_at) VALUES (?,?,?,?)', [$id, $phone, 'confirm', $this->app->now()])->rowCount();
+            if (!$new) return false;
+            try { $this->app->limit('whatsapp-confirm:' . $phone, 10, 3600); }
+            catch (\DomainException) { return false; }
+            $this->confirmNumber($phone, $match[1], $id);
+            return true;
+        }
         $intent = $this->intent($text);
         // Meta y Zernio reintentan el webhook: el id del mensaje evita respuestas duplicadas.
         $new = $this->app->db->run('INSERT IGNORE INTO whatsapp_inbound (wa_message_id,phone,intent,created_at) VALUES (?,?,?,?)', [$id, $phone, $intent, $this->app->now()])->rowCount();
@@ -105,16 +179,22 @@ final class WhatsApp
         return rtrim($this->app->config['public_url'], '/') . '/?page=home';
     }
 
-    public function sendFormLink(string $phone): void
+    /** Crea un enlace personal y de un solo uso al formulario, vinculado al chat. El token solo se guarda como hash. */
+    public function createFormLink(string $phone): array
     {
         $token = bin2hex(random_bytes(24));
         $this->app->db->insert('whatsapp_links', [
             'token_hash' => hash('sha256', $token), 'phone' => $phone, 'created_at' => $this->app->now(),
             'expires_at' => date('Y-m-d H:i:s', time() + (int)$this->app->config['whatsapp_link_seconds']),
         ]);
-        $url = rtrim($this->app->config['public_url'], '/') . '/?page=home&wa=' . $token;
-        $hours = max(1, intdiv((int)$this->app->config['whatsapp_link_seconds'], 3600));
-        $this->queueText($phone, $this->templates()->render('form_link', ['enlace' => $url, 'vigencia' => $hours]), 'link:' . hash('sha256', $token));
+        return ['url' => rtrim($this->app->config['public_url'], '/') . '/?page=home&wa=' . $token,
+            'hours' => max(1, intdiv((int)$this->app->config['whatsapp_link_seconds'], 3600)), 'key' => hash('sha256', $token)];
+    }
+
+    public function sendFormLink(string $phone): void
+    {
+        $link = $this->createFormLink($phone);
+        $this->queueText($phone, $this->templates()->render('form_link', ['enlace' => $link['url'], 'vigencia' => $link['hours']]), 'link:' . $link['key']);
     }
 
     /** Valida un enlace del formulario sin consumirlo. Devuelve su id. */
@@ -161,27 +241,40 @@ final class WhatsApp
         $this->queue($request['whatsapp_phone'], 'not_registered', $body, $requestId, null, 'wa:not_registered:' . $requestId);
     }
 
-    private function queueText(string $phone, string $body, string $dedupe): void
+    /** Encola un texto libre (lo usa n8n para las respuestas del bot). Devuelve el id del mensaje en la cola. */
+    public function queueText(string $phone, string $body, string $dedupe): int
     {
-        $this->queue($phone, 'text', $body, null, null, 'wa:' . hash('sha256', $dedupe));
+        return $this->queue($phone, 'text', $body, null, null, 'wa:' . hash('sha256', $dedupe));
     }
 
-    private function queue(string $phone, string $kind, ?string $body, ?int $requestId, ?int $packageId, string $dedupe): void
+    private const EVENTS = ['history' => 'historia.disponible', 'notice' => 'solicitud.pendiente', 'not_registered' => 'solicitud.no_registra', 'text' => 'whatsapp.mensaje'];
+
+    private function queue(string $phone, string $kind, ?string $body, ?int $requestId, ?int $packageId, string $dedupe): int
     {
-        $this->app->db->run('INSERT IGNORE INTO whatsapp_outbox (request_id,package_id,phone,kind,encrypted_body,available_at,created_at,dedupe_key) VALUES (?,?,?,?,?,?,?,?)', [
+        $new = $this->app->db->run('INSERT IGNORE INTO whatsapp_outbox (request_id,package_id,phone,kind,encrypted_body,available_at,created_at,dedupe_key) VALUES (?,?,?,?,?,?,?,?)', [
             $requestId, $packageId, $phone, $kind, $body === null ? null : Crypto::seal($body, $this->app->config['app_key']),
             $this->app->now(), $this->app->now(), $dedupe,
-        ]);
+        ])->rowCount();
+        $id = (int)$this->app->db->one('SELECT id FROM whatsapp_outbox WHERE dedupe_key=?', [$dedupe])['id'];
+        // n8n se entera de cada mensaje nuevo para coordinar su salida (y avisar al responsable de los pendientes).
+        if ($new) $this->automation()->emit(self::EVENTS[$kind] ?? 'whatsapp.mensaje', ['job_id' => $id, 'kind' => $kind,
+            'reference' => $requestId ? $this->app->request($requestId)['reference'] : null,
+            'plazo_horas' => $kind === 'notice' ? (int)$this->app->config['whatsapp_estimated_hours'] : null], 'wa-job:' . $id);
+        return $id;
     }
 
-    /** Procesa un mensaje pendiente. Devuelve false si no había trabajo. */
-    public function tick(): bool
+    private function automation(): Automation { return new Automation($this->app); }
+
+    /** Procesa un mensaje pendiente (o el indicado, si lo pide n8n). Devuelve false si no había trabajo. */
+    public function tick(?int $jobId = null): bool
     {
         $db = $this->app->db;
         $db->run("UPDATE whatsapp_outbox SET status='failed',last_error='window_expired',encrypted_body=NULL WHERE status='waiting_window' AND created_at<?", [date('Y-m-d H:i:s', time() - 86400 * (int)$this->app->config['whatsapp_window_wait_days'])]);
         $db->run("UPDATE whatsapp_outbox SET status='uncertain',last_error='worker_interrupted',encrypted_body=NULL WHERE status='sending' AND locked_at<?", [date('Y-m-d H:i:s', time() - 300)]);
-        $job = $db->transaction(function () use ($db) {
-            $job = $db->one("SELECT * FROM whatsapp_outbox WHERE status IN ('queued','retry') AND available_at<=? ORDER BY id LIMIT 1 FOR UPDATE", [$this->app->now()]);
+        $job = $db->transaction(function () use ($db, $jobId) {
+            $job = $jobId === null
+                ? $db->one("SELECT * FROM whatsapp_outbox WHERE status IN ('queued','retry') AND available_at<=? ORDER BY id LIMIT 1 FOR UPDATE", [$this->app->now()])
+                : $db->one("SELECT * FROM whatsapp_outbox WHERE id=? AND status IN ('queued','retry') FOR UPDATE", [$jobId]);
             if (!$job) return null;
             $db->run("UPDATE whatsapp_outbox SET status='sending',attempts=attempts+1,locked_at=? WHERE id=?", [$this->app->now(), $job['id']]);
             $job['attempts']++;
@@ -444,5 +537,7 @@ final class WhatsApp
             date('Y-m-d H:i:s', time() + 60 * (int)$job['attempts']), in_array($status, ['retry', 'waiting_window'], true) ? 0 : 1, $job['id'],
         ]);
         if ($job['request_id']) $this->app->event((int)$job['request_id'], 'whatsapp_' . $job['kind'], $status);
+        if (in_array($status, ['failed', 'uncertain'], true)) $this->automation()->emit('envio.fallido', ['canal' => 'whatsapp', 'job_id' => (int)$job['id'], 'kind' => $job['kind'],
+            'reference' => $job['request_id'] ? $this->app->request((int)$job['request_id'])['reference'] : null, 'error' => $error], 'wa-fail:' . $job['id'] . ':' . $job['attempts']);
     }
 }

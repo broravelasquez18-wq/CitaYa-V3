@@ -4,7 +4,25 @@ namespace App;
 
 final class Repository
 {
+    /** Resultado de la última importación, para explicar al encargado qué hizo el sistema. */
+    private bool $lastReused = false;
+    private array $lastResolved = [];
+
     public function __construct(private readonly Application $app) {}
+
+    /** Lo que el sistema leyó y hizo con un paquete recién importado. */
+    public function summary(int $packageId): array
+    {
+        $row = $this->app->db->one('SELECT k.version,e.attended_at,e.admission,s.name specialty,p.full_name,p.document_type,p.document_number,
+            (SELECT COUNT(*) FROM clinical_files f WHERE f.package_id=k.id) files,(SELECT COALESCE(SUM(f.page_count),0) FROM clinical_files f WHERE f.package_id=k.id) pages
+            FROM packages k JOIN encounters e ON e.id=k.encounter_id JOIN patients p ON p.id=e.patient_id JOIN specialties s ON s.id=e.specialty_id WHERE k.id=?', [$packageId]);
+        $orders = array_map(fn($type) => MedicalOrders::label($type), array_column($this->app->db->all('SELECT DISTINCT o.order_type FROM clinical_orders o JOIN clinical_files f ON f.id=o.file_id WHERE f.package_id=? ORDER BY o.order_type', [$packageId]), 'order_type'));
+        return [
+            'patient' => $row['full_name'], 'document' => $row['document_type'] . ' ' . $row['document_number'], 'admission' => $row['admission'],
+            'date' => substr($row['attended_at'], 0, 10), 'specialty' => $row['specialty'], 'files' => (int)$row['files'], 'pages' => (int)$row['pages'],
+            'version' => (int)$row['version'], 'orders' => $orders, 'reused' => $this->lastReused, 'resolved' => $this->lastResolved,
+        ];
+    }
 
     public function registerPackage(array $data, array $uploads): int
     {
@@ -30,7 +48,7 @@ final class Repository
             $files[] = $source + ['sha256'=>$hash,'page_count'=>$current['page_count'],'orders'=>$current['orders']];
         }
         $this->app->identity($metadata);
-        $paths = [];
+        $paths = []; $this->lastReused = false; $this->lastResolved = [];
         try {
             $packageId = $this->app->db->transaction(function () use ($metadata,$files,&$paths) {
                 $db=$this->app->db;
@@ -59,6 +77,7 @@ final class Repository
                     $db->run("UPDATE packages SET status='available',published_at=COALESCE(published_at,?) WHERE id=?",[$this->app->now(),$package['id']]);
                     $this->app->packageFiles((int)$package['id']);
                     $this->app->event(null,'pdf_indexed','package_'.$package['id']);
+                    $this->lastReused = true;
                     return (int)$package['id'];
                 }
                 $version=$previous ? (int)$previous[0]['version']+1 : 1;
@@ -79,7 +98,7 @@ final class Repository
             });
         } catch(\Throwable $error) { foreach($paths as $path) if(is_file($path)) unlink($path); throw $error; }
         // La historia ya quedó guardada: un fallo al reprocesar solicitudes pendientes no debe deshacer la carga.
-        try { $this->app->resolveWaitingRequests($packageId); }
+        try { $this->lastResolved = $this->app->resolveWaitingRequests($packageId); }
         catch (\Throwable) { $this->app->event(null,'waiting_requests','error'); }
         return $packageId;
     }

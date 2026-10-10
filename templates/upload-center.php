@@ -3,7 +3,14 @@ $uploadLimits=App\BulkImport::limits();
 $uploadMode=(($_POST['action'] ?? '')==='bulk-upload' || (empty($_POST['action']) && ($_SESSION['upload_mode'] ?? '')==='bulk')) ? 'bulk' : 'single';
 ?>
 <section class="card upload-center" aria-labelledby="upload-heading" data-upload-center data-upload-mode="<?= $uploadMode ?>">
-<div class="upload-heading"><div><h2 id="upload-heading">Cargar historias clínicas</h2><p class="muted">Elige según las atenciones que contienen tus archivos.</p></div><span class="upload-format">Documentos PDF</span></div>
+<div class="upload-heading"><div><h2 id="upload-heading">Cargar historias clínicas</h2><p class="muted">Sube los PDF de CEDIM tal como salen del sistema. CitaYa los lee y los deja listos para entregar al paciente.</p></div><span class="upload-format">Documentos PDF</span></div>
+<ol class="upload-flow" aria-label="Qué hace el sistema al cargar">
+<li><strong>Lee el PDF</strong><span>Extrae el texto de cada página. Un PDF escaneado sin texto no se puede leer.</span></li>
+<li><strong>Identifica la atención</strong><span>Paciente, documento, ingreso, fecha y especialidad.</span></li>
+<li><strong>Verifica</strong><span>Que todos los archivos sean del mismo paciente e ingreso. Si no, no guarda nada.</span></li>
+<li><strong>Detecta órdenes</strong><span>Fórmula, laboratorio, imágenes y otras, para orientar al paciente.</span></li>
+<li><strong>Publica y entrega</strong><span>Queda disponible. Si el paciente ya la había pedido, se le envía en ese momento.</span></li>
+</ol>
 <div class="upload-options" role="tablist" aria-label="Tipo de carga" data-upload-options hidden>
 <button type="button" id="upload-tab-single" class="upload-option" role="tab" aria-controls="upload-panel-single" aria-selected="true" data-upload-choice="single">
 <span class="upload-option-icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8Z"/><path d="M14 3v5h5M8 12h8M8 16h6"/></svg></span>
@@ -15,11 +22,11 @@ $uploadMode=(($_POST['action'] ?? '')==='bulk-upload' || (empty($_POST['action']
 </button>
 </div>
 <div id="upload-panel-single" class="upload-panel" data-upload-panel="single">
-<h3>Historia de una atención</h3><p class="muted upload-panel-description">Incluye la consulta, las órdenes, las fórmulas y los demás anexos de esa misma atención. El sistema leerá los datos del paciente.</p>
+<h3>Historia de una atención</h3><p class="muted upload-panel-description">Selecciona todos los PDF de <strong>una sola atención</strong>: la consulta, las órdenes, las fórmulas y los anexos. No necesitas escribir los datos del paciente: el sistema los toma del PDF y te muestra al final lo que leyó.</p>
 <?php require __DIR__ . '/single-upload.php'; ?>
 </div>
 <div id="upload-panel-bulk" class="upload-panel" data-upload-panel="bulk">
-<h3>Carga masiva de PDF</h3><p class="muted upload-panel-description">Selecciona los documentos de varias atenciones. El sistema los organizará por paciente e ingreso y mostrará el resultado de la carga.</p>
+<h3>Carga masiva de PDF</h3><p class="muted upload-panel-description">Selecciona los PDF de varias atenciones, de uno o varios pacientes, mezclados. El sistema los agrupa por paciente e ingreso, guarda cada atención por separado y al final te muestra qué guardó, qué ya existía y qué debes revisar.</p>
 <?php require __DIR__ . '/bulk-upload.php'; ?>
 </div>
 </section>

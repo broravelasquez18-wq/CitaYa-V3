@@ -68,7 +68,7 @@ final class BulkImport
                 $before=(int)$this->app->db->one('SELECT COALESCE(MAX(id),0) n FROM packages')['n'];
                 $id=$repository->importPackage($group['sources']);
                 $reused=$id<=$before;
-                $result+=['status'=>$reused?'reused':'saved','package_id'=>$id,'message'=>$reused?'Ya estaba registrada; no se duplicó.':'Historia completa registrada.'];
+                $result+=['status'=>$reused?'reused':'saved','package_id'=>$id,'message'=>$reused?'Ya estaba registrada; no se duplicó.':'Historia completa registrada.','summary'=>$repository->summary($id)];
                 $report[$reused?'reused':'saved']++;
             } catch(\DomainException $e){$result+=['status'=>'error','message'=>$e->getMessage()];$report['failed']++;}
             catch(\Throwable){$result+=['status'=>'error','message'=>'No se pudo guardar esta atención. Vuelve a intentarlo con todos sus PDF.'];$report['failed']++;}

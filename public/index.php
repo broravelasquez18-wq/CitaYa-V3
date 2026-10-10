@@ -58,9 +58,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         switch ($_POST['action'] ?? '') {
             case 'request':
                 // PRG plus a consumed form token protects against double submission.
+                // WhatsApp escrito en la web (opcional): se valida antes de crear la solicitud y se confirma después desde el chat.
+                $claimedPhone = !$whatsappLink && trim((string)($_POST['whatsapp'] ?? '')) !== '' ? App\WhatsApp::normalizePhone((string)$_POST['whatsapp']) : null;
                 $id = $app->createRequest($_POST, $ip, true, $whatsappLink);
                 $_SESSION['request_access'] = $id;
                 $_SESSION['request_id'] = $id;
+                if ($claimedPhone !== null) $_SESSION['whatsapp_confirm'] = ['request' => $id, 'code' => $app->whatsapp()->claimNumber($id, $claimedPhone)];
                 $_SESSION['csrf'] = bin2hex(random_bytes(32));
                 go($app->request($id)['status'] === 'awaiting_selection' ? 'appointments' : 'status');
             case 'verify':
@@ -138,8 +141,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             case 'upload':
                 requireAdmin(); $_SESSION['upload_mode']='single'; $uploads = [];
                 foreach (($_FILES['pdfs']['name'] ?? []) as $i => $name) $uploads[] = ['name' => $name, 'tmp_name' => $_FILES['pdfs']['tmp_name'][$i], 'error' => $_FILES['pdfs']['error'][$i]];
-                (new App\Repository($app))->registerPackage($_POST, $uploads);
-                $_SESSION['single_upload_result'] = count($uploads);
+                $repository = new App\Repository($app);
+                $_SESSION['single_upload_result'] = $repository->summary($repository->registerPackage($_POST, $uploads)) + ['received' => count($uploads)];
                 $_SESSION['upload_result_pending'] = 'single';
                 $_SESSION['flash'] = 'Historia completa registrada y disponible para solicitudes.'; go('admin');
             case 'bulk-upload':

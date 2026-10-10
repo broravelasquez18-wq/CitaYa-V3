@@ -1,0 +1,83 @@
+{
+  "name": "CitaYa · Eventos",
+  "nodes": [
+    {
+      "id": "dca0fb7f-04e8-57fd-95b1-47de1029890e",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "citaya-eventos",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      }
+    },
+    {
+      "id": "9db681c1-93ab-54a8-b0f6-3df41615400e",
+      "name": "Procesar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Eventos de CitaYa en n8n (fases 5 y 6, SCRUM-42/43). Se ejecuta en el nodo Code del flujo «CitaYa · Eventos».\n// CitaYa avisa cada mensaje nuevo de su cola (historia.disponible, solicitud.pendiente, solicitud.no_registra,\n// whatsapp.mensaje) y n8n pide su envío por el QR (delivery.send): CitaYa arma y autoriza el contenido, así los PDF\n// nunca pasan por n8n. Con WHATSAPP_DISPATCH=n8n en CitaYa, n8n es el único responsable de la cola de WhatsApp.\n// Variables de n8n: CITAYA_URL, CITAYA_N8N_SECRET y CITAYA_ADMIN_WHATSAPP (avisos al responsable, fase 6).\nconst CITAYA_DELIVERY_EVENTS = ['historia.disponible', 'solicitud.pendiente', 'solicitud.no_registra', 'whatsapp.mensaje'];\n\nfunction citayaClient({ env, http, crypto }) {\n  const hmac = (body, secret) => 'sha256=' + crypto.createHmac('sha256', secret).update(body).digest('hex');\n  return async function api(action, data) {\n    const body = JSON.stringify(Object.assign({ action, ts: Math.floor(Date.now() / 1000) }, data || {}));\n    try {\n      const response = await http({ method: 'POST', url: env.CITAYA_URL.replace(/\\/$/, '') + '/n8n.php', body,\n        headers: { 'Content-Type': 'application/json', 'X-CitaYa-Signature': hmac(body, env.CITAYA_N8N_SECRET) } });\n      return typeof response === 'string' ? JSON.parse(response) : response;\n    } catch (error) {\n      const detail = error && error.response && error.response.body;\n      try { return typeof detail === 'string' ? JSON.parse(detail) : { ok: false, error: 'unreachable' }; } catch { return { ok: false, error: 'unreachable' }; }\n    }\n  };\n}\n\n// Avisos administrativos al responsable (fase 6). Solo radicados y estados: nunca historias ni datos del paciente.\nfunction citayaAdminNotice(event, data) {\n  const ref = data.reference ? ' (radicado *' + data.reference + '*)' : '';\n  if (event === 'solicitud.pendiente') return '📋 Nueva solicitud pendiente' + ref + '. El paciente espera respuesta en ' + (data.plazo_horas || 24) + ' h. Revísala en CitaYa → Solicitudes → Pendientes.';\n  // Los fallos de textos sueltos (respuestas del bot y estos mismos avisos) no se notifican: evita bucles de avisos.\n  if (event === 'envio.fallido' && data.kind === 'text') return null;\n  if (event === 'envio.fallido') return '⚠️ Falló un envío por ' + (data.canal === 'correo' ? 'correo' : 'WhatsApp') + ref + (data.error ? ' · ' + data.error : '') + '. Revísalo en CitaYa.';\n  return null;\n}\n\nasync function citayaEvents({ raw, signature, env, http, crypto }) {\n  if (!env.CITAYA_URL || !env.CITAYA_N8N_SECRET) return { status: 500, result: 'not_configured' };\n  const expected = 'sha256=' + crypto.createHmac('sha256', env.CITAYA_N8N_SECRET).update(raw).digest('hex');\n  if (typeof signature !== 'string' || signature.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return { status: 401, result: 'invalid_signature' };\n  let payload;\n  try { payload = JSON.parse(raw); } catch { return { status: 400, result: 'invalid_json' }; }\n  if (Math.abs(Date.now() / 1000 - Number(payload.ts || 0)) > 300) return { status: 400, result: 'expired' };\n  const event = String(payload.event || '');\n  const data = payload.data || {};\n  const api = citayaClient({ env, http, crypto });\n  const done = [];\n\n  // Fase 5: entrega coordinada por n8n. CitaYa no repite lo ya enviado si el evento llega dos veces.\n  if (CITAYA_DELIVERY_EVENTS.includes(event) && Number(data.job_id) > 0) {\n    const delivery = await api('delivery.send', { job_id: Number(data.job_id) });\n    if (!delivery.ok && delivery.error === 'unreachable') return { status: 503, result: 'citaya_unreachable' };\n    done.push('delivery:' + (delivery.status || delivery.error));\n  }\n  // Fase 6: aviso al responsable.\n  const notice = citayaAdminNotice(event, data);\n  const admin = String(env.CITAYA_ADMIN_WHATSAPP || '').replace(/\\D/g, '');\n  if (notice && admin) {\n    const sent = await api('message.send', { phone: admin, text: notice, key: 'evento:' + payload.id });\n    done.push('admin:' + (sent.status || sent.error));\n  }\n  return { status: 200, result: event + (done.length ? ' → ' + done.join(', ') : ' (sin acción)') };\n}\n\n// Recuperación periódica (flujo «CitaYa · Recuperación»): envía lo que quedó pendiente, por ejemplo si n8n o el QR\n// estuvieron caídos cuando llegó el evento. CitaYa solo lista lo que ya está disponible según sus reintentos.\nasync function citayaRecovery({ env, http, crypto }) {\n  if (!env.CITAYA_URL || !env.CITAYA_N8N_SECRET) return { result: 'not_configured' };\n  const api = citayaClient({ env, http, crypto });\n  const pending = await api('delivery.pending');\n  if (!pending.ok) return { result: 'citaya_unreachable' };\n  const results = [];\n  for (const job of pending.jobs.slice(0, 20)) results.push((await api('delivery.send', { job_id: job.job_id })).status || 'error');\n  return { result: results.length ? 'enviados: ' + results.join(', ') : 'sin pendientes' };\n}\n\n\nconst http = async options => {\n  const response = await this.helpers.httpRequest(Object.assign({}, options, { returnFullResponse: true, ignoreHttpStatusErrors: true, json: false }));\n  const body = typeof response.body === 'string' ? response.body : JSON.stringify(response.body);\n  if (response.statusCode >= 400) { const error = new Error('HTTP ' + response.statusCode); error.response = { body }; throw error; }\n  return body;\n};\nconst crypto = require('crypto');\nconst item = $input.first();\nconst headers = item.json.headers || {};\nlet raw;\ntry { raw = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8'); }\ncatch (error) { raw = typeof item.json.body === 'string' ? item.json.body : JSON.stringify(item.json.body || {}); }\nconst result = await citayaEvents({ raw, signature: headers['x-citaya-signature'], env: { CITAYA_URL: $env.CITAYA_URL, CITAYA_N8N_SECRET: $env.CITAYA_N8N_SECRET, CITAYA_WA_SECRET: $env.CITAYA_WA_SECRET, CITAYA_ADMIN_WHATSAPP: $env.CITAYA_ADMIN_WHATSAPP }, http, crypto });\nreturn [{ json: result }];"
+      }
+    },
+    {
+      "id": "33ec43d1-a9df-5a86-83a4-50f26d5d377b",
+      "name": "Responder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        520,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { result: $json.result } }}",
+        "options": {
+          "responseCode": "={{ $json.status }}"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Procesar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none"
+  },
+  "active": false
+}

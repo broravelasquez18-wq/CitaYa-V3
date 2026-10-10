@@ -1,0 +1,58 @@
+{
+  "name": "CitaYa · Seguimiento",
+  "nodes": [
+    {
+      "id": "e6fdbaf1-2fae-5c8b-827d-bcf140ccd717",
+      "name": "Cada hora",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1,
+              "triggerAtMinute": 5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fc542ac2-8809-54c4-beeb-997b4109e97d",
+      "name": "Revisar y avisar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Seguimiento administrativo (fase 6, SCRUM-43). Flujo «CitaYa · Seguimiento», cada hora.\n// Avisa al responsable (CITAYA_ADMIN_WHATSAPP) por WhatsApp: procesador detenido, QR desconectado, solicitudes cerca\n// del plazo o vencidas, y a las 7:00 (hora de Colombia) el resumen del día anterior. Solo cantidades y radicados.\n// Cada aviso lleva una clave: CitaYa no repite un aviso ya enviado aunque el flujo se ejecute de nuevo.\nasync function citayaFollowUp({ env, http, crypto, now = new Date() }) {\n  if (!env.CITAYA_URL || !env.CITAYA_N8N_SECRET) return { result: 'not_configured' };\n  const admin = String(env.CITAYA_ADMIN_WHATSAPP || '').replace(/\\D/g, '');\n  if (!admin) return { result: 'sin_responsable' };\n  const hmac = (body, secret) => 'sha256=' + crypto.createHmac('sha256', secret).update(body).digest('hex');\n  async function api(action, data) {\n    const body = JSON.stringify(Object.assign({ action, ts: Math.floor(Date.now() / 1000) }, data || {}));\n    try {\n      const response = await http({ method: 'POST', url: env.CITAYA_URL.replace(/\\/$/, '') + '/n8n.php', body,\n        headers: { 'Content-Type': 'application/json', 'X-CitaYa-Signature': hmac(body, env.CITAYA_N8N_SECRET) } });\n      return typeof response === 'string' ? JSON.parse(response) : response;\n    } catch { return { ok: false, error: 'unreachable' }; }\n  }\n  // Fecha y hora de Colombia (UTC-5, sin horario de verano).\n  const local = new Date(now.getTime() - 5 * 3600 * 1000);\n  const day = local.toISOString().slice(0, 10);\n  const hour = local.getUTCHours();\n  const notices = [];\n  const notify = (text, key) => notices.push({ text, key });\n\n  const health = await api('system.health');\n  if (!health.ok) notify('⚠️ n8n no pudo comunicarse con CitaYa. Revisa que el sitio esté en línea.', 'salud:citaya:' + day + ':' + hour);\n  else {\n    if (health.worker_seconds === null || health.worker_seconds > 300) notify('⚠️ El procesador de CitaYa no está activo' + (health.worker_seconds ? ' desde hace ' + Math.round(health.worker_seconds / 60) + ' min' : '') + '. Los correos y la cola no avanzan.', 'salud:worker:' + day + ':' + hour);\n    if (health.qr && !health.qr.connected) notify('⚠️ El WhatsApp por QR está desconectado. Vuelve a vincularlo desde los registros del servicio.', 'salud:qr:' + day + ':' + hour);\n    if (health.failed_24h && health.failed_24h.eventos > 0) notify('⚠️ Hay ' + health.failed_24h.eventos + ' evento(s) de CitaYa que no llegaron a n8n en las últimas 24 h.', 'salud:eventos:' + day);\n  }\n  const overdue = await api('requests.overdue');\n  if (overdue.ok) for (const r of overdue.requests) {\n    notify(r.stage === 'vencida'\n      ? '⏰ Solicitud *' + r.reference + '* VENCIDA: lleva ' + r.age_hours + ' h sin respuesta (plazo ' + overdue.hours + ' h).'\n      : '⏰ Solicitud *' + r.reference + '* por vencer: lleva ' + r.age_hours + ' h (plazo ' + overdue.hours + ' h).', 'plazo:' + r.reference + ':' + r.stage);\n  }\n  if (hour === 7) {\n    const s = await api('stats.summary');\n    if (s.ok) notify('📊 Resumen de CitaYa del ' + s.date + ':\\n• Solicitudes: ' + s.created + ' (' + s.from_whatsapp + ' por WhatsApp)\\n• Historias entregadas: ' + s.delivered + '\\n• Pendientes ahora: ' + s.pending_now + (s.overdue_now ? ' (' + s.overdue_now + ' vencidas)' : ''), 'resumen:' + s.date);\n  }\n  const results = [];\n  for (const n of notices) results.push((await api('message.send', { phone: admin, text: n.text, key: n.key })).status || 'error');\n  return { result: notices.length ? 'avisos: ' + results.join(', ') : 'sin novedades' };\n}\n\n\nconst http = async options => {\n  const response = await this.helpers.httpRequest(Object.assign({}, options, { returnFullResponse: true, ignoreHttpStatusErrors: true, json: false }));\n  const body = typeof response.body === 'string' ? response.body : JSON.stringify(response.body);\n  if (response.statusCode >= 400) { const error = new Error('HTTP ' + response.statusCode); error.response = { body }; throw error; }\n  return body;\n};\nconst crypto = require('crypto');\nreturn [{ json: await citayaFollowUp({ env: { CITAYA_URL: $env.CITAYA_URL, CITAYA_N8N_SECRET: $env.CITAYA_N8N_SECRET, CITAYA_WA_SECRET: $env.CITAYA_WA_SECRET, CITAYA_ADMIN_WHATSAPP: $env.CITAYA_ADMIN_WHATSAPP }, http, crypto }) }];"
+      }
+    }
+  ],
+  "connections": {
+    "Cada hora": {
+      "main": [
+        [
+          {
+            "node": "Revisar y avisar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none"
+  },
+  "active": false
+}

@@ -43,6 +43,13 @@ $settings = [
     'whatsapp_template_ready' => $env('WHATSAPP_TEMPLATE_READY'),
     'whatsapp_template_lang'  => $env('WHATSAPP_TEMPLATE_LANG', 'es'),
     'public_url'      => $env('PUBLIC_URL', 'http://localhost'),
+    'n8n_secret'      => $env('N8N_SECRET'),
+    'n8n_events_url'  => $env('N8N_EVENTS_URL'),
+    'whatsapp_dispatch' => $env('WHATSAPP_DISPATCH', 'worker'),
+    'admin_whatsapp'  => preg_replace('/\D/', '', $env('ADMIN_WHATSAPP')),
+    'whatsapp_qr_url' => $env('WHATSAPP_QR_URL', 'http://whatsapp-qr:3218'),
+    'whatsapp_app_secret' => $env('WA_SECRET'),
+    'whatsapp_bot_number' => preg_replace('/\D/', '', $env('WHATSAPP_BOT_NUMBER')),
 ];
 
 file_put_contents($root . '/config/local.php', "<?php\nreturn " . var_export($settings, true) . ";\n");

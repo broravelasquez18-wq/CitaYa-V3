@@ -61,6 +61,9 @@ CREATE TABLE IF NOT EXISTS requests (
  claimed_document_number VARCHAR(24) NULL,
  contact_email VARCHAR(190) NULL,
  whatsapp_phone VARCHAR(20) NULL,
+ whatsapp_claimed VARCHAR(20) NULL,
+ whatsapp_code_hash CHAR(64) NULL,
+ whatsapp_code_expires DATETIME NULL,
  direct_search TINYINT NOT NULL DEFAULT 0,
  matched_at DATETIME NULL,
  case_reopened_at DATETIME NULL,
@@ -163,6 +166,28 @@ CREATE TABLE IF NOT EXISTS whatsapp_links (
  request_id BIGINT UNSIGNED NULL,
  created_at DATETIME NOT NULL,
  FOREIGN KEY (request_id) REFERENCES requests(id)
+) ENGINE=InnoDB;
+
+-- Estado del sistema (latido del procesador) para el monitoreo desde n8n.
+CREATE TABLE IF NOT EXISTS system_state (
+ name VARCHAR(60) PRIMARY KEY,
+ value VARCHAR(190) NOT NULL,
+ updated_at DATETIME NOT NULL
+) ENGINE=InnoDB;
+
+-- Eventos para n8n (ver src/Automation.php). Solo radicados e identificadores, sin datos clínicos.
+CREATE TABLE IF NOT EXISTS automation_events (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ event VARCHAR(60) NOT NULL,
+ payload TEXT NOT NULL,
+ dedupe_key CHAR(64) NOT NULL UNIQUE,
+ status VARCHAR(16) NOT NULL DEFAULT 'queued',
+ attempts INT NOT NULL DEFAULT 0,
+ last_error VARCHAR(60) NULL,
+ available_at DATETIME NOT NULL,
+ sent_at DATETIME NULL,
+ created_at DATETIME NOT NULL,
+ INDEX automation_ready (status, available_at)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS whatsapp_outbox (

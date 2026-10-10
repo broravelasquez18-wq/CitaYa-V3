@@ -91,7 +91,15 @@ try {
     check($app->request($pendingId)['status'] === 'no_matches' && $db->one("SELECT id FROM whatsapp_outbox WHERE request_id=? AND kind='notice'", [$pendingId]), 'Sin historia: queda pendiente con su radicado informado');
     $pdf = sys_get_temp_dir() . '/cy-orders-' . bin2hex(random_bytes(4)) . '.pdf';
     file_put_contents($pdf, testPdf('2000000002', 'INGORD1', '', ['FORMULA MEDICA', 'Acetaminofen 500 mg', 'Orden de laboratorio:', 'Hemograma']));
-    $uploaded = (new App\Repository($app))->importPackage([['path' => $pdf, 'name' => 'historia.pdf']]);
+    $repository = new App\Repository($app);
+    $uploaded = $repository->importPackage([['path' => $pdf, 'name' => 'historia.pdf']]);
+    $summary = $repository->summary($uploaded);
+    check($summary['document'] === 'CC 2000000002' && $summary['admission'] === 'INGORD1' && $summary['files'] === 1 && !$summary['reused'], 'El resumen de la carga muestra el paciente, el ingreso y los archivos leídos');
+    check($summary['orders'] === ['Fórmula médica', 'Orden de laboratorio'], 'El resumen de la carga lista las órdenes detectadas');
+    check($summary['resolved'] === [['reference' => $app->request($pendingId)['reference'], 'sent' => true]], 'El resumen indica a qué solicitud pendiente se envió la historia');
+    $repository->importPackage([['path' => $pdf, 'name' => 'historia.pdf']]);
+    $again = $repository->summary($uploaded);
+    check($again['reused'] && $again['resolved'] === [], 'Recargar los mismos archivos se informa como ya registrada, sin nuevos envíos');
     unlink($pdf);
     check($app->request($pendingId)['status'] === 'queued' && $db->one("SELECT id FROM whatsapp_outbox WHERE request_id=? AND kind='history' AND package_id=?", [$pendingId, $uploaded]), 'Al cargar la historia, la solicitud pendiente se envía sola por WhatsApp');
     check((bool)$db->one("SELECT id FROM jobs WHERE request_id=? AND kind='history' AND recipient='espera@example.test'", [$pendingId]), 'Al cargar la historia, también se encola el correo');
@@ -103,7 +111,31 @@ try {
     check($sent['status'] === 'simulated' && $types === ['text', 'document', 'text', 'image'], 'Envía historia, guía de órdenes y una imagen por página con órdenes');
     check(str_contains($preview['messages'][3]['caption'], 'Fórmula médica / Orden de laboratorio'), 'La imagen de la página lleva el título de cada orden');
     check(str_contains($preview['messages'][2]['body'], 'Fórmula médica') && str_contains($preview['messages'][2]['body'], 'reclamar tus medicamentos en tu farmacia') && str_contains($preview['messages'][2]['body'], 'Orden de laboratorio'), 'La guía explica cada orden detectada');
-    check($app->resolveWaitingRequests($uploaded) === null && $db->one("SELECT COUNT(*) n FROM whatsapp_outbox WHERE request_id=? AND kind='history'", [$pendingId])['n'] == 1, 'Recargar la misma historia no duplica el envío');
+    check($app->resolveWaitingRequests($uploaded) === [] && $db->one("SELECT COUNT(*) n FROM whatsapp_outbox WHERE request_id=? AND kind='history'", [$pendingId])['n'] == 1, 'Recargar la misma historia no duplica el envío');
+
+    // --- WhatsApp escrito en el formulario web (RF-29) ---
+    check(App\WhatsApp::normalizePhone('300 123 4567') === '573001234567' && App\WhatsApp::normalizePhone('+1 (415) 555-0100') === '14155550100', 'Normaliza el WhatsApp escrito en la web');
+    try { App\WhatsApp::normalizePhone('12345'); $invalid = false; } catch (DomainException) { $invalid = true; }
+    check($invalid, 'Rechaza un WhatsApp inválido');
+    $webId = $app->createRequest(['email' => 'web@example.test'] + $form, 'ip-6', true);
+    $code = $bot->claimNumber($webId, '573001239999');
+    check($app->request($webId)['status'] === 'queued' && !$db->one('SELECT id FROM whatsapp_outbox WHERE request_id=?', [$webId]) && !$db->one('SELECT id FROM requests WHERE whatsapp_code_hash=?', [$code]), 'El número escrito no recibe nada antes de confirmarlo y el código se guarda como hash');
+    $bot->receive(inbound('wamid.c1', '573001239999', 'CONFIRMAR ZZZZZZ'));
+    check($app->request($webId)['whatsapp_phone'] === null && str_contains(lastText(), 'no es válido'), 'Un código incorrecto no vincula el número');
+    $bot->receive(inbound('wamid.c2', '573001239999', 'confirmar ' . strtolower($code)));
+    check($app->request($webId)['whatsapp_phone'] === '573001239999' && (bool)$db->one("SELECT id FROM whatsapp_outbox WHERE request_id=? AND kind='history'", [$webId]), 'Al confirmar, la historia ya enviada por correo sale también por WhatsApp');
+    $bot->receive(inbound('wamid.c3', '573001239999', 'CONFIRMAR ' . $code));
+    check(str_contains(lastText(), 'no es válido'), 'El código no se puede usar dos veces');
+    $webMissing = $app->createRequest(['document_number' => '99999999', 'email' => 'web2@example.test'] + $form, 'ip-7', true);
+    $code2 = $bot->claimNumber($webMissing, '573001238888');
+    $bot->receive(inbound('wamid.c4', '573001238888', 'CONFIRMAR ' . $code2));
+    check($app->request($webMissing)['whatsapp_phone'] === '573001238888' && (bool)$db->one("SELECT id FROM whatsapp_outbox WHERE request_id=? AND kind='notice'", [$webMissing]), 'Al confirmar una solicitud pendiente se envía el radicado por WhatsApp');
+    $webExpired = $app->createRequest(['email' => 'web3@example.test'] + $form, 'ip-8', true);
+    $code3 = $bot->claimNumber($webExpired, '573001237777');
+    $db->run('UPDATE requests SET whatsapp_code_expires=? WHERE id=?', [date('Y-m-d H:i:s', time() - 60), $webExpired]);
+    $bot->receive(inbound('wamid.c5', '573001237777', 'CONFIRMAR ' . $code3));
+    check($app->request($webExpired)['whatsapp_phone'] === null, 'Un código vencido no vincula el número');
+    while ($bot->tick());
 
     // --- Ventana de 24 h ---
     $reflection = new ReflectionMethod($bot, 'waitForWindow');

@@ -50,6 +50,15 @@ return [
     'whatsapp_template_lang' => 'es',
     // Tiempo estimado que se informa al paciente cuando su solicitud queda con radicado.
     'whatsapp_estimated_hours' => 24,
+    // n8n (épica SCRUM-37): secreto compartido para /n8n.php y los eventos, y webhook que recibe los eventos.
+    'n8n_secret' => '',
+    'n8n_events_url' => '',
+    // Quién procesa la cola de WhatsApp: worker (bin/worker.php) o n8n (lo pide por /n8n.php). Un solo responsable.
+    'whatsapp_dispatch' => 'worker',
+    // WhatsApp del responsable de las excepciones (solo dígitos, con indicativo); n8n puede escribirle sin que haya escrito antes.
+    'admin_whatsapp' => '',
+    // Número del bot (solo dígitos, con indicativo) para el botón «Confirmar por WhatsApp» del formulario web.
+    'whatsapp_bot_number' => '',
     // URL pública del portal (por ejemplo, el túnel HTTPS hacia public/).
     'public_url' => 'http://localhost/CitaYaV3/public',
 ];
