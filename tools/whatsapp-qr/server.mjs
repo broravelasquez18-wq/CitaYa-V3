@@ -38,7 +38,13 @@ let pairingRequested = false;
 // Bandeja persistente (inbox.mjs): cada mensaje se guarda antes de entregarse al webhook y se reintenta si falla.
 const inbox = createInbox({
   file: path.join(dir, '.session', 'inbox.json'),
-  deliver: async body => (await fetch(webhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Hub-Signature-256': sign(body) }, body, signal: AbortSignal.timeout(20000) })).ok,
+  deliver: async body => {
+    try {
+      const response = await fetch(webhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Hub-Signature-256': sign(body) }, body, signal: AbortSignal.timeout(20000) });
+      console.log('Webhook: HTTP ' + response.status);
+      return response.ok;
+    } catch (error) { console.error('Webhook sin respuesta:', String(error?.cause?.code || error?.message || error).slice(0, 160)); return false; }
+  },
 });
 const enqueueInbound = (id, body) => inbox.add(id, body);
 async function flushInbound() {
@@ -115,22 +121,26 @@ async function connect() {
     }
   });
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type !== 'notify' || !secret || !state.connected) return;
+    if (type !== 'notify') return;
+    if (!secret || !state.connected) { console.error('Mensaje ignorado: ' + (!secret ? 'falta WA_SECRET' : 'sin conexión')); return; }
     for (const message of messages) {
       const key = message.key || {};
       if (key.fromMe || !key.remoteJid || isJidGroup(key.remoteJid) || key.remoteJid === 'status@broadcast') continue;
       const text = textOf(message.message);
-      if (!text) continue;
+      if (!text) { console.log('Mensaje sin texto ignorado.'); continue; }
       try {
         const phone = await senderPhone(key);
-        if (!/^\d{8,20}$/.test(phone) || (allowed.size && !allowed.has(phone))) continue;
+        // En el registro solo se muestran los últimos 4 dígitos del número.
+        if (!/^\d{8,20}$/.test(phone)) { console.error('Mensaje ignorado: no se pudo obtener el número (' + key.remoteJid.split('@')[1] + ').'); continue; }
+        if (allowed.size && !allowed.has(phone)) { console.log('Mensaje ignorado: …' + phone.slice(-4) + ' no está en WA_ALLOWED.'); continue; }
+        console.log('Mensaje recibido de …' + phone.slice(-4) + '.');
         rememberChat(phone, key.remoteJid);
         const id = key.id || 'qr-' + crypto.createHash('sha256').update(key.remoteJid + ':' + message.messageTimestamp + ':' + text).digest('hex');
         const body = JSON.stringify({ entry: [{ changes: [{ value: { messages: [{ id, from: phone, type: 'text', text: { body: text.slice(0, 4096) } }] } }] }] });
         // Primero se guarda (bandeja persistente) y luego se entrega: si el webhook no responde, se reintenta.
         enqueueInbound(id, body);
         state.received++;
-      } catch { state.status = 'No se pudo registrar un mensaje recibido.'; }
+      } catch (error) { state.status = 'No se pudo registrar un mensaje recibido.'; console.error(state.status, String(error?.message || error).slice(0, 160)); }
     }
     flushInbound();
   });
