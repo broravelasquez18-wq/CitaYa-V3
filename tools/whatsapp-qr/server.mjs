@@ -62,10 +62,16 @@ async function senderPhone(key) {
   const jid = key.remoteJid || '';
   if (jid.endsWith('@s.whatsapp.net')) return digits(jid);
   if (key.remoteJidAlt?.endsWith('@s.whatsapp.net')) return digits(key.remoteJidAlt);
-  try {
-    const pn = await sock.signalRepository?.lidMapping?.getPNForLID(jid);
-    if (pn) return digits(pn);
-  } catch {}
+  // El mapeo LID→número a veces llega justo después del mensaje: se reintenta una vez.
+  for (const wait of [0, 2000]) {
+    if (wait) await new Promise(resolve => setTimeout(resolve, wait));
+    try {
+      const pn = await sock.signalRepository?.lidMapping?.getPNForLID(jid);
+      if (pn) return digits(pn);
+    } catch {}
+  }
+  // Sin número (p. ej. la persona lo oculta): se usa el identificador del chat (LID) para poder responderle.
+  if (jid.endsWith('@lid')) { console.log('Número no disponible: se responde por el identificador del chat (LID).'); return digits(jid); }
   return '';
 }
 
