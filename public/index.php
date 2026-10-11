@@ -78,23 +78,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 go('verify');
             case 'filters':
                 $app->changeFilters(requirePatient(), $_POST);
+                // Fecha aproximada indicada después de la sugerencia: la solicitud queda con esa fecha y no se vuelve a sugerir.
+                if (($_POST['from'] ?? '') === 'status') $_SESSION['date_given'] = requirePatient();
                 // Búsqueda directa: si ya se encoló la historia o sigue sin resultados, se muestra el estado de la solicitud.
                 go(in_array($app->request(requirePatient())['status'], ['verified','matched','awaiting_selection'], true) ? 'appointments' : 'status');
-            case 'period':
-                // No recuerda la fecha: elige un periodo aproximado y se le muestran las atenciones disponibles de ese periodo.
-                $id = requirePatient();
-                $period = (string)($_POST['period'] ?? '');
-                $periodSpecialty = empty($_POST['specialty_id']) ? null : (int)$_POST['specialty_id'];
-                $app->periodEncounters($id, $period, $periodSpecialty);
-                $_SESSION['period'] = ['request' => $id, 'period' => $period, 'specialty' => $periodSpecialty];
-                go('status');
-            case 'select-period':
-                $id = requirePatient();
-                $choice = $_SESSION['period'] ?? null;
-                if (($choice['request'] ?? null) !== $id) throw new DomainException('Elige de nuevo cuándo fue la atención.');
-                $app->selectPeriodEncounter($id, $choice['period'], $choice['specialty'], (int)($_POST['encounter_id'] ?? 0));
-                unset($_SESSION['period']);
-                go('status');
             case 'select-suggestion':
                 $app->selectSuggestion(requirePatient(), (int) ($_POST['encounter_id'] ?? 0));
                 go('status');
@@ -232,8 +219,8 @@ if (in_array($page, ['appointments','status'], true)) {
         if (!$request['direct_search'] || $page === 'appointments') $request=$app->requireVerified($id);
         if ($page === 'status') $historyResend = $app->historyResendInfo($id);
         if ($page === 'status') $recentSuggestion = $app->recentSuggestion($id);
-        $periodChoice = ($_SESSION['period']['request'] ?? null) === $id ? $_SESSION['period'] : null;
-        if ($page === 'status' && $periodChoice) $periodEncounters = $app->periodEncounters($id, $periodChoice['period'], $periodChoice['specialty']);
+        $dateGiven = ($_SESSION['date_given'] ?? null) === $id;
+        if ($dateGiven) $recentSuggestion = null;
         if ($page === 'appointments') {
             if (!in_array($request['status'], ['verified','matched','awaiting_selection','no_matches','unavailable'], true)) go('status');
             $encounters = $app->search($id);
@@ -243,6 +230,7 @@ if (in_array($page, ['appointments','status'], true)) {
 $steps = ['home' => 1, 'verify' => 2, 'appointments' => 2, 'status' => 3];
 $labels = ['matched'=>'Datos coincidentes','no_matches'=>'Sin coincidencias','awaiting_selection'=>'Selecciona una atención','not_eligible'=>'Entrega no habilitada','pending_verification'=>'Pendiente de verificación','verified'=>'Verificada','queued'=>'En cola de envío','sending'=>'Preparando el envío','retry'=>'Reintento programado','sent'=>'Correo enviado','simulated'=>'Entrega simulada','failed'=>'No se pudo enviar','uncertain'=>'Resultado por confirmar','unavailable'=>'Historia no disponible','expired'=>'Solicitud vencida','cancelled'=>'Cancelado','waiting_window'=>'Esperando que el paciente escriba','not_registered'=>'No registra'];
 if ($recentSuggestion && $request['approximate_date'] === null) $labels['no_matches'] = 'Consulta más reciente encontrada';
+if (!empty($dateGiven)) $labels['no_matches'] = 'Solicitud registrada';
 if ($page === 'delivery' && ($_GET['fragment'] ?? '') === '1') {
     header('Content-Type: text/html; charset=UTF-8');
     $deliveryModal = true;
