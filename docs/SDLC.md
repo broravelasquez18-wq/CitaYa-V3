@@ -566,3 +566,5 @@ Ruta de regreso: con `WA_WEBHOOK_URL` apuntando al webhook de CitaYa (`/whatsapp
 - Aviso inicial de una línea. Se quitaron la referencia a la página y los pasos numerados largos.
 - Las plantillas «Orden: …» quedaron como una sola línea de acción (editables).
 - Validación: `tests/whatsapp.php` 54 (3 nuevas: formato de imágenes, interconsulta y dosis).
+
+**Ajuste: sin confirmación al responder.** A pedido del titular se quitó la ventana «¿Guardar la respuesta… y notificar al paciente?»: «Guardar y notificar» envía directamente. Se mantienen las validaciones (estado elegido, adjuntos para «Aprobado», límite de tamaño) y el botón se desactiva al enviar para evitar dobles envíos.

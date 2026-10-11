@@ -331,7 +331,6 @@ document.addEventListener('click', event => {
       if (!decision) form.querySelector('[data-decision-menu]').open = true;
       return;
     }
-    if (!confirm(`¿Guardar la respuesta «${decision.value === 'approved' ? 'Aprobado' : 'No Registra'}» y notificar al paciente?`)) { event.preventDefault(); return; }
     form.querySelector('button[type="submit"]').disabled = true;
   });
 })();
