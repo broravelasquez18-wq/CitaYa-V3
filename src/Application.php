@@ -75,7 +75,8 @@ final class Application
         return [$date, $specialty];
     }
 
-    public function createRequest(array $data, string $ip, bool $directSearch = false, ?int $whatsappLinkId = null): int
+    /** $whatsappPhone: número escrito en el formulario web; se usa directamente, sin confirmación desde el chat. */
+    public function createRequest(array $data, string $ip, bool $directSearch = false, ?int $whatsappLinkId = null, ?string $whatsappPhone = null): int
     {
         [$type, $number] = $this->identity($data);
         [$date, $specialty] = $this->filters($data, $directSearch);
@@ -86,7 +87,7 @@ final class Application
         // Do not persist unverified contact updates in the patient record.
         $this->limit('request-ip:' . $ip, 20, 3600);
         $this->limit('request-patient:' . $type . ':' . $number, 5, 3600);
-        $id = $this->db->transaction(function () use ($type, $number, $name, $date, $specialty, $email, $directSearch, $whatsappLinkId) {
+        $id = $this->db->transaction(function () use ($type, $number, $name, $date, $specialty, $email, $directSearch, $whatsappLinkId, $whatsappPhone) {
             $patient = $this->db->one('SELECT * FROM patients WHERE document_type=? AND document_number=? AND active=1', [$type, $number]);
             if ($directSearch && $patient && self::nameKey($patient['full_name']) !== self::nameKey($name)) $patient=null;
             $id = $this->db->insert('requests', [
@@ -95,6 +96,7 @@ final class Application
                 'claimed_document_type' => $type, 'claimed_document_number' => $number,
                 'approximate_date' => $date, 'specialty_id' => $specialty, 'created_at' => $this->now(),
                 'direct_search' => $directSearch ? 1 : 0,
+                'whatsapp_phone' => $whatsappLinkId === null ? $whatsappPhone : null,
             ]);
             if (!$directSearch) $this->issueCode($id, $this->verificationRecipient($patient, $email));
             if ($whatsappLinkId !== null) $this->whatsapp()->attachLink($whatsappLinkId, $id);

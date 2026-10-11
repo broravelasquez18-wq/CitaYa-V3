@@ -58,12 +58,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         switch ($_POST['action'] ?? '') {
             case 'request':
                 // PRG plus a consumed form token protects against double submission.
-                // WhatsApp escrito en la web (opcional): se valida antes de crear la solicitud y se confirma después desde el chat.
-                $claimedPhone = !$whatsappLink && trim((string)($_POST['whatsapp'] ?? '')) !== '' ? App\WhatsApp::normalizePhone((string)$_POST['whatsapp']) : null;
-                $id = $app->createRequest($_POST, $ip, true, $whatsappLink);
+                // WhatsApp escrito en la web (opcional): se valida y queda vinculado a la solicitud, sin confirmación desde el chat.
+                $webPhone = !$whatsappLink && trim((string)($_POST['whatsapp'] ?? '')) !== '' ? App\WhatsApp::normalizePhone((string)$_POST['whatsapp']) : null;
+                $id = $app->createRequest($_POST, $ip, true, $whatsappLink, $webPhone);
                 $_SESSION['request_access'] = $id;
                 $_SESSION['request_id'] = $id;
-                if ($claimedPhone !== null) $_SESSION['whatsapp_confirm'] = ['request' => $id, 'code' => $app->whatsapp()->claimNumber($id, $claimedPhone)];
                 $_SESSION['csrf'] = bin2hex(random_bytes(32));
                 go($app->request($id)['status'] === 'awaiting_selection' ? 'appointments' : 'status');
             case 'verify':

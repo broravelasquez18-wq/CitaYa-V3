@@ -109,6 +109,10 @@ try {
     $confirmed = $api->handle(['action' => 'code.confirm', 'phone' => '573001239999', 'code' => strtolower($code)]);
     check($confirmed['valid'] && $confirmed['next'] === 'history' && $confirmed['reference'] === $app->request($webId)['reference'], 'Un código válido vincula el chat y encola la historia');
 
+    // --- WhatsApp escrito en la web, sin confirmación ---
+    $direct = $app->createRequest(['email' => 'web2@example.test'] + $form, 'ip-4', true, null, '573001238888');
+    check($app->request($direct)['whatsapp_phone'] === '573001238888' && $db->one("SELECT id FROM whatsapp_outbox WHERE request_id=? AND kind='history' AND phone='573001238888'", [$direct]), 'El WhatsApp escrito en la web queda vinculado y recibe la historia sin código');
+
     // --- Eventos hacia n8n ---
     $events = array_column($db->all('SELECT event FROM automation_events ORDER BY id'), 'event');
     check(in_array('historia.disponible', $events, true) && in_array('whatsapp.mensaje', $events, true), 'Se registran eventos de historia disponible y de mensajes');
@@ -136,7 +140,7 @@ try {
     $late = $api->handle(['action' => 'requests.overdue']);
     check(count($late['requests']) === 1 && $late['requests'][0]['reference'] === $app->request($missing)['reference'] && $late['requests'][0]['stage'] === 'vencida', 'Plazos: detecta la solicitud pendiente vencida');
     $today = $api->handle(['action' => 'stats.summary', 'date' => date('Y-m-d')]);
-    check($today['created'] === 2 && $today['from_whatsapp'] === 2 && $today['delivered'] >= 0 && $today['pending_now'] === 1 && $today['overdue_now'] === 1 && fails(fn() => $api->handle(['action' => 'stats.summary', 'date' => 'ayer']), 'invalid_date'), 'Resumen: cantidades del día y pendientes, sin datos personales');
+    check($today['created'] === 3 && $today['from_whatsapp'] === 3 && $today['delivered'] >= 0 && $today['pending_now'] === 1 && $today['overdue_now'] === 1 && fails(fn() => $api->handle(['action' => 'stats.summary', 'date' => 'ayer']), 'invalid_date'), 'Resumen: cantidades del día y pendientes, sin datos personales');
     $disabled = $config; $disabled['n8n_events_url'] = '';
     (new App\Automation(new App\Application($db, $disabled)))->emit('prueba', [], 'x');
     check(!$db->one("SELECT id FROM automation_events WHERE event='prueba'"), 'Sin n8n configurado no se registran eventos');

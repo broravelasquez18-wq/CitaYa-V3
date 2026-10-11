@@ -475,3 +475,9 @@ Ruta de regreso: con `WA_WEBHOOK_URL` apuntando al webhook de CitaYa (`/whatsapp
 **Pruebas en el VPS (datos ficticios).**
 - Saludo → menú: correcto.
 - HISTORIA → enlace al formulario: correcto.
+
+**Cambio pedido por el titular: WhatsApp de la web sin confirmación.**
+- Antes, el número escrito en el formulario web quedaba pendiente hasta que el paciente enviara «CONFIRMAR código» desde ese chat. Ahora se valida el formato y queda vinculado al crear la solicitud (`createRequest(..., $whatsappPhone)`): la historia o el radicado salen directamente a ese número.
+- Se quitó el recuadro de confirmación de la página y el texto de ayuda dice que también se enviará el radicado.
+- Riesgo aceptado: igual que con el correo escrito en la búsqueda directa, quien conozca nombre y documento del paciente puede pedir que la historia vaya a un número que no es suyo. «CONFIRMAR» sigue funcionando en el bot para solicitudes anteriores.
+- Validación: `tests/n8n-api.php` 28 (1 nueva); `whatsapp` 44, `whatsapp-qr` 8, `requests-admin` 25 y `run` 155 correctas.
