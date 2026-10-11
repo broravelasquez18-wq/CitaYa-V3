@@ -527,3 +527,8 @@ Ruta de regreso: con `WA_WEBHOOK_URL` apuntando al webhook de CitaYa (`/whatsapp
 - Las indicaciones son plantillas editables («Orden: fórmula médica», «Orden: laboratorio», imágenes diagnósticas, procedimiento, terapias, remisión, incapacidad) en Acceso interno → Plantillas. Son orientaciones administrativas y el aviso recuerda seguir lo que indicó el médico.
 - Si la página no se puede convertir en imagen al enviar, las mismas indicaciones salen como texto (antes se omitía). Aplica a QR, Meta y Zernio. El contenedor tiene poppler-utils para generar las imágenes.
 - Validación: `tests/whatsapp.php` 45 (pruebas de órdenes actualizadas y una nueva de plantilla editable). Las demás suites siguen correctas.
+
+**Incidente: correo en reintento permanente («Esperando un nuevo intento…»).**
+- Diagnóstico en el VPS: el contenedor sí conecta con smtp.gmail.com (587, 465 y 25), pero Gmail rechaza el inicio de sesión («Could not authenticate»). `MAIL_PASSWORD` no es una contraseña de aplicación de Gmail (tiene 12 caracteres; las de aplicación tienen 16). Lo resuelve el titular creando la contraseña de aplicación y poniéndola en Dokploy.
+- Defecto corregido: PHPMailer cierra la conexión tras el fallo y el código SMTP se perdía (`transport_error_0`), así que el error de credenciales se reintentaba como una falla de red. Ahora se registra como `smtp_auth_failed` y queda en `failed` de inmediato. Eso dispara el aviso al responsable y la página del paciente ya no se queda cargando.
+- Nuevo `php bin/mail-check.php [--retry]`: prueba el inicio de sesión SMTP sin mostrar la contraseña y, con `--retry`, vuelve a encolar los correos fallidos por credenciales o red de los últimos 7 días. Las respuestas recuperan su texto del comentario cifrado.

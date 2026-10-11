@@ -102,7 +102,10 @@ final class MailWorker
         } catch (\DomainException $error) {
             // Domain messages contain internal codes or fixed text, never clinical content.
             $this->finish($job, 'failed', $error->getMessage());
-        } catch (\Throwable) {
+        } catch (\Throwable $error) {
+            // Credenciales rechazadas (p. ej. Gmail sin contraseña de aplicación): reintentar no sirve. PHPMailer cierra
+            // la conexión tras el fallo y el código SMTP se pierde, así que se reconoce por su mensaje.
+            if (str_contains($error->getMessage(), 'Could not authenticate')) { $this->finish($job, 'failed', 'smtp_auth_failed'); return true; }
             $smtpError = $smtp?->getError() ?? [];
             $code = (int) ($smtpError['smtp_code'] ?? 0);
             // PHPMailer can put OS socket errors (e.g. Windows 10061) in smtp_code.
