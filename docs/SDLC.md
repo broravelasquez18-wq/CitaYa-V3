@@ -568,3 +568,8 @@ Ruta de regreso: con `WA_WEBHOOK_URL` apuntando al webhook de CitaYa (`/whatsapp
 - Validación: `tests/whatsapp.php` 54 (3 nuevas: formato de imágenes, interconsulta y dosis).
 
 **Ajuste: sin confirmación al responder.** A pedido del titular se quitó la ventana «¿Guardar la respuesta… y notificar al paciente?»: «Guardar y notificar» envía directamente. Se mantienen las validaciones (estado elegido, adjuntos para «Aprobado», límite de tamaño) y el botón se desactiva al enviar para evitar dobles envíos.
+
+**Corrección: órdenes en las respuestas «Aprobado».** Al responder una solicitud con un PDF adjunto, el WhatsApp enviaba el documento pero no explicaba sus órdenes (solo se hacía con las historias del repositorio).
+- `responseMessages` lee cada PDF adjunto de una respuesta «Aprobado» (`MedicalOrders::detect`) y agrega, después de los documentos, el aviso y una imagen por página con órdenes y su texto sencillo.
+- El armado se unificó en `orderPageMessages`, que usan ambos casos.
+- Validación: `tests/whatsapp.php` 55 (1 nueva: respuesta con PDF que trae una orden de ecografía → texto, documento, aviso e imagen con «Pide una cita en tu EPS»).

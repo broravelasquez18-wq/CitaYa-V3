@@ -179,10 +179,22 @@ try {
     $db->run("UPDATE whatsapp_outbox SET status='waiting_window',created_at=? WHERE id=?", [date('Y-m-d H:i:s', time() - 86400 * 8), $sent['id']]);
     $bot->tick();
     check($db->one('SELECT last_error FROM whatsapp_outbox WHERE id=?', [$sent['id']])['last_error'] === 'window_expired', 'Un mensaje en espera más de 7 días se marca vencido');
+
+    // --- Respuesta «Aprobado» con PDF: también se leen sus órdenes ---
+    $bot->receive(inbound('wamid.r1', '573005554433', 'historia'));
+    $answered = $app->createRequest(['document_number' => '3000000003', 'full_name' => 'Paciente ficticio de respuesta', 'email' => 'respuesta@example.test'] + $form, 'ip-r1', true, $bot->findLink(linkToken()));
+    $responsePdf = $config['storage_path'] . '/histories/respuesta-orden.pdf';
+    file_put_contents($responsePdf, testPdf('3000000003', 'INGRESP1', '', ['SOLICITUD AYUDAS DIAGNOSTICAS EXTRAMURAL', 'PLAN DE MANEJO', '881401 ECOGRAFIA PELVICA GINECOLOGICA. 1']));
+    $app->respondCase($answered, 1, 'approved', 'Te enviamos tu historia clínica.', [['path' => $responsePdf, 'name' => 'historia.pdf']]);
+    $responseJob = $db->one("SELECT id FROM whatsapp_outbox WHERE request_id=? AND kind='response'", [$answered]);
+    while ($bot->tick());
+    $responsePreview = json_decode((string)file_get_contents($config['storage_path'] . '/wa-outbox/' . $responseJob['id'] . '.json'), true);
+    $responseTypes = array_column($responsePreview['messages'], 'type');
+    check($responseTypes === ['text', 'document', 'text', 'image'] && str_contains($responsePreview['messages'][3]['caption'], 'Pide una cita en tu EPS'), 'La respuesta «Aprobado» con PDF también explica las órdenes del documento');
     echo "\nPASS: $checks comprobaciones. Sin envíos externos.\n";
 } finally {
     if (!preg_match('/^citaya_test_[a-f0-9]{10}$/', $databaseName)) throw new RuntimeException('Invalid test database name');
     $server->exec("DROP DATABASE `$databaseName`");
-    foreach (['histories','outbox','wa-outbox'] as $dir) { foreach (glob($config['storage_path'] . '/' . $dir . '/*') as $file) unlink($file); rmdir($config['storage_path'] . '/' . $dir); }
+    foreach (['histories','outbox','wa-outbox','responses'] as $dir) { if (!is_dir($config['storage_path'] . '/' . $dir)) continue; foreach (glob($config['storage_path'] . '/' . $dir . '/*') as $file) unlink($file); rmdir($config['storage_path'] . '/' . $dir); }
     rmdir($config['storage_path']);
 }

@@ -349,13 +349,19 @@ final class WhatsApp
         if (!$job['request_id']) return [];
         $request = $this->app->request((int)$job['request_id']);
         if (!$request['whatsapp_phone'] || !hash_equals($request['whatsapp_phone'], $job['phone'])) throw new \DomainException('recipient_changed');
-        $messages = [];
+        $messages = []; $pages = [];
         foreach ($this->app->responseFiles((int)$job['id'], 'wa_job_id') as $file) {
             $messages[] = $file['mime'] === 'application/pdf'
                 ? ['type' => 'document', 'path' => $file['path'], 'filename' => $file['original_name'], 'caption' => null]
                 : ['type' => 'photo', 'path' => $file['path'], 'filename' => $file['original_name'], 'mime' => $file['mime']];
+            // Igual que con las historias del repositorio: las órdenes de cada PDF adjunto, con lo que debe hacer.
+            if ($file['mime'] === 'application/pdf' && $job['kind'] === 'response') {
+                try { $texts = array_map(fn($page) => $page->getText(), (new \Smalot\PdfParser\Parser())->parseFile($file['path'])->getPages()); }
+                catch (\Throwable) { continue; }
+                foreach (MedicalOrders::detect($texts) as $order) $pages[$file['path'] . '#' . $order['page']][$order['type']] = $order['details'];
+            }
         }
-        return $messages;
+        return array_merge($messages, $this->orderPageMessages($pages));
     }
 
     private function historyMessages(array $job): array
@@ -385,15 +391,25 @@ final class WhatsApp
         foreach ($files as $index => $file) $position[(int)$file['id']] = $index + 1;
         $orders = $this->app->db->all('SELECT file_id,order_type,page,details FROM clinical_orders WHERE file_id IN (' . implode(',', array_keys($position)) . ') ORDER BY file_id,page,id');
         if (!$orders) return [];
-        $pages = [];
-        foreach ($orders as $order) $pages[$order['file_id'] . ':' . $order['page']][$order['order_type']] = json_decode((string)$order['details'], true) ?: [];
-        $messages = [['type' => 'text', 'body' => "Estas son tus órdenes médicas y lo que debes hacer con cada una 👇\n_Sigue siempre las indicaciones de tu médico._"]];
         $filesById = array_column($files, null, 'id');
+        $pages = [];
+        foreach ($orders as $order) $pages[$filesById[(int)$order['file_id']]['path'] . '#' . $order['page']][$order['order_type']] = json_decode((string)$order['details'], true) ?: [];
+        return $this->orderPageMessages($pages);
+    }
+
+    /**
+     * Aviso y una imagen por página con órdenes («ruta#página» => [tipo => detalle]), con el texto sencillo de cada
+     * orden. Máximo 8 páginas. Lo usan las historias del repositorio y las respuestas «Aprobado» con PDF.
+     */
+    private function orderPageMessages(array $pages): array
+    {
+        if (!$pages) return [];
+        $messages = [['type' => 'text', 'body' => "Estas son tus órdenes médicas y lo que debes hacer con cada una 👇\n_Sigue siempre las indicaciones de tu médico._"]];
         foreach (array_slice($pages, 0, 8, true) as $key => $types) {
-            [$fileId, $page] = array_map('intval', explode(':', (string)$key));
+            $cut = strrpos((string)$key, '#');
             $parts = [];
-            foreach ($types as $type => $details) $parts[] = $this->orderText($type, $details);
-            $messages[] = ['type' => 'image', 'path' => $filesById[$fileId]['path'], 'page' => $page, 'caption' => mb_substr(implode("\n\n", $parts), 0, 1000)];
+            foreach ($types as $type => $details) $parts[] = $this->orderText($type, (array)$details);
+            $messages[] = ['type' => 'image', 'path' => substr((string)$key, 0, $cut), 'page' => (int)substr((string)$key, $cut + 1), 'caption' => mb_substr(implode("\n\n", $parts), 0, 1000)];
         }
         return $messages;
     }
