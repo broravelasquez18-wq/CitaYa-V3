@@ -249,6 +249,16 @@ try {
     check($app->recentSuggestion($emptySuggestion)===null,'Sin historias disponibles de la especialidad no inventa una fecha');
     $anySpecialty=$app->createRequest(array_replace($suggestData,['specialty_id'=>0]),'any-specialty',true);
     check((int)$app->recentSuggestion($anySpecialty)['id']===$differentSpecialty,'No recuerdo la especialidad permite sugerir la última consulta entre especialidades');
+    $otherDatePatient=$db->insert('patients',['document_type'=>'CC','document_number'=>'6000000077','full_name'=>'Paciente Otra Fecha','email'=>'']);
+    [$latestVisit]=addEncounter($otherDatePatient,-5);
+    [$wantedVisit,$wantedPackage]=addEncounter($otherDatePatient,-40);
+    $otherDateRequest=$app->createRequest(['document_type'=>'CC','document_number'=>'6000000077','full_name'=>'Paciente Otra Fecha','date_unknown'=>'1','specialty_id'=>0,'email'=>'otra@example.test'],'other-date',true);
+    check($app->request($otherDateRequest)['status']==='no_matches' && (int)$app->recentSuggestion($otherDateRequest)['id']===$latestVisit,'Sin fecha: sugiere la consulta más reciente');
+    $app->changeFilters($otherDateRequest,['approximate_date'=>date('Y-m-d',strtotime('-40 days')),'specialty_id'=>0]);
+    $otherDateJob=$db->one("SELECT * FROM jobs WHERE request_id=? AND kind='history'",[$otherDateRequest]);
+    check($app->request($otherDateRequest)['status']==='queued' && (int)$otherDateJob['package_id']===$wantedPackage,'Rechazar la sugerencia y buscar otra fecha envía la historia de esa fecha');
+    $app->changeFilters($anySpecialty,['approximate_date'=>date('Y-m-d',strtotime('-200 days')),'specialty_id'=>0]);
+    check($app->request($anySpecialty)['status']==='no_matches' && !$db->one("SELECT id FROM jobs WHERE request_id=? AND kind='history'",[$anySpecialty]),'Otra fecha sin historia deja la solicitud pendiente sin enviar nada');
     check($app->filters(['date_unknown'=>'1','approximate_date'=>'invalid','specialty_id'=>1],true)[0]===null,'No recuerdo la fecha omite incluso una fecha residual inválida');
     rejects(fn()=>$app->filters(['approximate_date'=>''],true),'Fecha vacía sin marcar la opción sigue siendo inválida');
     rejects(fn()=>$app->filters(['date_unknown'=>'1']),'Flujo histórico sigue requiriendo fecha');

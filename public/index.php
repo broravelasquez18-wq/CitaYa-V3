@@ -76,7 +76,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $app->resend((int) $_SESSION['request_id'], $ip);
                 $_SESSION['flash'] = 'Si el registro está habilitado, recibirás un nuevo código.';
                 go('verify');
-            case 'filters': $app->changeFilters(requirePatient(), $_POST); go('appointments');
+            case 'filters':
+                $app->changeFilters(requirePatient(), $_POST);
+                // Búsqueda directa: si ya se encoló la historia o sigue sin resultados, se muestra el estado de la solicitud.
+                go(in_array($app->request(requirePatient())['status'], ['verified','matched','awaiting_selection'], true) ? 'appointments' : 'status');
             case 'select-suggestion':
                 $app->selectSuggestion(requirePatient(), (int) ($_POST['encounter_id'] ?? 0));
                 go('status');

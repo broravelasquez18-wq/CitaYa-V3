@@ -481,3 +481,8 @@ Ruta de regreso: con `WA_WEBHOOK_URL` apuntando al webhook de CitaYa (`/whatsapp
 - Se quitó el recuadro de confirmación de la página y el texto de ayuda dice que también se enviará el radicado.
 - Riesgo aceptado: igual que con el correo escrito en la búsqueda directa, quien conozca nombre y documento del paciente puede pedir que la historia vaya a un número que no es suyo. «CONFIRMAR» sigue funcionando en el bot para solicitudes anteriores.
 - Validación: `tests/n8n-api.php` 28 (1 nueva); `whatsapp` 44, `whatsapp-qr` 8, `requests-admin` 25 y `run` 155 correctas.
+
+**Corrección: rechazar la consulta sugerida y buscar otra fecha.**
+- Problema (reportado en la prueba): con «No recuerdo la fecha», la página sugería la consulta más reciente y solo dejaba aceptarla; no había forma de decir que no era esa.
+- Ahora, cuando el paciente fue encontrado y no hay coincidencia, la página de estado muestra «No es esta consulta: buscar con otra fecha» (o «Buscar con otra fecha o especialidad» si no hay sugerencia), con fecha y especialidad. Usa `changeFilters` y la misma búsqueda: si hay historia de esa fecha se envía; si no, la solicitud sigue pendiente para el personal y la página vuelve al estado.
+- Validación: `tests/run.php` 158 (3 nuevas: sugerencia sin fecha, otra fecha con historia, otra fecha sin historia).
