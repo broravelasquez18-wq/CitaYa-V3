@@ -41,7 +41,12 @@ $createdText = date('d/m/Y, h:i ', $created) . (date('A', $created) === 'AM' ? '
 <div class="case-main">
 <?php if (!empty($record['awaiting']) && $record['direct_search'] && in_array($record['status'], App\Application::PENDING_STATUSES, true)):
 $messageTemplates = new App\MessageTemplates($app);
-$templateValues = ['radicado' => $record['reference'], 'nombre' => $record['claimed_name'], 'enlace' => $app->whatsapp()->portalUrl()];
+$templateValues = ['radicado' => $record['reference'], 'nombre' => $record['claimed_name'], 'enlace' => $app->whatsapp()->portalUrl(),
+    'documento' => trim(($record['document_type'] ?? '') . ' ' . ($record['document_number'] ?? '')), 'fecha' => $record['approximate_date'] ? date('d/m/Y', strtotime($record['approximate_date'])) : 'fecha que indicaste',
+    'especialidad' => $record['specialty'] ?? 'la especialidad indicada'];
+// Plantillas del menú: código => [título, estado que selecciona].
+$responseTemplates = ['response_approved' => ['Historia aprobada', 'approved'], 'nr_document' => ['No registra: número de documento', 'not_registered'], 'nr_name' => ['No registra: nombre', 'not_registered'],
+    'nr_date' => ['No registra: fecha de atención', 'not_registered'], 'nr_specialty' => ['No registra: especialidad', 'not_registered'], 'not_registered' => ['No registra: general', 'not_registered']];
 $chevron = $icon('<path d="m6 9 6 6 6-6"/>'); ?>
 <form method="post" action="?page=deliveries" enctype="multipart/form-data" class="case-respond" data-case-respond><?= csrf() ?><input type="hidden" name="action" value="respond-case"><input type="hidden" name="request_id" value="<?= (int)$record['id'] ?>">
 <div class="case-respond-head"><h3 class="case-section-title"><?= $icon('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>') ?>Comentario de gestión / respuesta</h3>
@@ -53,8 +58,7 @@ $chevron = $icon('<path d="m6 9 6 6 6-6"/>'); ?>
 </div></details>
 <details class="case-menu"><summary><?= $icon('<rect x="3" y="3" width="18" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>') ?>Plantillas<?= $chevron ?></summary>
 <div class="case-menu-list">
-<button type="button" class="case-option" data-template="approved" data-template-text="<?= h($messageTemplates->renderPlain('response_approved', $templateValues)) ?>"><span class="case-option-icon approved"><?= $icon('<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>') ?></span>Historia aprobada</button>
-<button type="button" class="case-option" data-template="not_registered" data-template-text="<?= h($messageTemplates->renderPlain('not_registered', $templateValues)) ?>"><span class="case-option-icon rejected"><?= $icon('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="m10 12 4 4m0-4-4 4"/>') ?></span>No registra</button>
+<?php foreach ($responseTemplates as $templateCode => [$templateTitle, $templateDecision]): ?><button type="button" class="case-option" data-template="<?= h($templateCode) ?>" data-decision="<?= $templateDecision ?>"<?= in_array($templateCode, ['response_approved', 'not_registered'], true) ? ' data-default' : '' ?> data-template-text="<?= h($messageTemplates->renderPlain($templateCode, $templateValues)) ?>"><span class="case-option-icon <?= $templateDecision === 'approved' ? 'approved' : 'rejected' ?>"><?= $templateDecision === 'approved' ? $icon('<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>') : $icon('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="m10 12 4 4m0-4-4 4"/>') ?></span><?= h($templateTitle) ?></button><?php endforeach ?>
 </div></details>
 </div></div>
 <label class="visually-hidden" for="case-comment-<?= (int)$record['id'] ?>">Comentario para el paciente</label>

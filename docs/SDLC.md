@@ -573,3 +573,10 @@ Ruta de regreso: con `WA_WEBHOOK_URL` apuntando al webhook de CitaYa (`/whatsapp
 - `responseMessages` lee cada PDF adjunto de una respuesta «Aprobado» (`MedicalOrders::detect`) y agrega, después de los documentos, el aviso y una imagen por página con órdenes y su texto sencillo.
 - El armado se unificó en `orderPageMessages`, que usan ambos casos.
 - Validación: `tests/whatsapp.php` 55 (1 nueva: respuesta con PDF que trae una orden de ecografía → texto, documento, aviso e imagen con «Pide una cita en tu EPS»).
+
+**Plantillas «No registra» por motivo.** A pedido del titular, al responder «No Registra» se puede elegir el motivo exacto en el menú «Plantillas»:
+- `nr_document` (no hay historias con ese documento), `nr_name` (el nombre no coincide con el documento), `nr_date` (no hay atención en la fecha indicada), `nr_specialty` (no hay atención en esa especialidad) y la general `not_registered`.
+- Usan los datos de la solicitud ({documento}, {nombre}, {fecha}, {especialidad}) y exigen {enlace} para que el paciente haga una nueva solicitud. Se editan en Plantillas.
+- Elegir una plantilla selecciona su estado. Elegir el estado sugiere la plantilla general (Aprobado → «Historia aprobada»; No Registra → «No registra: general»).
+- WhatsApp ya no antepone «Respuesta a tu solicitud…» cuando el comentario ya nombra el radicado.
+- Validación: `tests/requests-admin.php` 46 (3 nuevas). Las demás suites siguen correctas.

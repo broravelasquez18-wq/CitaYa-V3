@@ -160,6 +160,18 @@ try {
     $dated = viaWhatsApp(['approximate_date' => date('Y-m-d', strtotime('-6 days'))] + $form, '573001118888', 'w00');
     $app->changeFilters($dated, ['approximate_date' => date('Y-m-d', strtotime('-60 days')), 'specialty_id' => 0], true);
     check(str_contains(waText($dated, 'notice'), '24 horas'), 'Si indica una fecha aproximada sin historia, recibe el radicado de inmediato');
+
+    // --- Plantillas «No registra» por motivo ---
+    $reasonValues = ['radicado' => 'HC-1', 'nombre' => 'Ana Pérez', 'documento' => 'CC 123', 'fecha' => '15/09/2026', 'especialidad' => 'Ortopedia', 'enlace' => 'https://portal.example.test'];
+    check(str_contains($templates->renderPlain('nr_document', $reasonValues), 'documento CC 123') && str_contains($templates->renderPlain('nr_date', $reasonValues), 'atención el 15/09/2026')
+        && str_contains($templates->renderPlain('nr_name', $reasonValues), '(Ana Pérez) no coincide') && str_contains($templates->renderPlain('nr_specialty', $reasonValues), 'en Ortopedia'), 'Cada motivo de «No registra» dice exactamente qué revisar');
+    rejects(fn() => $templates->save('nr_date', 'No encontramos atención el {fecha}.', 1), 'Las plantillas de motivo exigen el enlace para una nueva solicitud', '{enlace}');
+    $db->run('DELETE FROM rate_limits');
+    $reasonCase = viaWhatsApp(['document_number' => '55555555'] + $form, '573005550000', 'nr1');
+    $reasonText = $templates->renderPlain('nr_date', ['radicado' => $app->request($reasonCase)['reference']] + $reasonValues);
+    $app->respondCase($reasonCase, 1, 'not_registered', $reasonText, []);
+    $sentReason = waText($reasonCase, 'not_registered');
+    check($sentReason === $reasonText && substr_count($sentReason, 'Respuesta a tu solicitud') === 1, 'WhatsApp envía el motivo sin repetir «Respuesta a tu solicitud»');
     echo "\nPASS: $checks comprobaciones. Sin envíos externos.\n";
 } finally {
     if (!preg_match('/^citaya_test_[a-f0-9]{10}$/', $databaseName)) throw new RuntimeException('Invalid test database name');

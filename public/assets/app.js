@@ -234,7 +234,8 @@ document.addEventListener('click', event => {
   const templateTexts = form => [...form.querySelectorAll('[data-template-text]')].map(button => button.dataset.templateText);
   const fillTemplate = (form, decision, force) => {
     const comment = form.querySelector('[data-case-comment]');
-    const button = form.querySelector(`[data-template="${decision}"]`);
+    // Al elegir el estado se sugiere la primera plantilla de ese estado (Aprobado → historia aprobada).
+    const button = form.querySelector(`[data-template][data-decision="${decision}"][data-default]`) || form.querySelector(`[data-template][data-decision="${decision}"]`);
     if (!comment || !button) return;
     const current = comment.value.trim();
     if (force || current === '' || templateTexts(form).includes(current)) comment.value = button.dataset.templateText;
@@ -283,8 +284,8 @@ document.addEventListener('click', event => {
       const comment = form.querySelector('[data-case-comment]');
       const current = comment.value.trim();
       if (current && !templateTexts(form).includes(current) && !confirm('¿Reemplazar el comentario que escribiste por la plantilla?')) return;
-      fillTemplate(form, template.dataset.template, true);
-      selectDecision(form, template.dataset.template);
+      comment.value = template.dataset.templateText;
+      selectDecision(form, template.dataset.decision);
       template.closest('details').open = false;
       comment.focus();
       return;

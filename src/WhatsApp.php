@@ -252,7 +252,8 @@ final class WhatsApp
         $request = $this->app->request($requestId);
         if (!$request['whatsapp_phone']) return null;
         $kind = $decision === 'approved' ? 'response' : 'not_registered';
-        $body = "Respuesta a tu solicitud *{$request['reference']}*.\n\n" . $comment;
+        // Las plantillas ya nombran el radicado; si el comentario no lo hace, se antepone.
+        $body = str_contains($comment, $request['reference']) ? $comment : "Respuesta a tu solicitud *{$request['reference']}*.\n\n" . $comment;
         return $this->queue($request['whatsapp_phone'], $kind, $body, $requestId, null, 'wa:response:' . $requestId . ':' . $unique,
             $decision === 'approved' ? 'historia.disponible' : 'solicitud.no_registra');
     }

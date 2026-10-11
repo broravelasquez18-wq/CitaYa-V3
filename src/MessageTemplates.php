@@ -22,6 +22,14 @@ final class MessageTemplates
             "Hola, {nombre}.\n\nTu solicitud *{radicado}* fue aprobada. Te enviamos adjuntos los documentos de tu historia clínica.\n\nConsérvalos en un lugar privado."],
         'not_registered' => ['No registra', 'Respuesta de la persona encargada cuando el nombre no coincide con el documento o el paciente no existe.', ['radicado', 'nombre', 'enlace'],
             "Respuesta a tu solicitud *{radicado}*.\n\nNo encontramos una historia clínica registrada con el número de documento y el nombre que indicaste.\n\nVerifica nuevamente tu *número de documento* y escribe tus nombres y apellidos completos tal como aparecen en tu documento. Puedes hacer una nueva solicitud aquí:\n{enlace}"],
+        'nr_document' => ['No registra: número de documento', 'Motivo «No Registra»: no hay historias con el número de documento indicado.', ['radicado', 'nombre', 'documento', 'enlace'],
+            "Respuesta a tu solicitud *{radicado}*.\n\nNo encontramos historias clínicas con el documento *{documento}*.\n\nRevisa que el *tipo y número de documento* sean correctos (sin puntos ni espacios) y haz una nueva solicitud aquí:\n{enlace}"],
+        'nr_name' => ['No registra: nombre', 'Motivo «No Registra»: el documento existe, pero el nombre no coincide.', ['radicado', 'nombre', 'documento', 'enlace'],
+            "Respuesta a tu solicitud *{radicado}*.\n\nEncontramos el documento *{documento}*, pero el nombre que escribiste (*{nombre}*) no coincide con el registrado.\n\nHaz una nueva solicitud con tus *nombres y apellidos completos*, tal como aparecen en tu documento:\n{enlace}"],
+        'nr_date' => ['No registra: fecha de atención', 'Motivo «No Registra»: no hay atención en la fecha indicada.', ['radicado', 'nombre', 'fecha', 'enlace'],
+            "Respuesta a tu solicitud *{radicado}*.\n\nNo encontramos una atención el *{fecha}*.\n\nRevisa la fecha en tu carné de cita, factura o mensaje de confirmación y haz una nueva solicitud con la fecha correcta:\n{enlace}"],
+        'nr_specialty' => ['No registra: especialidad', 'Motivo «No Registra»: no hay atención en la especialidad indicada.', ['radicado', 'nombre', 'especialidad', 'enlace'],
+            "Respuesta a tu solicitud *{radicado}*.\n\nNo encontramos una atención en *{especialidad}* con los datos que indicaste.\n\nRevisa la especialidad (o elige «No recuerdo la especialidad») y haz una nueva solicitud:\n{enlace}"],
         'order_formula' => ['Orden: fórmula médica', 'Qué debe hacer el paciente con esta orden (una o dos líneas). Va debajo de lo que se le ordenó.', [],
             "👉 Reclama tus medicamentos en la farmacia de tu EPS. Lleva esta fórmula y tu documento."],
         'order_laboratorio' => ['Orden: laboratorio', 'Qué debe hacer el paciente con esta orden (una o dos líneas). Va debajo de lo que se le ordenó.', [],
@@ -76,7 +84,7 @@ final class MessageTemplates
         $unknown = array_diff(array_unique($used[1]), self::DEFINITIONS[$code][2]);
         if ($unknown) throw new \DomainException('Variable no permitida en esta plantilla: {' . implode('}, {', $unknown) . '}.');
         // Sin el enlace el paciente no podría continuar.
-        foreach (['form_link', 'not_registered'] as $required) {
+        foreach (['form_link', 'not_registered', 'nr_document', 'nr_name', 'nr_date', 'nr_specialty'] as $required) {
             if ($code === $required && !str_contains($body, '{enlace}')) throw new \DomainException('Esta plantilla debe incluir {enlace}.');
         }
         $this->app->db->run('INSERT INTO message_templates (code,body,updated_by,updated_at) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE body=VALUES(body),updated_by=VALUES(updated_by),updated_at=VALUES(updated_at)', [$code, $body, $adminId, $this->app->now()]);
@@ -94,6 +102,7 @@ final class MessageTemplates
     public static function sample(): array
     {
         return ['radicado' => 'HC-261006-A1B2C3D4E5', 'nombre' => 'Paciente Demo', 'horas' => '24', 'vigencia' => '6',
-            'enlace' => 'https://portal.ejemplo/?page=home', 'correo' => 'paciente@correo.com', 'documentos' => '2'];
+            'enlace' => 'https://portal.ejemplo/?page=home', 'correo' => 'paciente@correo.com', 'documentos' => '2',
+            'documento' => 'CC 1000000000', 'fecha' => '15/09/2026', 'especialidad' => 'Medicina general'];
     }
 }
