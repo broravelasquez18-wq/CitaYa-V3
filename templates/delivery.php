@@ -39,7 +39,7 @@ $createdText = date('d/m/Y, h:i ', $created) . (date('A', $created) === 'AM' ? '
 </div>
 </aside>
 <div class="case-main">
-<?php if (!empty($record['awaiting']) && $record['direct_search'] && in_array($record['status'], App\Application::PENDING_STATUSES, true)): $candidates = $deliveryDetail['candidates'] ?? []; $hasDocument = !empty($record['claimed_document_number']);
+<?php if (!empty($record['awaiting']) && $record['direct_search'] && in_array($record['status'], App\Application::PENDING_STATUSES, true)):
 $messageTemplates = new App\MessageTemplates($app);
 $templateValues = ['radicado' => $record['reference'], 'nombre' => $record['claimed_name'], 'enlace' => $app->whatsapp()->portalUrl()];
 $chevron = $icon('<path d="m6 9 6 6 6-6"/>'); ?>
@@ -66,19 +66,6 @@ $chevron = $icon('<path d="m6 9 6 6 6-6"/>'); ?>
 <p class="case-hint">La respuesta sale al correo <?= h($record['contact_email'] ?? '') ?><?= $record['whatsapp_phone'] ? ' y al WhatsApp +' . h($record['whatsapp_phone']) : '' ?>. Para «Aprobado» adjunta los documentos.</p>
 <div class="case-actions"><button type="button" class="button secondary" data-close-case>Cerrar</button><button class="button primary" type="submit"><?= $icon('<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>') ?>Guardar y notificar</button></div>
 </form>
-<?php if ($hasDocument): ?><details class="case-repo"><summary>Historias del repositorio con este documento (<?= count($candidates) ?>)</summary>
-<?php if (!$hasDocument): ?><div class="notice"><p>Esta solicitud antigua no conservó el número de documento, así que no se puede emparejar con una historia. Responde «No registra» para que el paciente haga una nueva solicitud con su documento.</p></div>
-<?php else: ?><p class="muted">Solo se puede enviar una historia del mismo documento (<?= h($record['claimed_document_type'] . ' ' . $record['claimed_document_number']) ?>) cuyo nombre coincida con «<?= h($record['claimed_name']) ?>». El envío sale por correo<?= $record['whatsapp_phone'] ? ' y por WhatsApp' : '' ?>.</p>
-<?php if (!$candidates): ?><div class="empty-state">No hay historias cargadas con este número de documento. Carga el PDF abajo o responde «No registra».</div><?php endif ?><?php endif ?>
-<?php foreach ($candidates as $candidate): ?>
-<article class="mail-item candidate"><div class="mail-top"><h3><?= h($candidate['specialty']) ?> · <?= h(date('d/m/Y H:i', strtotime($candidate['attended_at']))) ?></h3><span class="pill <?= $candidate['name_matches'] ? 'sla-ok' : 'sla-late' ?>"><?= $candidate['name_matches'] ? 'Nombre coincide' : 'Nombre distinto' ?></span></div>
-<p class="muted"><?= h($candidate['location']) ?> · Ingreso <?= h($candidate['admission']) ?> · <?= (int)$candidate['file_count'] ?> PDF · Nombre en el PDF: <strong><?= h($candidate['patient_name']) ?></strong></p>
-<?php if ($candidate['name_matches']): ?><form method="post" action="?page=deliveries" class="respond-form"><?= csrf() ?><input type="hidden" name="action" value="assign-encounter"><input type="hidden" name="request_id" value="<?= (int)$record['id'] ?>"><input type="hidden" name="encounter_id" value="<?= (int)$candidate['id'] ?>"><label class="check"><input type="checkbox" required>Confirmo que es la atención que pidió el paciente</label><button class="button primary" type="submit">Enviar esta historia</button></form>
-<?php else: ?><p class="muted">El nombre no coincide con el de la solicitud: no se puede enviar. Si corresponde, responde «No registra» para que el paciente verifique sus datos.</p><?php endif ?>
-</article><?php endforeach ?>
-<?php if ($hasDocument): ?><details class="spaced"><summary>Cargar el PDF de esta solicitud</summary>
-<form method="post" action="?page=deliveries" enctype="multipart/form-data" class="spaced respond-form"><?= csrf() ?><input type="hidden" name="action" value="request-upload"><input type="hidden" name="request_id" value="<?= (int)$record['id'] ?>"><label>PDF de la atención (uno o varios del mismo ingreso)<input type="file" name="pdfs[]" accept="application/pdf" multiple required></label><label class="check"><input type="checkbox" name="complete" value="1" required>Los archivos componen la historia completa de la atención</label><button class="button secondary" type="submit">Cargar y enviar si coincide</button><small>Si el documento y el nombre del PDF coinciden con la solicitud, se envía automáticamente. Si no, queda guardado en el repositorio sin enviarse.</small></form></details><?php endif ?>
-</details><?php endif ?>
 <?php endif ?>
 <?php if (empty($record['awaiting'])): ?><div class="notice spaced"><p><strong>Esta solicitud ya fue gestionada.</strong> Consulta en el historial la respuesta y los envíos.</p></div><?php endif ?>
 <div class="case-history-link"><a class="history-button" data-history-modal aria-haspopup="dialog" href="?page=case-history&amp;id=<?= (int)$record['id'] ?>" aria-label="Ver historial del caso <?= h($record['reference']) ?>" title="Historial del caso"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg></a><div><strong>Historial del caso</strong><small>Radicación, respuestas y envíos por correo y WhatsApp.</small></div></div>

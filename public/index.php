@@ -214,7 +214,6 @@ if (in_array($page, ['deliveries','delivery','case-history','history'], true)) {
     } elseif ($page === 'delivery') {
         $deliveryDetail = $adminDeliveries->detail((int)($_GET['id'] ?? 0));
         if (!$deliveryDetail) http_response_code(404);
-        elseif ($deliveryDetail['request']['awaiting']) $deliveryDetail['candidates'] = $app->candidateEncounters((int)$deliveryDetail['request']['id']);
     } else {
         $deliverySearch = $adminDeliveries->search((string)($_GET['q'] ?? ''), (int)($_GET['p'] ?? 1), $page==='history', $page === 'deliveries' && ($_GET['f'] ?? 'pending') !== 'all');
     }
