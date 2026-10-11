@@ -488,3 +488,9 @@ Ruta de regreso: con `WA_WEBHOOK_URL` apuntando al webhook de CitaYa (`/whatsapp
 - Validación: `tests/run.php` 158 (3 nuevas: sugerencia sin fecha, otra fecha con historia, otra fecha sin historia).
 
 **Corrección: chats con identificador privado (LID).** Un segundo número escribió al bot y el servicio QR lo descartó («no se pudo obtener el número (lid)»): WhatsApp no envió el número real y el mapeo LID→número no estaba disponible. Ahora el servicio reintenta el mapeo a los 2 s y, si sigue sin número, usa el identificador del chat (dígitos del LID) como número para CitaYa y n8n. Las respuestas salen al mismo chat por el mapa `chats.json`.
+
+**Mejora: periodo aproximado en vez de fecha exacta.** El titular señaló que quien no recuerda la fecha tampoco puede escribir otra fecha exacta.
+- «No es esta consulta: buscar otra» pregunta «¿Cuándo fue la atención, más o menos?» (último mes, 1-3 meses, 3-6 meses, 6 meses-1 año, más de un año) y la especialidad si la recuerda. La página lista hasta 10 consultas con historia disponible de ese periodo (fecha, especialidad, sede) y el paciente elige la suya. La fecha exacta queda como opción secundaria («Sé la fecha exacta»).
+- `Application::PERIODS`, `availableEncounters` (consulta común con la sugerencia), `periodEncounters` y `selectPeriodEncounter` (revalida que la atención esté en el periodo y sea del paciente, y entrega por `confirm`). El periodo elegido se guarda en la sesión; al elegir un periodo se oculta la sugerencia única.
+- Solo aplica a búsquedas directas sin coincidencia y con el nombre validado (si no, no revela fechas).
+- Validación: `tests/run.php` 166 (8 nuevas). Prueba manual en local con un paciente ficticio: periodo «Hace 1 a 3 meses» → 2 consultas → elegir una → en cola de envío.

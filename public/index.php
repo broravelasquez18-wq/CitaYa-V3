@@ -80,6 +80,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $app->changeFilters(requirePatient(), $_POST);
                 // Búsqueda directa: si ya se encoló la historia o sigue sin resultados, se muestra el estado de la solicitud.
                 go(in_array($app->request(requirePatient())['status'], ['verified','matched','awaiting_selection'], true) ? 'appointments' : 'status');
+            case 'period':
+                // No recuerda la fecha: elige un periodo aproximado y se le muestran las atenciones disponibles de ese periodo.
+                $id = requirePatient();
+                $period = (string)($_POST['period'] ?? '');
+                $periodSpecialty = empty($_POST['specialty_id']) ? null : (int)$_POST['specialty_id'];
+                $app->periodEncounters($id, $period, $periodSpecialty);
+                $_SESSION['period'] = ['request' => $id, 'period' => $period, 'specialty' => $periodSpecialty];
+                go('status');
+            case 'select-period':
+                $id = requirePatient();
+                $choice = $_SESSION['period'] ?? null;
+                if (($choice['request'] ?? null) !== $id) throw new DomainException('Elige de nuevo cuándo fue la atención.');
+                $app->selectPeriodEncounter($id, $choice['period'], $choice['specialty'], (int)($_POST['encounter_id'] ?? 0));
+                unset($_SESSION['period']);
+                go('status');
             case 'select-suggestion':
                 $app->selectSuggestion(requirePatient(), (int) ($_POST['encounter_id'] ?? 0));
                 go('status');
@@ -217,6 +232,8 @@ if (in_array($page, ['appointments','status'], true)) {
         if (!$request['direct_search'] || $page === 'appointments') $request=$app->requireVerified($id);
         if ($page === 'status') $historyResend = $app->historyResendInfo($id);
         if ($page === 'status') $recentSuggestion = $app->recentSuggestion($id);
+        $periodChoice = ($_SESSION['period']['request'] ?? null) === $id ? $_SESSION['period'] : null;
+        if ($page === 'status' && $periodChoice) $periodEncounters = $app->periodEncounters($id, $periodChoice['period'], $periodChoice['specialty']);
         if ($page === 'appointments') {
             if (!in_array($request['status'], ['verified','matched','awaiting_selection','no_matches','unavailable'], true)) go('status');
             $encounters = $app->search($id);

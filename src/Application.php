@@ -334,12 +334,25 @@ final class Application
         if ($request['direct_search']) $this->processSearch($id);
     }
 
-    public function recentSuggestion(int $id): ?array
+    /** Periodos aproximados que puede elegir quien no recuerda la fecha: clave => [etiqueta, días desde, días hasta]. */
+    public const PERIODS = [
+        'month' => ['En el último mes', 0, 31],
+        '3m' => ['Hace 1 a 3 meses', 31, 92],
+        '6m' => ['Hace 3 a 6 meses', 92, 183],
+        '12m' => ['Hace 6 meses a 1 año', 183, 366],
+        'older' => ['Hace más de un año', 366, null],
+    ];
+
+    /**
+     * Atenciones del paciente con historia completa y disponible (las que se pueden entregar), de la más reciente a la
+     * más antigua. Solo para búsquedas directas sin coincidencia y con el nombre ya validado (si no, lista vacía).
+     */
+    public function availableEncounters(int $id, ?string $from = null, ?string $to = null, ?int $specialty = null, int $limit = 1): array
     {
         $request = $this->request($id);
-        if (!$request['direct_search'] || !in_array($request['status'], ['no_matches','unavailable'], true)) return null;
+        if (!$request['direct_search'] || !in_array($request['status'], ['no_matches','unavailable'], true)) return [];
         try { $request = $this->requireVerified($id); }
-        catch (\DomainException) { return null; }
+        catch (\DomainException) { return []; }
         $sql = "SELECT e.*,s.name specialty,p.id package_id FROM encounters e
             JOIN specialties s ON s.id=e.specialty_id
             JOIN packages p ON p.encounter_id=e.id AND p.status='available'
@@ -347,14 +360,59 @@ final class Application
             AND NOT EXISTS (SELECT 1 FROM packages other WHERE other.encounter_id=e.id AND other.status='available' AND other.id<>p.id)
             AND EXISTS (SELECT 1 FROM clinical_files f WHERE f.package_id=p.id)";
         $params = [$request['patient_id'], $this->now()];
-        if ($request['approximate_date'] !== null) { $sql .= ' AND DATE(e.attended_at)<>?'; $params[] = $request['approximate_date']; }
-        if ($request['specialty_id']) { $sql .= ' AND e.specialty_id=?'; $params[] = $request['specialty_id']; }
+        if ($from !== null) { $sql .= ' AND e.attended_at>=?'; $params[] = $from . ' 00:00:00'; }
+        if ($to !== null) { $sql .= ' AND e.attended_at<=?'; $params[] = $to . ' 23:59:59'; }
+        if ($specialty) { $sql .= ' AND e.specialty_id=?'; $params[] = $specialty; }
+        $found = [];
         foreach ($this->db->all($sql . ' ORDER BY e.attended_at DESC,e.id DESC', $params) as $encounter) {
             try { $this->packageFiles((int)$encounter['package_id']); }
             catch (\DomainException) { continue; }
-            return $encounter;
+            $found[] = $encounter;
+            if (count($found) >= $limit) break;
+        }
+        return $found;
+    }
+
+    public function recentSuggestion(int $id): ?array
+    {
+        $request = $this->request($id);
+        if (!$request['direct_search']) return null;
+        // La sugerencia excluye el día que el paciente ya indicó (no tuvo coincidencia) y respeta su especialidad.
+        foreach ($this->availableEncounters($id, null, null, $request['specialty_id'] ? (int)$request['specialty_id'] : null, 50) as $encounter) {
+            if ($request['approximate_date'] === null || substr($encounter['attended_at'], 0, 10) !== $request['approximate_date']) return $encounter;
         }
         return null;
+    }
+
+    /** Rango de fechas [desde, hasta] (Y-m-d) de un periodo aproximado. */
+    public function periodRange(string $period): array
+    {
+        if (!isset(self::PERIODS[$period])) throw new \DomainException('Elige cuándo fue la atención, más o menos.');
+        [, $fromDays, $toDays] = self::PERIODS[$period];
+        $today = new \DateTimeImmutable('today');
+        return [$toDays === null ? null : $today->modify("-$toDays days")->format('Y-m-d'), $today->modify("-$fromDays days")->format('Y-m-d')];
+    }
+
+    /** Atenciones disponibles en un periodo aproximado (máximo 10), para que el paciente elija la suya. */
+    public function periodEncounters(int $id, string $period, ?int $specialty): array
+    {
+        if ($specialty !== null && !$this->db->one('SELECT id FROM specialties WHERE id=? AND active=1', [$specialty])) throw new \DomainException('Selecciona una especialidad válida.');
+        [$from, $to] = $this->periodRange($period);
+        return $this->availableEncounters($id, $from, $to, $specialty, 10);
+    }
+
+    /** El paciente eligió una atención de la lista de un periodo: se revalida y se envía como cualquier coincidencia. */
+    public function selectPeriodEncounter(int $id, string $period, ?int $specialty, int $encounterId): void
+    {
+        $this->db->transaction(function () use ($id, $period, $specialty, $encounterId) {
+            $this->db->one('SELECT id FROM requests WHERE id=? FOR UPDATE', [$id]);
+            $chosen = null;
+            foreach ($this->periodEncounters($id, $period, $specialty) as $encounter) if ((int)$encounter['id'] === $encounterId) $chosen = $encounter;
+            if (!$chosen) throw new \DomainException('Esa atención ya no está disponible. Actualiza la página.');
+            $this->db->run("UPDATE requests SET approximate_date=?,specialty_id=?,status='matched' WHERE id=?", [substr($chosen['attended_at'], 0, 10), $chosen['specialty_id'], $id]);
+            $this->event($id, 'period_selected', 'date_updated');
+        });
+        $this->confirm($id, $encounterId);
     }
 
     public function selectSuggestion(int $id, int $encounterId): void
