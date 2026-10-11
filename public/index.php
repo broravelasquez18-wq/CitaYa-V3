@@ -190,12 +190,12 @@ if ($error !== null && uploadJson()) {
     header('Content-Type: application/json; charset=UTF-8');
     echo json_encode(['error' => $error]); exit;
 }
-if ($page === 'delivery' && ($_GET['fragment'] ?? '') === '1' && empty($_SESSION['admin_id'])) {
+if (in_array($page, ['delivery', 'case-history'], true) && ($_GET['fragment'] ?? '') === '1' && empty($_SESSION['admin_id'])) {
     http_response_code(401);
     header('Content-Type: text/plain; charset=UTF-8');
     exit('La sesión administrativa venció. Inicia sesión nuevamente.');
 }
-if (in_array($page, ['admin','inbox','mail','deliveries','delivery','history','analytics','templates','whatsapp'], true)) requireAdmin();
+if (in_array($page, ['admin','inbox','mail','deliveries','delivery','case-history','history','analytics','templates','whatsapp'], true)) requireAdmin();
 $pendingCount = !empty($_SESSION['admin_id']) ? (new App\AdminDeliveries($app->db))->pendingCount() : 0;
 $analytics = null;
 if ($page === 'analytics') {
@@ -205,10 +205,13 @@ if ($page === 'analytics') {
     try { $activity = $service->activity((string)($_GET['activity_date'] ?? '')); }
     catch (DomainException $exception) { $error = $exception->getMessage(); $activity = $service->activity(); }
 }
-$deliverySearch = null; $deliveryDetail = null;
-if (in_array($page, ['deliveries','delivery','history'], true)) {
+$deliverySearch = null; $deliveryDetail = null; $caseHistory = null;
+if (in_array($page, ['deliveries','delivery','case-history','history'], true)) {
     $adminDeliveries = new App\AdminDeliveries($app->db, (string)$app->config['app_key']);
-    if ($page === 'delivery') {
+    if ($page === 'case-history') {
+        $caseHistory = $adminDeliveries->timeline((int)($_GET['id'] ?? 0));
+        if (!$caseHistory) http_response_code(404);
+    } elseif ($page === 'delivery') {
         $deliveryDetail = $adminDeliveries->detail((int)($_GET['id'] ?? 0));
         if (!$deliveryDetail) http_response_code(404);
         elseif ($deliveryDetail['request']['awaiting']) $deliveryDetail['candidates'] = $app->candidateEncounters((int)$deliveryDetail['request']['id']);
@@ -245,6 +248,12 @@ $steps = ['home' => 1, 'verify' => 2, 'appointments' => 2, 'status' => 3];
 $labels = ['matched'=>'Datos coincidentes','no_matches'=>'Sin coincidencias','awaiting_selection'=>'Selecciona una atención','not_eligible'=>'Entrega no habilitada','pending_verification'=>'Pendiente de verificación','verified'=>'Verificada','queued'=>'En cola de envío','sending'=>'Preparando el envío','retry'=>'Reintento programado','sent'=>'Correo enviado','simulated'=>'Entrega simulada','failed'=>'No se pudo enviar','uncertain'=>'Resultado por confirmar','unavailable'=>'Historia no disponible','expired'=>'Solicitud vencida','cancelled'=>'Cancelado','waiting_window'=>'Esperando que el paciente escriba','not_registered'=>'No registra'];
 if ($recentSuggestion && $request['approximate_date'] === null) $labels['no_matches'] = 'Consulta más reciente encontrada';
 if (!empty($dateGiven)) $labels['no_matches'] = 'Solicitud registrada';
+if ($page === 'case-history' && ($_GET['fragment'] ?? '') === '1') {
+    header('Content-Type: text/html; charset=UTF-8');
+    $historyModal = true;
+    require dirname(__DIR__) . '/templates/case-history.php';
+    exit;
+}
 if ($page === 'delivery' && ($_GET['fragment'] ?? '') === '1') {
     header('Content-Type: text/html; charset=UTF-8');
     $deliveryModal = true;

@@ -294,10 +294,12 @@ final class Application
         if (!$request['direct_search'] || !in_array($request['status'],['pending_verification','matched','no_matches','unavailable','awaiting_selection'],true)) return;
         $patient=$this->db->one('SELECT * FROM patients WHERE id=? AND active=1',[$request['patient_id']]);
         if (!$patient || self::nameKey($patient['full_name'])!==self::nameKey($request['claimed_name'])) {
-            $this->db->run("UPDATE requests SET status='no_matches' WHERE id=?",[$id]); $this->whatsapp()->queueNotFound($id); return;
+            $this->db->run("UPDATE requests SET status='no_matches' WHERE id=?",[$id]); $this->whatsapp()->queueNotFound($id);
+            $this->event($id,'pdf_search','patient_not_found'); return;
         }
         if (!$this->canUseRecipient($patient,$request['contact_email'],true)) {
-            $this->db->run("UPDATE requests SET status='not_eligible' WHERE id=?",[$id]); $this->whatsapp()->queueNotFound($id); return;
+            $this->db->run("UPDATE requests SET status='not_eligible' WHERE id=?",[$id]); $this->whatsapp()->queueNotFound($id);
+            $this->event($id,'pdf_search','not_eligible'); return;
         }
         // Matching data is not identity/email verification. Keep verified_at/email empty.
         $this->db->run("UPDATE requests SET status='matched',matched_at=? WHERE id=?",[$this->now(),$id]);

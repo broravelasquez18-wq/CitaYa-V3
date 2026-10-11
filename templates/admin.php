@@ -4,6 +4,7 @@
 <?php elseif ($page === 'templates'): require __DIR__ . '/templates.php'; ?>
 <?php elseif ($page === 'whatsapp'): require __DIR__ . '/whatsapp-link.php'; ?>
 <?php elseif ($page === 'delivery'): require __DIR__ . '/delivery.php'; ?>
+<?php elseif ($page === 'case-history'): require __DIR__ . '/case-history.php'; ?>
 <?php elseif (in_array($page, ['deliveries','history'], true)): require __DIR__ . '/deliveries.php'; ?>
 <?php elseif ($page === 'inbox'): ?>
 <section class="card"><h2>Correos de simulación</h2><p class="muted">Estos mensajes se generaron con PHPMailer y se guardaron localmente. No se enviaron al destinatario externo.</p>

@@ -75,6 +75,68 @@ final class AdminDeliveries
         return compact('query','total','page','pages','rows','history','pendingOnly');
     }
 
+    /**
+     * Línea de tiempo del caso para «Historial del caso»: radicación, búsqueda automática, respuesta de la persona
+     * encargada, reapertura y cada envío por correo y WhatsApp, del más antiguo al más reciente.
+     * Cada entrada: at, icon, title, status, text, by, notified. Solo metadatos y el comentario de respuesta.
+     */
+    public function timeline(int $id): ?array
+    {
+        $detail = $this->detail($id);
+        if (!$detail) return null;
+        $r = $detail['request'];
+        $entries = [];
+        $add = static function (?string $at, string $icon, string $title, string $status, string $text, string $by, ?string $notified = null) use (&$entries): void {
+            if ($at) $entries[] = compact('at', 'icon', 'title', 'status', 'text', 'by', 'notified');
+        };
+        $events = $this->db->all('SELECT action,result,created_at FROM events WHERE request_id=? ORDER BY id', [$id]);
+        $viaWhatsApp = (bool)array_filter($events, fn($e) => $e['action'] === 'whatsapp_link' && $e['result'] === 'attached');
+        $date = $r['approximate_date'] ? 'Fecha de atención indicada: ' . date('d/m/Y', strtotime($r['approximate_date'])) . '.' : 'El paciente no recordaba la fecha de atención.';
+        $add($r['created_at'], 'web', 'Radicación', 'pending',
+            'Solicitud de historia clínica radicada por el paciente ' . ($viaWhatsApp ? 'con el enlace que le envió el bot de WhatsApp' : 'desde el formulario web') . '. ' . $date
+            . ($r['specialty'] ? ' Especialidad: ' . $r['specialty'] . '.' : ''), 'Paciente', trim(($r['contact_email'] ?? '') . ($r['whatsapp_phone'] ? ' · +' . $r['whatsapp_phone'] : ''), ' ·'));
+        foreach ($events as $event) {
+            if ($event['action'] !== 'pdf_search') continue;
+            [$status, $text] = match ($event['result']) {
+                'single_match' => ['ok', 'Se encontró la historia clínica en el repositorio y se preparó el envío automático.'],
+                'multiple_matches' => ['info', 'Se encontraron varias atenciones posibles; el paciente debe elegir la suya.'],
+                'patient_not_found' => ['pending', 'No hay un paciente con ese documento y nombre en el repositorio. La solicitud quedó pendiente para la persona encargada.'],
+                'not_eligible' => ['pending', 'El paciente existe, pero no se habilitó la entrega automática al correo indicado. La solicitud quedó pendiente.'],
+                default => ['pending', 'No se encontró una historia cargada con los datos indicados. La solicitud quedó pendiente para la persona encargada.'],
+            };
+            $add($event['created_at'], 'search', 'Búsqueda automática', $status, $text, 'Sistema');
+        }
+        if ($r['resolution']) {
+            $titles = ['approved' => 'Aprobado', 'not_registered' => 'No Registra', 'assigned' => 'Historia asignada'];
+            $text = $r['response_note'] ?? ($r['resolution'] === 'assigned' ? 'La persona encargada asignó la historia del repositorio a esta solicitud.' : 'Se respondió «No registra» con la plantilla.');
+            $add($r['resolved_at'], 'response', 'Respuesta de la persona encargada', $r['resolution'] === 'not_registered' ? 'fail' : 'ok', $text, $r['resolved_by_name'] ?? 'Administrador');
+            $entries[count($entries) - 1]['badge'] = $titles[$r['resolution']] ?? $r['resolution'];
+        }
+        if ($r['case_reopened_at']) {
+            $by = $this->db->one('SELECT name FROM admins WHERE id=?', [$r['case_reopened_by']])['name'] ?? 'Administrador';
+            $add($r['case_reopened_at'], 'reopen', 'Caso reabierto', 'pending', 'El caso volvió a pendientes. Los envíos anteriores se conservan.', $by);
+        }
+        $mailTitles = ['history' => 'Envío de historia clínica por correo', 'response' => 'Respuesta «Aprobado» por correo', 'notice' => 'Respuesta «No Registra» por correo'];
+        $mailJobs = $this->db->all("SELECT j.id,j.kind,j.recipient,j.status,j.created_at,j.sent_at,j.last_error FROM jobs j WHERE j.request_id=? AND j.kind IN ('history','response','notice') ORDER BY j.id", [$id]);
+        foreach ($mailJobs as $job) {
+            $files = $job['kind'] === 'history'
+                ? $this->db->all('SELECT f.original_name FROM clinical_files f JOIN jobs j ON j.package_id=f.package_id WHERE j.id=? ORDER BY f.sort_order,f.id', [$job['id']])
+                : $this->db->all('SELECT original_name FROM response_files WHERE job_id=? ORDER BY sort_order,id', [$job['id']]);
+            $text = $files ? count($files) . ' archivo(s): ' . implode(', ', array_column($files, 'original_name')) . '.' : 'Sin archivos adjuntos.';
+            if ($job['sent_at']) $text .= ' Aceptado por el servidor el ' . date('d/m/Y h:i a', strtotime($job['sent_at'])) . '.';
+            if ($job['last_error']) $text .= ' Motivo registrado: ' . $job['last_error'] . '.';
+            $add($job['created_at'], 'mail', $mailTitles[$job['kind']], $job['status'], $text, $job['kind'] === 'history' && $r['resolution'] !== 'assigned' ? 'Sistema' : ($r['resolved_by_name'] ?? 'Sistema'), $job['recipient']);
+        }
+        $waTitles = ['history' => 'Historia clínica por WhatsApp', 'notice' => 'Radicado por WhatsApp (sin historia cargada)', 'not_registered' => 'Respuesta «No Registra» por WhatsApp', 'response' => 'Respuesta «Aprobado» por WhatsApp'];
+        foreach ($detail['whatsapp'] as $message) {
+            $text = $message['sent_at'] ? 'WhatsApp aceptó el mensaje el ' . date('d/m/Y h:i a', strtotime($message['sent_at'])) . '.' : 'Intentos: ' . (int)$message['attempts'] . '.';
+            if ($message['last_error']) $text .= ' Motivo registrado: ' . $message['last_error'] . '.';
+            $add($message['created_at'], 'whatsapp', $waTitles[$message['kind']] ?? 'Mensaje de WhatsApp', $message['status'], $text, in_array($message['kind'], ['response', 'not_registered'], true) && $r['resolution'] ? ($r['resolved_by_name'] ?? 'Administrador') : 'Sistema', '+' . $message['phone']);
+        }
+        usort($entries, fn($a, $b) => strcmp($a['at'], $b['at']));
+        return ['request' => $r, 'entries' => $entries];
+    }
+
     public function detail(int $id): ?array
     {
         $request = $this->db->one('SELECT r.*,' . $this->pendingSql() . ' case_pending,' . $this->awaitingSql() . ' awaiting,COALESCE(r.claimed_document_type,p.document_type) document_type,

@@ -87,7 +87,7 @@ $botNumber = (string)$app->config['whatsapp_bot_number']; $confirmText = 'CONFIR
 </aside></div>
 <?php elseif ($page === 'admin-login'): ?>
 <section class="card login-card"><span class="eyebrow">ACCESO INTERNO</span><h1>Repositorio clínico</h1><p class="muted">Administra los archivos que dan origen a las entregas automáticas.</p><form method="post"><?= csrf() ?><input type="hidden" name="action" value="login"><label>Correo de acceso<input type="email" name="email" autocomplete="username" required></label><label>Contraseña<input type="password" name="password" autocomplete="current-password" required></label><button class="button primary full">Ingresar →</button></form></section>
-<?php elseif (in_array($page, ['admin','inbox','deliveries','delivery','history','analytics','templates','whatsapp'], true)): ?>
+<?php elseif (in_array($page, ['admin','inbox','deliveries','delivery','case-history','history','analytics','templates','whatsapp'], true)): ?>
 <?php require __DIR__ . '/admin.php'; ?>
 <?php else: http_response_code(404); ?><section class="card"><h1>Página no encontrada</h1><a href="?page=home">Volver al inicio</a></section><?php endif ?>
 </main><footer><span class="footer-brand">CitaYa</span><span>Historias clínicas · Portal del paciente</span><span><?= $app->config['mode'] === 'demo' ? 'Versión de prueba' : 'Acceso privado a tus documentos' ?></span></footer>

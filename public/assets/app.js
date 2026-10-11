@@ -335,3 +335,55 @@ document.addEventListener('click', event => {
     form.querySelector('button[type="submit"]').disabled = true;
   });
 })();
+
+// Ventana «Historial del caso»: se abre desde la lista de solicitudes o desde el detalle (encima de él).
+(() => {
+  const modal = document.querySelector('#history-modal');
+  if (!modal || typeof modal.showModal !== 'function') return;
+  const content = modal.querySelector('[data-history-content]');
+  const reference = modal.querySelector('[data-history-reference]');
+  let pending = null;
+  let opener = null;
+  document.addEventListener('click', async event => {
+    const link = event.target.closest('[data-history-modal]');
+    if (!link || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    pending?.abort();
+    const controller = new AbortController();
+    pending = controller;
+    opener = link;
+    content.textContent = 'Cargando el historial…';
+    content.setAttribute('aria-busy', 'true');
+    reference.textContent = '';
+    if (!modal.open) modal.showModal();
+    document.body.classList.add('delivery-modal-open');
+    const url = new URL(link.href);
+    url.searchParams.set('fragment', '1');
+    try {
+      const response = await fetch(url, {signal: controller.signal, credentials: 'same-origin', cache: 'no-store'});
+      if (pending !== controller) return;
+      if (response.status === 401 || response.redirected) { content.textContent = 'Tu sesión administrativa venció. Vuelve a iniciar sesión.'; return; }
+      if (!response.ok && response.status !== 404) throw new Error('history_unavailable');
+      content.innerHTML = await response.text();
+      const title = content.querySelector('[data-case-title]');
+      if (title) reference.textContent = title.textContent;
+    } catch (error) {
+      if (error.name !== 'AbortError' && pending === controller) content.textContent = 'No se pudo cargar el historial. Cierra esta ventana e inténtalo nuevamente.';
+    } finally {
+      if (pending === controller) content.removeAttribute('aria-busy');
+    }
+  });
+  modal.addEventListener('click', event => {
+    if (event.target.closest('[data-close-history]')) { modal.close(); return; }
+    if (event.target !== modal) return;
+    const bounds = modal.getBoundingClientRect();
+    if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) modal.close();
+  });
+  modal.addEventListener('close', () => {
+    pending?.abort();
+    pending = null;
+    content.replaceChildren();
+    if (!document.querySelector('#delivery-modal[open]')) document.body.classList.remove('delivery-modal-open');
+    opener?.focus();
+  });
+})();

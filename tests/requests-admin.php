@@ -135,6 +135,13 @@ try {
     check(array_column($preview['messages'], 'type') === ['text', 'document', 'photo'] && str_contains($preview['messages'][0]['body'], $comment) && $preview['messages'][2]['mime'] === 'image/png', 'WhatsApp envía el comentario, el PDF como documento y la imagen como foto');
     $detail = (new App\AdminDeliveries($db, $config['app_key']))->detail($approvedCase);
     check($detail['request']['response_note'] === $comment && $detail['deliveries'][0]['kind'] === 'response' && count($detail['deliveries'][0]['files']) === 2, 'El detalle muestra la respuesta y sus adjuntos');
+    $timeline = (new App\AdminDeliveries($db, $config['app_key']))->timeline($approvedCase);
+    $titles = array_column($timeline['entries'], 'title');
+    $responseEntry = array_values(array_filter($timeline['entries'], fn($e) => $e['title'] === 'Respuesta de la persona encargada'))[0] ?? null;
+    check($titles[0] === 'Radicación' && in_array('Búsqueda automática', $titles, true) && in_array('Respuesta «Aprobado» por correo', $titles, true) && in_array('Respuesta «Aprobado» por WhatsApp', $titles, true)
+        && $responseEntry && $responseEntry['text'] === $comment && $responseEntry['badge'] === 'Aprobado' && $timeline['entries'] === array_values($timeline['entries']), 'Historial del caso: radicación, búsqueda, respuesta con su comentario y envíos por correo y WhatsApp');
+    $dates = array_column($timeline['entries'], 'at'); $sorted = $dates; sort($sorted);
+    check($dates === $sorted && (new App\AdminDeliveries($db))->timeline(999999) === null, 'Historial ordenado por fecha; un caso inexistente no devuelve datos');
     $rejectedCase = viaWhatsApp(['document_number' => '88888888'] + $form, '573008880000', 'r2');
     $pendingBefore = $admin->pendingCount();
     $app->respondCase($rejectedCase, 1, 'not_registered', 'No encontramos una historia con esos datos. Verifica tu documento.', []);
