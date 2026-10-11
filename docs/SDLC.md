@@ -494,3 +494,9 @@ Ruta de regreso: con `WA_WEBHOOK_URL` apuntando al webhook de CitaYa (`/whatsapp
 - Después de indicar la fecha no se vuelve a sugerir otra consulta: la página dice «Solicitud registrada con la fecha aproximada dd/mm/aaaa» y que la persona encargada la verificará.
 - Se quitó el código de periodos. Se conserva `availableEncounters`, ahora usado por la sugerencia.
 - Validación: `tests/run.php` 158, `whatsapp` 44, `n8n-api` 28 y `requests-admin` 25 correctas. Prueba manual en local con un paciente ficticio: sin fecha → sugerencia → fecha aproximada 15/09/2026 → «Solicitud registrada».
+
+**Diseño: detalle de la solicitud como expediente.** A pedido del titular (con una imagen de referencia), el «Detalle del envío» se reorganizó:
+- Encabezado «Caso #radicado · Expediente de atención» con icono y botón × (el título lo toma `app.js` del contenido cargado).
+- Dos columnas: a la izquierda «Información de la solicitud» en tres bloques con banda de color (Paciente: nombre, documento con botón copiar, fecha de atención, especialidad y nombre en los PDF; Contacto: correo y WhatsApp con botón copiar; Requerimiento: tipo, estado, fecha de radicación, atención seleccionada, respuesta y caso reabierto). A la derecha, la gestión (responder, cargar PDF, «No registra») y el historial de envíos y WhatsApp, que ahora también se ve en el modal.
+- En pantallas angostas las columnas se apilan. La página sin modal usa el mismo diseño.
+- Validación: pruebas completas correctas y revisión visual en local con un caso ficticio.

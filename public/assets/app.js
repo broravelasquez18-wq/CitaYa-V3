@@ -155,6 +155,8 @@ if (resendButton) {
 const deliveryModal = document.querySelector('#delivery-modal');
 if (deliveryModal && typeof deliveryModal.showModal === 'function') {
   const content = deliveryModal.querySelector('[data-delivery-content]');
+  const modalTitle = deliveryModal.querySelector('#delivery-modal-title');
+  const defaultTitle = modalTitle.textContent;
   let pendingDelivery = null;
   let deliveryOpener = null;
   document.querySelectorAll('[data-delivery-modal]').forEach(link => {
@@ -184,7 +186,11 @@ if (deliveryModal && typeof deliveryModal.showModal === 'function') {
         }
         if (!response.ok && response.status !== 404) throw new Error('delivery_unavailable');
         const html = await response.text();
-        if (!controller.signal.aborted && pendingDelivery === controller) content.innerHTML = html;
+        if (!controller.signal.aborted && pendingDelivery === controller) {
+          content.innerHTML = html;
+          const caseTitle = content.querySelector('[data-case-title]');
+          if (caseTitle) modalTitle.textContent = caseTitle.textContent;
+        }
       } catch (error) {
         if (error.name !== 'AbortError' && pendingDelivery === controller) {
           content.textContent = 'No se pudo cargar el envío. Cierra esta ventana e inténtalo nuevamente.';
@@ -204,8 +210,20 @@ if (deliveryModal && typeof deliveryModal.showModal === 'function') {
     pendingDelivery?.abort();
     pendingDelivery = null;
     content.replaceChildren();
+    modalTitle.textContent = defaultTitle;
     content.removeAttribute('aria-busy');
     document.body.classList.remove('delivery-modal-open');
     deliveryOpener?.focus();
   });
 }
+
+// Botones de copiar (documento, número) en el detalle de la solicitud, también en contenido cargado después.
+document.addEventListener('click', event => {
+  const button = event.target.closest('[data-copy]');
+  if (!button || !navigator.clipboard) return;
+  navigator.clipboard.writeText(button.dataset.copy).then(() => {
+    button.classList.add('copied');
+    button.title = 'Copiado';
+    setTimeout(() => { button.classList.remove('copied'); button.title = 'Copiar'; }, 1500);
+  }).catch(() => {});
+});
