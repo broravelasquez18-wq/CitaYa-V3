@@ -220,6 +220,8 @@ final class WhatsApp
     {
         $request = $this->app->request($requestId);
         if (!$request['whatsapp_phone']) return;
+        // Si había un aviso de «historia no encontrada» sin enviar, ya no aplica.
+        $this->app->db->run("UPDATE whatsapp_outbox SET status='cancelled',encrypted_body=NULL,last_error='history_found' WHERE request_id=? AND kind='notice' AND status IN ('queued','retry','waiting_window')", [$requestId]);
         $this->queue($request['whatsapp_phone'], 'history', null, $requestId, $packageId, 'wa:history:' . $requestId);
     }
 

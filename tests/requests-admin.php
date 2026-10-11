@@ -55,6 +55,11 @@ try {
     check($app->request($wrongDate)['status'] === 'no_matches' && $admin->pendingCount() === 3, 'Las solicitudes sin historia aparecen como pendientes');
     $pending = $admin->search('', 1, false, true);
     check(array_column($pending['rows'], 'id') === [$wrongDate, $web, $mismatch], 'Pendientes ordenadas de la más antigua a la más reciente');
+    // La página le sugiere su consulta: el aviso de «no encontrada» espera a que decida.
+    check(waText($wrongDate, 'notice') === '' && $app->recentSuggestion($wrongDate), 'Con una consulta sugerida no se envía todavía el aviso de historia no encontrada');
+    check($app->releaseDeferredNotices() === 0 && waText($wrongDate, 'notice') === '', 'El aviso en espera no sale antes de 20 minutos');
+    $db->run('UPDATE requests SET created_at=? WHERE id=?', [date('Y-m-d H:i:s', time() - 1500), $wrongDate]);
+    check($app->releaseDeferredNotices() === 1 && $app->releaseDeferredNotices() === 0, 'Si el paciente no decide en 20 minutos, recibe el radicado una sola vez');
     check(str_contains(waText($wrongDate, 'notice'), '24 horas'), 'El radicado usa la plantilla con el tiempo estimado');
 
     // --- Candidatas y asignación ---
@@ -146,6 +151,15 @@ try {
     $pendingBefore = $admin->pendingCount();
     $app->respondCase($rejectedCase, 1, 'not_registered', 'No encontramos una historia con esos datos. Verifica tu documento.', []);
     check($app->request($rejectedCase)['status'] === 'not_registered' && $db->one("SELECT id FROM jobs WHERE request_id=? AND kind='notice' AND dedupe_key LIKE 'response:%'", [$rejectedCase]) && str_contains(waText($rejectedCase, 'not_registered'), 'Verifica tu documento') && $admin->pendingCount() === $pendingBefore - 1, 'No Registra sin adjuntos: avisa por correo y WhatsApp y sale de pendientes');
+
+    // --- Aviso de «no encontrada» solo cuando corresponde ---
+    $db->run('DELETE FROM rate_limits'); // base temporal: el límite por paciente ya se probó arriba
+    $chosen = viaWhatsApp(['approximate_date' => date('Y-m-d', strtotime('-5 days'))] + $form, '573001119999', 'w0');
+    $app->selectSuggestion($chosen, $encounter);
+    check(waText($chosen, 'notice') === '' && $db->one("SELECT id FROM whatsapp_outbox WHERE request_id=? AND kind='history'", [$chosen]) && $app->releaseDeferredNotices() === 0, 'Si elige la consulta sugerida solo recibe la historia, nunca el aviso de «no encontrada»');
+    $dated = viaWhatsApp(['approximate_date' => date('Y-m-d', strtotime('-6 days'))] + $form, '573001118888', 'w00');
+    $app->changeFilters($dated, ['approximate_date' => date('Y-m-d', strtotime('-60 days')), 'specialty_id' => 0], true);
+    check(str_contains(waText($dated, 'notice'), '24 horas'), 'Si indica una fecha aproximada sin historia, recibe el radicado de inmediato');
     echo "\nPASS: $checks comprobaciones. Sin envíos externos.\n";
 } finally {
     if (!preg_match('/^citaya_test_[a-f0-9]{10}$/', $databaseName)) throw new RuntimeException('Invalid test database name');

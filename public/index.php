@@ -77,7 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['flash'] = 'Si el registro está habilitado, recibirás un nuevo código.';
                 go('verify');
             case 'filters':
-                $app->changeFilters(requirePatient(), $_POST);
+                $app->changeFilters(requirePatient(), $_POST, ($_POST['from'] ?? '') === 'status');
                 // Fecha aproximada indicada después de la sugerencia: la solicitud queda con esa fecha y no se vuelve a sugerir.
                 if (($_POST['from'] ?? '') === 'status') $_SESSION['date_given'] = requirePatient();
                 // Búsqueda directa: si ya se encoló la historia o sigue sin resultados, se muestra el estado de la solicitud.

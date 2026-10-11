@@ -24,7 +24,7 @@ $heartbeat = 0;
 do {
     $processed = 0;
     // Latido para el monitoreo de n8n (system.health): como máximo una escritura por minuto.
-    if (time() - $heartbeat >= 60) { $app->db->run('INSERT INTO system_state (name,value,updated_at) VALUES (?,?,?) ON DUPLICATE KEY UPDATE value=VALUES(value),updated_at=VALUES(updated_at)', ['worker_heartbeat', $loop ? 'loop' : 'once', $app->now()]); $heartbeat = time(); }
+    if (time() - $heartbeat >= 60) { $app->releaseDeferredNotices(); $app->db->run('INSERT INTO system_state (name,value,updated_at) VALUES (?,?,?) ON DUPLICATE KEY UPDATE value=VALUES(value),updated_at=VALUES(updated_at)', ['worker_heartbeat', $loop ? 'loop' : 'once', $app->now()]); $heartbeat = time(); }
     while ($processed < 50 && $worker->tick()) $processed++;
     // Un solo responsable de la cola de WhatsApp: con whatsapp_dispatch = n8n, los envíos los pide n8n por /n8n.php.
     if (($app->config['whatsapp_dispatch'] ?? 'worker') !== 'n8n') while ($processed < 100 && $whatsapp->tick()) $processed++;

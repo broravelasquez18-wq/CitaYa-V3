@@ -288,7 +288,12 @@ final class Application
         return mb_strtoupper(ClinicalPdfReader::normalize(trim(preg_replace('/\s+/u',' ',$name))),'UTF-8');
     }
 
-    public function processSearch(int $id): void
+    /**
+     * Búsqueda directa en los PDF. $final: el paciente ya indicó su fecha aproximada, así que si no hay historia
+     * se le informa el radicado. Si no es final y la página le sugiere una consulta, el aviso de «no encontrada»
+     * espera: puede que la elija (releaseDeferredNotices lo envía si no decide).
+     */
+    public function processSearch(int $id, bool $final = false): void
     {
         $request=$this->request($id);
         if (!$request['direct_search'] || !in_array($request['status'],['pending_verification','matched','no_matches','unavailable','awaiting_selection'],true)) return;
@@ -304,7 +309,11 @@ final class Application
         // Matching data is not identity/email verification. Keep verified_at/email empty.
         $this->db->run("UPDATE requests SET status='matched',matched_at=? WHERE id=?",[$this->now(),$id]);
         $matches=$this->search($id);
-        if (!$matches) { $this->db->run("UPDATE requests SET status='no_matches' WHERE id=?",[$id]); $this->whatsapp()->queueNotFound($id); }
+        if (!$matches) {
+            $this->db->run("UPDATE requests SET status='no_matches' WHERE id=?",[$id]);
+            if ($final || !$this->recentSuggestion($id)) $this->whatsapp()->queueNotFound($id);
+            else $this->event($id,'notice_deferred','suggestion_shown');
+        }
         elseif(count($matches)===1) $this->confirm($id,(int)$matches[0]['id']);
         else $this->db->run("UPDATE requests SET status='awaiting_selection' WHERE id=?",[$id]);
         $this->event($id,'pdf_search',count($matches)===1?'single_match':(count($matches)>1?'multiple_matches':'no_matches'));
@@ -401,13 +410,28 @@ final class Application
         return $this->db->all($sql . ' ORDER BY e.attended_at DESC', $params);
     }
 
-    public function changeFilters(int $id, array $data): void
+    /** $final: fecha aproximada indicada por el paciente después de la sugerencia (si no hay historia, recibe el radicado). */
+    public function changeFilters(int $id, array $data, bool $final = false): void
     {
         $request = $this->requireVerified($id);
         if (!in_array($request['status'], ['verified','matched','awaiting_selection','no_matches','unavailable'], true)) throw new \DomainException('Esta solicitud ya fue procesada.');
         [$date, $specialty] = $this->filters($data, (bool)$request['direct_search']);
         $this->db->run('UPDATE requests SET approximate_date=?,specialty_id=?,status=? WHERE id=?', [$date, $specialty, $request['direct_search'] ? 'matched' : 'verified', $id]);
-        if ($request['direct_search']) $this->processSearch($id);
+        if ($request['direct_search']) $this->processSearch($id, $final);
+    }
+
+    /**
+     * Envía el radicado por WhatsApp a las solicitudes pendientes cuyo aviso quedó en espera porque se le sugirió una
+     * consulta al paciente y no decidió en $minutes minutos. Lo llama el procesador; devuelve cuántos avisos encoló.
+     */
+    public function releaseDeferredNotices(int $minutes = 20): int
+    {
+        $rows = $this->db->all("SELECT r.id FROM requests r WHERE r.direct_search=1 AND r.whatsapp_phone IS NOT NULL AND r.created_at<?
+            AND r.status IN ('" . implode("','", self::PENDING_STATUSES) . "')
+            AND NOT EXISTS (SELECT 1 FROM whatsapp_outbox o WHERE o.request_id=r.id AND o.kind IN ('notice','history','response','not_registered'))
+            AND EXISTS (SELECT 1 FROM events e WHERE e.request_id=r.id AND e.action='notice_deferred')", [date('Y-m-d H:i:s', time() - 60 * $minutes)]);
+        foreach ($rows as $row) $this->whatsapp()->queueNotFound((int)$row['id']);
+        return count($rows);
     }
 
     /**
