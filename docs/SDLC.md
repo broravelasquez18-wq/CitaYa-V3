@@ -500,3 +500,15 @@ Ruta de regreso: con `WA_WEBHOOK_URL` apuntando al webhook de CitaYa (`/whatsapp
 - Dos columnas: a la izquierda «Información de la solicitud» en tres bloques con banda de color (Paciente: nombre, documento con botón copiar, fecha de atención, especialidad y nombre en los PDF; Contacto: correo y WhatsApp con botón copiar; Requerimiento: tipo, estado, fecha de radicación, atención seleccionada, respuesta y caso reabierto). A la derecha, la gestión (responder, cargar PDF, «No registra») y el historial de envíos y WhatsApp, que ahora también se ve en el modal.
 - En pantallas angostas las columnas se apilan. La página sin modal usa el mismo diseño.
 - Validación: pruebas completas correctas y revisión visual en local con un caso ficticio.
+
+**Cuadro de gestión de la solicitud (Aprobado / No Registra).** A pedido del titular, con imágenes de referencia.
+- **Requisito:** en el detalle, a la derecha, «Comentario de gestión / respuesta» con selector de estado (Aprobado, No Registra), menú de plantillas, área para adjuntar documentos (PDF, JPG, PNG) y botones «Cerrar» y «Guardar y notificar».
+- **Diseño:**
+  - `Application::respondCase`: valida estado, comentario (10-3000 caracteres), tipo real del archivo (finfo) y tamaño total (`max_response_bytes`, 14 MB, para que quepa en un correo de `max_mail_bytes`). «Aprobado» exige al menos un adjunto.
+  - Guarda los adjuntos en `storage/responses` (tabla `response_files`, con hash) y el comentario cifrado en `requests.response_note`.
+  - Correo: «Aprobado» sale como trabajo `response` (actualiza el estado de la solicitud como una historia y aparece en el historial de enviadas); «No Registra» sale como `notice`. Ambos llevan el comentario y los adjuntos verificados.
+  - WhatsApp: el comentario y luego cada adjunto (PDF como documento, JPG/PNG como imagen, también por el servicio QR). A n8n se avisa como `historia.disponible` o `solicitud.no_registra`, así que la entrega por n8n funciona sin cambios en los flujos.
+  - Plantilla nueva «Historia aprobada» (editable en Plantillas). El menú de plantillas inserta «Historia aprobada» o «No registra» y elegir el estado llena la plantilla si el comentario está vacío.
+  - Las historias del repositorio con el mismo documento y la carga de PDF al repositorio quedan en una sección desplegable debajo. Después de responder, el detalle muestra «Respuesta enviada» con el comentario.
+  - Límite de PHP en el contenedor: `upload_max_filesize` 15M y `post_max_size` 40M.
+- **Validación:** `tests/requests-admin.php` 36 (11 nuevas: rechazos, archivos guardados y enlazados, comentario cifrado, correo con adjuntos, WhatsApp con documento e imagen, detalle y «No Registra» sin adjuntos). Las demás suites siguen correctas. Prueba en local con un caso ficticio: «Aprobado» con un PDF y un PNG sale de pendientes y queda «Respuesta enviada». `tests/admin-http.php` sigue apuntando a CitaYaV2 y falla igual que antes del cambio.

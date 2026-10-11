@@ -227,3 +227,111 @@ document.addEventListener('click', event => {
     setTimeout(() => { button.classList.remove('copied'); button.title = 'Copiar'; }, 1500);
   }).catch(() => {});
 });
+
+// Cuadro de gestión de la solicitud (detalle del envío): estado, plantillas, adjuntos y envío.
+(() => {
+  const formatSize = bytes => bytes >= 1048576 ? (bytes / 1048576).toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round(bytes / 1024)) + ' KB';
+  const templateTexts = form => [...form.querySelectorAll('[data-template-text]')].map(button => button.dataset.templateText);
+  const fillTemplate = (form, decision, force) => {
+    const comment = form.querySelector('[data-case-comment]');
+    const button = form.querySelector(`[data-template="${decision}"]`);
+    if (!comment || !button) return;
+    const current = comment.value.trim();
+    if (force || current === '' || templateTexts(form).includes(current)) comment.value = button.dataset.templateText;
+  };
+  const selectDecision = (form, decision) => {
+    const radio = form.querySelector(`input[name="decision"][value="${decision}"]`);
+    if (!radio) return;
+    radio.checked = true;
+    const menu = form.querySelector('[data-decision-menu]');
+    menu.querySelector('[data-decision-label]').textContent = radio.closest('label').querySelector('[data-option-label]').textContent;
+    menu.dataset.decision = decision;
+    menu.open = false;
+  };
+  const listFiles = form => {
+    const input = form.querySelector('[data-drop-input]');
+    const list = form.querySelector('[data-drop-list]');
+    const max = Number(form.querySelector('[data-drop]').dataset.max || 0);
+    const files = [...input.files];
+    const total = files.reduce((sum, file) => sum + file.size, 0);
+    list.replaceChildren(...files.map(file => {
+      const item = document.createElement('li');
+      item.textContent = file.name;
+      const size = document.createElement('small');
+      size.textContent = formatSize(file.size);
+      item.append(size);
+      return item;
+    }));
+    if (max && total > max) {
+      const warning = document.createElement('li');
+      warning.className = 'case-files-warning';
+      warning.textContent = `Los adjuntos suman ${formatSize(total)} y el límite del correo es ${formatSize(max)}. Quita alguno.`;
+      list.append(warning);
+    }
+    return {files, total, max};
+  };
+  document.addEventListener('change', event => {
+    const form = event.target.closest('[data-case-respond]');
+    if (!form) return;
+    if (event.target.name === 'decision') { selectDecision(form, event.target.value); fillTemplate(form, event.target.value, false); }
+    if (event.target.matches('[data-drop-input]')) listFiles(form);
+  });
+  document.addEventListener('click', event => {
+    const template = event.target.closest('[data-template]');
+    if (template) {
+      const form = template.closest('[data-case-respond]');
+      const comment = form.querySelector('[data-case-comment]');
+      const current = comment.value.trim();
+      if (current && !templateTexts(form).includes(current) && !confirm('¿Reemplazar el comentario que escribiste por la plantilla?')) return;
+      fillTemplate(form, template.dataset.template, true);
+      selectDecision(form, template.dataset.template);
+      template.closest('details').open = false;
+      comment.focus();
+      return;
+    }
+    const close = event.target.closest('[data-close-case]');
+    if (close) {
+      const dialog = close.closest('dialog');
+      if (dialog) dialog.close(); else location.href = '?page=deliveries';
+      return;
+    }
+    // Cierra los menús desplegables al hacer clic fuera de ellos.
+    document.querySelectorAll('.case-menu[open]').forEach(menu => { if (!menu.contains(event.target)) menu.open = false; });
+  });
+  ['dragenter', 'dragover'].forEach(type => document.addEventListener(type, event => {
+    const zone = event.target.closest?.('[data-drop]');
+    if (!zone) return;
+    event.preventDefault();
+    zone.classList.add('dragging');
+  }));
+  ['dragleave', 'drop'].forEach(type => document.addEventListener(type, event => {
+    const zone = event.target.closest?.('[data-drop]');
+    if (!zone) return;
+    zone.classList.remove('dragging');
+    if (type !== 'drop') return;
+    event.preventDefault();
+    const input = zone.querySelector('[data-drop-input]');
+    const transfer = new DataTransfer();
+    [...input.files, ...event.dataTransfer.files].forEach(file => transfer.items.add(file));
+    input.files = transfer.files;
+    listFiles(zone.closest('[data-case-respond]'));
+  }));
+  document.addEventListener('submit', event => {
+    const form = event.target.closest('[data-case-respond]');
+    if (!form) return;
+    const decision = form.querySelector('input[name="decision"]:checked');
+    const {files, total, max} = listFiles(form);
+    let problem = '';
+    if (!decision) problem = 'Selecciona el estado: Aprobado o No Registra.';
+    else if (decision.value === 'approved' && !files.length) problem = 'Para «Aprobado» adjunta los documentos que recibirá el paciente.';
+    else if (max && total > max) problem = 'Los adjuntos superan el límite del correo. Quita alguno.';
+    if (problem) {
+      event.preventDefault();
+      alert(problem);
+      if (!decision) form.querySelector('[data-decision-menu]').open = true;
+      return;
+    }
+    if (!confirm(`¿Guardar la respuesta «${decision.value === 'approved' ? 'Aprobado' : 'No Registra'}» y notificar al paciente?`)) { event.preventDefault(); return; }
+    form.querySelector('button[type="submit"]').disabled = true;
+  });
+})();

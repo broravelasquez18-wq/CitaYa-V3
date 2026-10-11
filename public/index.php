@@ -110,6 +110,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['csrf'] = bin2hex(random_bytes(32));
                 $_SESSION['flash'] = 'Historia asignada. Se está enviando al paciente por correo' . ($app->request((int)$_POST['request_id'])['whatsapp_phone'] ? ' y WhatsApp.' : '.');
                 go('deliveries');
+            case 'respond-case':
+                requireAdmin();
+                $sources = [];
+                foreach (($_FILES['files']['name'] ?? []) as $i => $name) {
+                    $error = $_FILES['files']['error'][$i] ?? UPLOAD_ERR_NO_FILE;
+                    if ($error === UPLOAD_ERR_NO_FILE) continue;
+                    if ($error !== UPLOAD_ERR_OK || !is_uploaded_file($_FILES['files']['tmp_name'][$i])) throw new DomainException('No se pudo recibir un adjunto. Revisa que no supere el límite de tamaño.');
+                    $sources[] = ['path' => $_FILES['files']['tmp_name'][$i], 'name' => (string)$name];
+                }
+                $decision = (string)($_POST['decision'] ?? '');
+                $app->respondCase((int)($_POST['request_id'] ?? 0), (int)$_SESSION['admin_id'], $decision, (string)($_POST['comment'] ?? ''), $sources);
+                $_SESSION['csrf'] = bin2hex(random_bytes(32));
+                $_SESSION['flash'] = $decision === 'approved' ? 'Respuesta «Aprobado» guardada. Se está enviando al paciente con los adjuntos.' : 'Respuesta «No Registra» guardada y enviada al paciente.';
+                go('deliveries');
             case 'not-registered':
                 requireAdmin();
                 $app->markNotRegistered((int)($_POST['request_id'] ?? 0), (int)$_SESSION['admin_id']);
@@ -193,7 +207,7 @@ if ($page === 'analytics') {
 }
 $deliverySearch = null; $deliveryDetail = null;
 if (in_array($page, ['deliveries','delivery','history'], true)) {
-    $adminDeliveries = new App\AdminDeliveries($app->db);
+    $adminDeliveries = new App\AdminDeliveries($app->db, (string)$app->config['app_key']);
     if ($page === 'delivery') {
         $deliveryDetail = $adminDeliveries->detail((int)($_GET['id'] ?? 0));
         if (!$deliveryDetail) http_response_code(404);

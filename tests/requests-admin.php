@@ -105,10 +105,44 @@ try {
     $templates->reset('pending', 1);
     check(!$templates->isCustom('pending') && str_contains($templates->render('pending', ['horas' => 24]), 'tiempo estimado'), 'Restaurar vuelve al texto predeterminado');
     check($templates->renderPlain('history_found', ['radicado' => 'HC-1', 'documentos' => 2, 'correo' => 'a@b.c']) === "Encontramos tu historia clínica. Radicado HC-1.\n\nTe enviamos 2 documento(s) por este chat y también al correo a@b.c. Consérvalos en un lugar privado.", 'La versión de correo quita la negrita de WhatsApp');
+
+    // --- Respuesta desde el cuadro de gestión (Aprobado / No Registra, comentario y adjuntos) ---
+    $pdfSource = $config['storage_path'] . '/histories/respuesta.pdf';
+    file_put_contents($pdfSource, "%PDF-1.4\nRespuesta ficticia\n%%EOF");
+    $pngSource = $config['storage_path'] . '/histories/orden.png';
+    file_put_contents($pngSource, base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='));
+    $txtSource = $config['storage_path'] . '/histories/nota.txt';
+    file_put_contents($txtSource, 'texto plano');
+    $approvedCase = viaWhatsApp(['document_number' => '77777777'] + $form, '573007770000', 'r1');
+    $comment = 'Te enviamos tu historia clínica en los archivos adjuntos.';
+    rejects(fn() => $app->respondCase($approvedCase, 1, 'approved', $comment, []), 'Aprobado exige adjuntar documentos', 'adjunta');
+    rejects(fn() => $app->respondCase($approvedCase, 1, 'approved', 'corto', [['path' => $pdfSource, 'name' => 'a.pdf']]), 'Exige un comentario de al menos 10 caracteres', 'comentario');
+    rejects(fn() => $app->respondCase($approvedCase, 1, 'approved', $comment, [['path' => $txtSource, 'name' => 'nota.txt']]), 'Solo acepta PDF, JPG o PNG (por contenido)', 'PDF, JPG o PNG');
+    rejects(fn() => $app->respondCase($approvedCase, 1, 'otro', $comment, []), 'Rechaza un estado inventado', 'estado');
+    $app->respondCase($approvedCase, 1, 'approved', $comment, [['path' => $pdfSource, 'name' => 'Historia completa.pdf'], ['path' => $pngSource, 'name' => '../orden<médica>.png']]);
+    $approvedRequest = $app->request($approvedCase);
+    $responseFiles = $db->all('SELECT * FROM response_files WHERE request_id=? ORDER BY sort_order', [$approvedCase]);
+    $mailJob = $db->one("SELECT * FROM jobs WHERE request_id=? AND kind='response'", [$approvedCase]);
+    check($approvedRequest['status'] === 'queued' && $approvedRequest['resolution'] === 'approved' && count($responseFiles) === 2 && (int)$responseFiles[0]['job_id'] === (int)$mailJob['id'] && $responseFiles[1]['wa_job_id'] && $responseFiles[1]['original_name'] === 'orden_médica_.png' && $responseFiles[1]['mime'] === 'image/png', 'Aprobado: guarda los adjuntos (nombre saneado) y los enlaza al correo y al WhatsApp');
+    check(!str_contains((string)$approvedRequest['response_note'], 'historia') && App\Crypto::open($approvedRequest['response_note'], $config['app_key']) === $comment, 'El comentario se guarda cifrado');
+    rejects(fn() => $app->respondCase($approvedCase, 1, 'not_registered', $comment, []), 'Una solicitud ya respondida no admite otra respuesta', 'ya fue gestionada');
+    while ((new App\MailWorker($app))->tick());
+    $eml = (string)file_get_contents($config['storage_path'] . '/outbox/' . $mailJob['id'] . '.eml');
+    check($app->request($approvedCase)['status'] === 'simulated' && str_contains($eml, 'Historia completa.pdf') && str_contains($eml, 'image/png') && str_contains(quoted_printable_decode($eml), $comment), 'El correo lleva el comentario y los dos adjuntos, y actualiza el estado de la solicitud');
+    $waJob = $db->one("SELECT * FROM whatsapp_outbox WHERE request_id=? AND kind='response'", [$approvedCase]);
+    while ($bot->tick());
+    $preview = json_decode((string)file_get_contents($config['storage_path'] . '/wa-outbox/' . $waJob['id'] . '.json'), true);
+    check(array_column($preview['messages'], 'type') === ['text', 'document', 'photo'] && str_contains($preview['messages'][0]['body'], $comment) && $preview['messages'][2]['mime'] === 'image/png', 'WhatsApp envía el comentario, el PDF como documento y la imagen como foto');
+    $detail = (new App\AdminDeliveries($db, $config['app_key']))->detail($approvedCase);
+    check($detail['request']['response_note'] === $comment && $detail['deliveries'][0]['kind'] === 'response' && count($detail['deliveries'][0]['files']) === 2, 'El detalle muestra la respuesta y sus adjuntos');
+    $rejectedCase = viaWhatsApp(['document_number' => '88888888'] + $form, '573008880000', 'r2');
+    $pendingBefore = $admin->pendingCount();
+    $app->respondCase($rejectedCase, 1, 'not_registered', 'No encontramos una historia con esos datos. Verifica tu documento.', []);
+    check($app->request($rejectedCase)['status'] === 'not_registered' && $db->one("SELECT id FROM jobs WHERE request_id=? AND kind='notice' AND dedupe_key LIKE 'response:%'", [$rejectedCase]) && str_contains(waText($rejectedCase, 'not_registered'), 'Verifica tu documento') && $admin->pendingCount() === $pendingBefore - 1, 'No Registra sin adjuntos: avisa por correo y WhatsApp y sale de pendientes');
     echo "\nPASS: $checks comprobaciones. Sin envíos externos.\n";
 } finally {
     if (!preg_match('/^citaya_test_[a-f0-9]{10}$/', $databaseName)) throw new RuntimeException('Invalid test database name');
     $server->exec("DROP DATABASE `$databaseName`");
-    foreach (['histories', 'outbox', 'wa-outbox'] as $dir) { foreach (glob($config['storage_path'] . '/' . $dir . '/*') as $file) unlink($file); rmdir($config['storage_path'] . '/' . $dir); }
+    foreach (['histories', 'outbox', 'wa-outbox', 'responses'] as $dir) { if (!is_dir($config['storage_path'] . '/' . $dir)) continue; foreach (glob($config['storage_path'] . '/' . $dir . '/*') as $file) unlink($file); rmdir($config['storage_path'] . '/' . $dir); }
     rmdir($config['storage_path']);
 }

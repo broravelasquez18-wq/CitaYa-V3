@@ -18,6 +18,8 @@ final class MessageTemplates
             "Encontramos tu historia clínica. Radicado *{radicado}*.\n\nTe enviamos {documentos} documento(s) por este chat y también al correo {correo}. Consérvalos en un lugar privado."],
         'pending' => ['Solicitud con radicado', 'Cuando la historia no está cargada y la solicitud queda para gestión.', ['radicado', 'nombre', 'horas'],
             "Recibimos tu solicitud de historia clínica.\n\nNo encontramos una historia clínica cargada con los datos que indicaste, por eso quedó registrada para gestión con el radicado:\n\n*{radicado}*\n\nGuarda este número. El tiempo estimado de respuesta es de *{horas} horas*: cuando nuestro equipo cargue tu historia te la enviaremos automáticamente por este chat y a tu correo."],
+        'response_approved' => ['Historia aprobada', 'Texto sugerido al responder una solicitud como «Aprobado» con los documentos adjuntos.', ['radicado', 'nombre'],
+            "Hola, {nombre}.\n\nTu solicitud *{radicado}* fue aprobada. Te enviamos adjuntos los documentos de tu historia clínica.\n\nConsérvalos en un lugar privado."],
         'not_registered' => ['No registra', 'Respuesta de la persona encargada cuando el nombre no coincide con el documento o el paciente no existe.', ['radicado', 'nombre', 'enlace'],
             "Respuesta a tu solicitud *{radicado}*.\n\nNo encontramos una historia clínica registrada con el número de documento y el nombre que indicaste.\n\nVerifica nuevamente tu *número de documento* y escribe tus nombres y apellidos completos tal como aparecen en tu documento. Puedes hacer una nueva solicitud aquí:\n{enlace}"],
     ];

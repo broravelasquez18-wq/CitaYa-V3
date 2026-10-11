@@ -167,6 +167,80 @@ final class Application
         $this->event((int)$before['id'], 'request_assigned', 'reverted');
     }
 
+    public const RESPONSE_MIMES = ['application/pdf' => 'pdf', 'image/jpeg' => 'jpg', 'image/png' => 'png'];
+
+    /**
+     * Respuesta de la persona encargada desde el detalle de la solicitud: estado (approved = Aprobado,
+     * not_registered = No Registra), comentario para el paciente y archivos adjuntos (PDF, JPG o PNG).
+     * Sale por correo y, si la solicitud tiene WhatsApp, también por ese chat. Aprobado exige al menos un archivo.
+     * $sources: [['path' => ..., 'name' => ...]] (la capa HTTP solo pasa archivos subidos verificados).
+     */
+    public function respondCase(int $requestId, int $adminId, string $decision, string $comment, array $sources): void
+    {
+        if (!in_array($decision, ['approved', 'not_registered'], true)) throw new \DomainException('Selecciona el estado de la respuesta.');
+        $comment = trim(str_replace("\r\n", "\n", $comment));
+        if (mb_strlen($comment) < 10 || mb_strlen($comment) > 3000) throw new \DomainException('Escribe un comentario para el paciente (entre 10 y 3000 caracteres).');
+        if (count($sources) > 10) throw new \DomainException('Adjunta como máximo 10 archivos.');
+        if ($decision === 'approved' && !$sources) throw new \DomainException('Para aprobar adjunta los documentos que recibirá el paciente.');
+        $files = []; $total = 0;
+        foreach ($sources as $source) {
+            $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($source['path']) ?: '';
+            if (!isset(self::RESPONSE_MIMES[$mime])) throw new \DomainException('Solo se pueden adjuntar archivos PDF, JPG o PNG.');
+            $size = (int)filesize($source['path']);
+            if ($size <= 0) throw new \DomainException('Uno de los archivos está vacío.');
+            $total += $size;
+            $name = trim(preg_replace('/[^\p{L}\p{N} ._()-]/u', '_', basename((string)$source['name']))) ?: 'documento';
+            $files[] = ['path' => $source['path'], 'name' => mb_substr($name, 0, 150), 'mime' => $mime, 'size' => $size];
+        }
+        if ($total > (int)$this->config['max_response_bytes']) throw new \DomainException('Los adjuntos superan ' . intdiv((int)$this->config['max_response_bytes'], 1048576) . ' MB en total, el límite para enviarlos por correo.');
+        $directory = $this->config['storage_path'] . '/responses';
+        if (!is_dir($directory)) mkdir($directory, 0700, true);
+        $stored = [];
+        try {
+            foreach ($files as &$file) {
+                $file['storage'] = bin2hex(random_bytes(16)) . '.' . self::RESPONSE_MIMES[$file['mime']];
+                if (!copy($file['path'], $directory . '/' . $file['storage'])) throw new \RuntimeException('No se pudo guardar un adjunto.');
+                $stored[] = $directory . '/' . $file['storage'];
+                $file['sha256'] = hash_file('sha256', $directory . '/' . $file['storage']);
+            }
+            unset($file);
+            $this->db->transaction(function () use ($requestId, $adminId, $decision, $comment, $files) {
+                $request = $this->db->one('SELECT * FROM requests WHERE id=? FOR UPDATE', [$requestId]);
+                if (!$request || !$request['direct_search'] || !in_array($request['status'], self::PENDING_STATUSES, true)) throw new \DomainException('La solicitud ya fue gestionada o no admite esta acción. Actualiza la página.');
+                $sealed = Crypto::seal($comment, $this->config['app_key']);
+                $this->db->run('UPDATE requests SET status=?,resolved_by=?,resolved_at=?,resolution=?,response_note=? WHERE id=?',
+                    [$decision === 'approved' ? 'queued' : 'not_registered', $adminId, $this->now(), $decision, $sealed, $requestId]);
+                $ids = [];
+                foreach ($files as $index => $file) $ids[] = $this->db->insert('response_files', ['request_id' => $requestId, 'storage_name' => $file['storage'], 'original_name' => $file['name'],
+                    'mime' => $file['mime'], 'size_bytes' => $file['size'], 'sha256' => $file['sha256'], 'sort_order' => $index, 'created_at' => $this->now()]);
+                $in = $ids ? implode(',', array_map('intval', $ids)) : '0';
+                $unique = bin2hex(random_bytes(4));
+                if ($request['contact_email'] && filter_var($request['contact_email'], FILTER_VALIDATE_EMAIL)) {
+                    $jobId = $this->queue($requestId, $decision === 'approved' ? 'response' : 'notice', $request['contact_email'], null, null, $sealed, 'response:' . $requestId . ':' . $unique);
+                    $this->db->run("UPDATE response_files SET job_id=? WHERE id IN ($in)", [$jobId]);
+                }
+                $waJob = $this->whatsapp()->queueResponse($requestId, $decision, $comment, $unique);
+                if ($waJob) $this->db->run("UPDATE response_files SET wa_job_id=? WHERE id IN ($in)", [$waJob]);
+                $this->event($requestId, 'request_responded', $decision . ':admin_' . $adminId . ':files_' . count($files));
+            });
+        } catch (\Throwable $error) {
+            foreach ($stored as $path) @unlink($path);
+            throw $error;
+        }
+    }
+
+    /** Adjuntos de una respuesta, verificados (existen y no cambiaron). $column: job_id (correo) o wa_job_id. */
+    public function responseFiles(int $jobId, string $column = 'job_id'): array
+    {
+        if (!in_array($column, ['job_id', 'wa_job_id'], true)) throw new \InvalidArgumentException('column');
+        $files = $this->db->all("SELECT * FROM response_files WHERE $column=? ORDER BY sort_order,id", [$jobId]);
+        foreach ($files as &$file) {
+            $file['path'] = $this->config['storage_path'] . '/responses/' . $file['storage_name'];
+            if (!is_file($file['path']) || filesize($file['path']) !== (int)$file['size_bytes'] || !hash_equals($file['sha256'], hash_file('sha256', $file['path']))) throw new \DomainException('response_file_unavailable');
+        }
+        return $files;
+    }
+
     /** Respuesta «No registra»: cierra la solicitud y avisa al paciente por WhatsApp (si aplica) y correo. */
     public function markNotRegistered(int $requestId, int $adminId): void
     {

@@ -170,7 +170,7 @@ async function send(payload) {
     const data = Buffer.from(payload.data, 'base64');
     await sock.sendMessage(jid, payload.type === 'document'
       ? { document: data, mimetype: 'application/pdf', fileName: String(payload.filename || 'documento.pdf'), caption }
-      : { image: data, mimetype: 'image/png', caption });
+      : { image: data, mimetype: ['image/jpeg', 'image/png'].includes(payload.mimetype) ? payload.mimetype : 'image/png', caption });
   } else return [400, 'invalid_type'];
   return [200, 'sent'];
 }

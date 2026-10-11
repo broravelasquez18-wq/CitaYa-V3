@@ -20,14 +20,14 @@ final class MailWorker
         foreach ($stale as $row) {
             $db->transaction(function () use ($db, $row) {
                 $changed = $db->run("UPDATE jobs SET status='uncertain',last_error='worker_interrupted',encrypted_payload=NULL WHERE id=? AND status='sending'", [$row['id']])->rowCount();
-                if ($changed && $row['kind'] === 'history') $db->run("UPDATE requests SET status='uncertain' WHERE id=?", [$row['request_id']]);
+                if ($changed && in_array($row['kind'], ['history', 'response'], true)) $db->run("UPDATE requests SET status='uncertain' WHERE id=?", [$row['request_id']]);
             });
         }
         $job = $db->transaction(function () use ($db, $scope, $scopeParams) {
             $job = $db->one("SELECT * FROM jobs WHERE status IN ('queued','retry') AND available_at <= ?" . $scope . " ORDER BY id LIMIT 1 FOR UPDATE", [$this->app->now(), ...$scopeParams]);
             if (!$job) return null;
             $db->run("UPDATE jobs SET status='sending',attempts=attempts+1,locked_at=? WHERE id=?", [$this->app->now(), $job['id']]);
-            if ($job['kind'] === 'history') $db->run("UPDATE requests SET status='sending' WHERE id=?", [$job['request_id']]);
+            if (in_array($job['kind'], ['history', 'response'], true)) $db->run("UPDATE requests SET status='sending' WHERE id=?", [$job['request_id']]);
             $job['attempts']++;
             return $job;
         });
@@ -37,8 +37,8 @@ final class MailWorker
         try {
             $request = $this->app->request((int) $job['request_id']);
             $patient = $db->one('SELECT * FROM patients WHERE id=? AND active=1', [$request['patient_id']]);
-            if ($job['kind'] === 'notice') {
-                // Aviso sin documentos clínicos (p. ej. «No registra»): el paciente puede no existir en el repositorio.
+            if (in_array($job['kind'], ['notice', 'response'], true)) {
+                // Aviso o respuesta de la persona encargada (p. ej. «No registra»): el paciente puede no existir en el repositorio.
                 if (!$request['direct_search'] || !hash_equals($request['contact_email'] ?? '', $job['recipient']) || !filter_var($job['recipient'], FILTER_VALIDATE_EMAIL)) throw new \DomainException('recipient_changed_or_untrusted');
             } else {
                 $directDelivery = (bool)$request['direct_search'] && $job['kind'] === 'history';
@@ -59,9 +59,11 @@ final class MailWorker
                 $code = Crypto::open($job['encrypted_payload'], $config['app_key']);
                 $mail->Subject = 'Código de verificación · ' . $request['reference'];
                 $mail->Body = "Tu código de verificación es: $code\n\nVence en 10 minutos y solo puede usarse una vez.\nSi no solicitaste este código, ignora este mensaje.\n\nCitaYa";
-            } elseif ($job['kind'] === 'notice') {
+            } elseif (in_array($job['kind'], ['notice', 'response'], true)) {
                 $mail->Subject = 'Respuesta a tu solicitud ' . $request['reference'];
                 $mail->Body = Crypto::open($job['encrypted_payload'], $config['app_key']) . "\n\nCitaYa";
+                // Adjuntos que eligió la persona encargada al responder (si los hay), verificados antes de salir.
+                foreach ($this->app->responseFiles((int) $job['id']) as $file) $mail->addAttachment($file['path'], $file['original_name'], PHPMailer::ENCODING_BASE64, $file['mime']);
             } else {
                 if ($request['direct_search']) $this->app->requireVerified((int)$request['id']);
                 elseif (!hash_equals($request['verified_email'] ?? '', $job['recipient'])) throw new \DomainException('verification_required');
@@ -122,7 +124,7 @@ final class MailWorker
                 $status, $error, in_array($status, ['sent','simulated'], true) ? $this->app->now() : null,
                 date('Y-m-d H:i:s', time() + 60 * (int) $job['attempts']), $terminal ? 1 : 0, $job['id'],
             ]);
-            if ($job['kind'] === 'history') $db->run('UPDATE requests SET status=? WHERE id=?', [$status, $job['request_id']]);
+            if (in_array($job['kind'], ['history', 'response'], true)) $db->run('UPDATE requests SET status=? WHERE id=?', [$status, $job['request_id']]);
             $this->app->event((int) $job['request_id'], 'mail_' . $job['kind'], $status);
         });
         if (in_array($status, ['failed', 'uncertain'], true)) (new Automation($this->app))->emit('envio.fallido', ['canal' => 'correo', 'job_id' => (int) $job['id'], 'kind' => $job['kind'],

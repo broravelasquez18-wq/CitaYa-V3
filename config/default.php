@@ -24,6 +24,8 @@ return [
     'session_seconds' => 900,
     'max_mail_bytes' => 20 * 1024 * 1024,
     'max_upload_bytes' => 12 * 1024 * 1024,
+    // Adjuntos de una respuesta de la persona encargada (en total): deben caber en un correo (max_mail_bytes).
+    'max_response_bytes' => 14 * 1024 * 1024,
     'mail_attempts' => 3,
     'history_resend_seconds' => 60,
     'history_resend_max' => 3,

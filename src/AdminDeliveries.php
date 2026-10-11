@@ -4,11 +4,12 @@ namespace App;
 
 final class AdminDeliveries
 {
-    public function __construct(private readonly Database $db) {}
+    /** $appKey: para mostrar el comentario de respuesta (cifrado) en el detalle. */
+    public function __construct(private readonly Database $db, private readonly string $appKey = '') {}
 
     private function pendingSql(): string
     {
-        return "(r.case_reopened_after_job_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM jobs resolved WHERE resolved.request_id=r.id AND resolved.kind='history' AND resolved.status='sent' AND resolved.sent_at IS NOT NULL AND resolved.id>r.case_reopened_after_job_id))";
+        return "(r.case_reopened_after_job_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM jobs resolved WHERE resolved.request_id=r.id AND resolved.kind IN ('history','response') AND resolved.status='sent' AND resolved.sent_at IS NOT NULL AND resolved.id>r.case_reopened_after_job_id))";
     }
 
     public function reopen(int $id, int $adminId, int $expectedJobId): void
@@ -17,7 +18,7 @@ final class AdminDeliveries
             if (!$this->db->one('SELECT id FROM admins WHERE id=? AND active=1', [$adminId])) throw new \DomainException('Se requiere un administrador activo.');
             $request = $this->db->one('SELECT * FROM requests WHERE id=? FOR UPDATE', [$id]);
             if (!$request || (!$request['matched_at'] && !$request['verified_at'])) throw new \DomainException('El caso no está disponible para reabrir.');
-            $jobs = $this->db->all("SELECT id,status,sent_at FROM jobs WHERE request_id=? AND kind='history' ORDER BY id DESC FOR UPDATE", [$id]);
+            $jobs = $this->db->all("SELECT id,status,sent_at FROM jobs WHERE request_id=? AND kind IN ('history','response') ORDER BY id DESC FOR UPDATE", [$id]);
             if (!$jobs || (int)$jobs[0]['id'] !== $expectedJobId) throw new \DomainException('El envío cambió. Actualiza el historial antes de reabrir.');
             $closed = false;
             foreach ($jobs as $job) {
@@ -54,7 +55,7 @@ final class AdminDeliveries
         }
         if ($history) {
             $where .= ($where === '' ? ' WHERE ' : ' AND ') . "(r.matched_at IS NOT NULL OR r.verified_at IS NOT NULL)
-                AND EXISTS (SELECT 1 FROM jobs delivered WHERE delivered.request_id=r.id AND delivered.kind='history' AND delivered.status='sent' AND delivered.sent_at IS NOT NULL AND delivered.id>COALESCE(r.case_reopened_after_job_id,0))";
+                AND EXISTS (SELECT 1 FROM jobs delivered WHERE delivered.request_id=r.id AND delivered.kind IN ('history','response') AND delivered.status='sent' AND delivered.sent_at IS NOT NULL AND delivered.id>COALESCE(r.case_reopened_after_job_id,0))";
         }
         if ($pendingOnly && !$history) $where .= ($where === '' ? ' WHERE ' : ' AND ') . $this->awaitingSql();
         $from = ' FROM requests r LEFT JOIN patients p ON p.id=r.patient_id';
@@ -66,10 +67,10 @@ final class AdminDeliveries
             COALESCE(r.claimed_document_number,p.document_number) document_number,
             j.id last_job_id,j.status delivery_status,j.sent_at,j.recipient,j.last_error,e.attended_at,s.name specialty,
             " . $this->pendingSql() . " case_pending," . $this->awaitingSql() . " awaiting,
-            (SELECT MIN(done.sent_at) FROM jobs done WHERE done.request_id=r.id AND done.kind='history' AND done.status='sent' AND done.id>COALESCE(r.case_reopened_after_job_id,0)) closed_at,
-            (SELECT COUNT(*) FROM jobs n WHERE n.request_id=r.id AND n.kind='history') deliveries"
+            (SELECT MIN(done.sent_at) FROM jobs done WHERE done.request_id=r.id AND done.kind IN ('history','response') AND done.status='sent' AND done.id>COALESCE(r.case_reopened_after_job_id,0)) closed_at,
+            (SELECT COUNT(*) FROM jobs n WHERE n.request_id=r.id AND n.kind IN ('history','response')) deliveries"
             . $from . " LEFT JOIN encounters e ON e.id=r.encounter_id LEFT JOIN specialties s ON s.id=e.specialty_id
-                LEFT JOIN jobs j ON j.id=(SELECT MAX(last.id) FROM jobs last WHERE last.request_id=r.id AND last.kind='history')"
+                LEFT JOIN jobs j ON j.id=(SELECT MAX(last.id) FROM jobs last WHERE last.request_id=r.id AND last.kind IN ('history','response'))"
             . $where . ($history ? ' ORDER BY closed_at DESC,r.id DESC' : ($pendingOnly ? ' ORDER BY r.created_at ASC,r.id ASC' : ' ORDER BY awaiting DESC,case_pending DESC,r.id DESC')) . " LIMIT 20 OFFSET $offset", $params);
         return compact('query','total','page','pages','rows','history','pendingOnly');
     }
@@ -84,11 +85,16 @@ final class AdminDeliveries
             WHERE r.id=?', [$id]);
         if (!$request) return null;
         // Only delivery metadata is exposed: no OTPs or encrypted verification payloads.
-        $deliveries = $this->db->all("SELECT id,recipient,status,attempts,created_at,locked_at,sent_at,message_id,last_error,package_id
-            FROM jobs WHERE request_id=? AND kind='history' ORDER BY id DESC", [$id]);
+        $deliveries = $this->db->all("SELECT id,kind,recipient,status,attempts,created_at,locked_at,sent_at,message_id,last_error,package_id
+            FROM jobs WHERE request_id=? AND (kind IN ('history','response') OR (kind='notice' AND dedupe_key LIKE 'response:%')) ORDER BY id DESC", [$id]);
         foreach ($deliveries as &$delivery) {
-            $delivery['files'] = $this->db->all('SELECT original_name,page_count,size_bytes FROM clinical_files WHERE package_id=? ORDER BY sort_order,id', [$delivery['package_id']]);
+            // Historias: los PDF del paquete; respuestas de la persona encargada: sus adjuntos.
+            $delivery['files'] = $delivery['kind'] === 'history'
+                ? $this->db->all('SELECT original_name,page_count,size_bytes FROM clinical_files WHERE package_id=? ORDER BY sort_order,id', [$delivery['package_id']])
+                : $this->db->all('SELECT original_name,NULL page_count,size_bytes FROM response_files WHERE job_id=? ORDER BY sort_order,id', [$delivery['id']]);
         }
+        try { $request['response_note'] = $request['response_note'] && $this->appKey !== '' ? Crypto::open($request['response_note'], $this->appKey) : null; }
+        catch (\Throwable) { $request['response_note'] = null; }
         // Solo metadatos: el texto cifrado del mensaje no se expone.
         $whatsapp = $this->db->all("SELECT id,phone,kind,status,attempts,progress,created_at,sent_at,last_error FROM whatsapp_outbox WHERE request_id=? ORDER BY id DESC", [$id]);
         return compact('request','deliveries','whatsapp');

@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS requests (
  resolved_by BIGINT UNSIGNED NULL,
  resolved_at DATETIME NULL,
  resolution VARCHAR(20) NULL,
+ response_note TEXT NULL,
  approximate_date DATE NULL,
  specialty_id BIGINT UNSIGNED NULL,
  encounter_id BIGINT UNSIGNED NULL,
@@ -225,4 +226,23 @@ CREATE TABLE IF NOT EXISTS message_templates (
  body TEXT NOT NULL,
  updated_by BIGINT UNSIGNED NULL,
  updated_at DATETIME NOT NULL
+) ENGINE=InnoDB;
+
+-- Archivos que la persona encargada adjunta al responder una solicitud (Aprobado / No Registra).
+-- job_id: correo que los lleva; wa_job_id: mensaje de WhatsApp que los lleva.
+CREATE TABLE IF NOT EXISTS response_files (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ request_id BIGINT UNSIGNED NOT NULL,
+ job_id BIGINT UNSIGNED NULL,
+ wa_job_id BIGINT UNSIGNED NULL,
+ storage_name VARCHAR(80) NOT NULL,
+ original_name VARCHAR(190) NOT NULL,
+ mime VARCHAR(40) NOT NULL,
+ size_bytes BIGINT UNSIGNED NOT NULL,
+ sha256 CHAR(64) NOT NULL,
+ sort_order INT NOT NULL DEFAULT 0,
+ created_at DATETIME NOT NULL,
+ FOREIGN KEY (request_id) REFERENCES requests(id),
+ INDEX response_job (job_id),
+ INDEX response_wa_job (wa_job_id)
 ) ENGINE=InnoDB;

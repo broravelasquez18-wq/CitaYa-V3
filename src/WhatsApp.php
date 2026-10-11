@@ -241,6 +241,20 @@ final class WhatsApp
         $this->queue($request['whatsapp_phone'], 'not_registered', $body, $requestId, null, 'wa:not_registered:' . $requestId);
     }
 
+    /**
+     * Respuesta de la persona encargada (Aprobado / No Registra) con su comentario; los adjuntos se enlazan después
+     * con wa_job_id. Devuelve el id del mensaje o null si la solicitud no tiene WhatsApp.
+     */
+    public function queueResponse(int $requestId, string $decision, string $comment, string $unique): ?int
+    {
+        $request = $this->app->request($requestId);
+        if (!$request['whatsapp_phone']) return null;
+        $kind = $decision === 'approved' ? 'response' : 'not_registered';
+        $body = "Respuesta a tu solicitud *{$request['reference']}*.\n\n" . $comment;
+        return $this->queue($request['whatsapp_phone'], $kind, $body, $requestId, null, 'wa:response:' . $requestId . ':' . $unique,
+            $decision === 'approved' ? 'historia.disponible' : 'solicitud.no_registra');
+    }
+
     /** Encola un texto libre (lo usa n8n para las respuestas del bot). Devuelve el id del mensaje en la cola. */
     public function queueText(string $phone, string $body, string $dedupe): int
     {
@@ -249,7 +263,7 @@ final class WhatsApp
 
     private const EVENTS = ['history' => 'historia.disponible', 'notice' => 'solicitud.pendiente', 'not_registered' => 'solicitud.no_registra', 'text' => 'whatsapp.mensaje'];
 
-    private function queue(string $phone, string $kind, ?string $body, ?int $requestId, ?int $packageId, string $dedupe): int
+    private function queue(string $phone, string $kind, ?string $body, ?int $requestId, ?int $packageId, string $dedupe, ?string $event = null): int
     {
         $new = $this->app->db->run('INSERT IGNORE INTO whatsapp_outbox (request_id,package_id,phone,kind,encrypted_body,available_at,created_at,dedupe_key) VALUES (?,?,?,?,?,?,?,?)', [
             $requestId, $packageId, $phone, $kind, $body === null ? null : Crypto::seal($body, $this->app->config['app_key']),
@@ -257,7 +271,7 @@ final class WhatsApp
         ])->rowCount();
         $id = (int)$this->app->db->one('SELECT id FROM whatsapp_outbox WHERE dedupe_key=?', [$dedupe])['id'];
         // n8n se entera de cada mensaje nuevo para coordinar su salida (y avisar al responsable de los pendientes).
-        if ($new) $this->automation()->emit(self::EVENTS[$kind] ?? 'whatsapp.mensaje', ['job_id' => $id, 'kind' => $kind,
+        if ($new) $this->automation()->emit($event ?? self::EVENTS[$kind] ?? 'whatsapp.mensaje', ['job_id' => $id, 'kind' => $kind,
             'reference' => $requestId ? $this->app->request($requestId)['reference'] : null,
             'plazo_horas' => $kind === 'notice' ? (int)$this->app->config['whatsapp_estimated_hours'] : null], 'wa-job:' . $id);
         return $id;
@@ -283,10 +297,12 @@ final class WhatsApp
         if (!$job) return false;
         try {
             $messages = $job['kind'] === 'history' ? $this->historyMessages($job) : [['type' => 'text', 'body' => Crypto::open($job['encrypted_body'], $this->app->config['app_key'])]];
+            if (in_array($job['kind'], ['response', 'not_registered'], true)) $messages = array_merge($messages, $this->responseMessages($job));
             if ($this->app->config['whatsapp_transport'] === 'local') {
                 $preview = array_map(fn($m) => match ($m['type']) {
                     'document' => ['type' => 'document', 'filename' => $m['filename'], 'caption' => $m['caption'] ?? null],
                     'image' => ['type' => 'image', 'page' => $m['page'], 'caption' => $m['caption'] ?? null],
+                    'photo' => ['type' => 'photo', 'filename' => $m['filename'], 'mime' => $m['mime']],
                     default => $m,
                 }, $messages);
                 $path = $this->app->config['storage_path'] . '/wa-outbox/' . $job['id'] . '.json';
@@ -323,6 +339,21 @@ final class WhatsApp
             $this->finish($job, $error->retry && $job['attempts'] < $this->app->config['mail_attempts'] ? 'retry' : 'failed', $error->getMessage());
         }
         return true;
+    }
+
+    /** Adjuntos de una respuesta de la persona encargada: PDF como documento y JPG/PNG como imagen. */
+    private function responseMessages(array $job): array
+    {
+        if (!$job['request_id']) return [];
+        $request = $this->app->request((int)$job['request_id']);
+        if (!$request['whatsapp_phone'] || !hash_equals($request['whatsapp_phone'], $job['phone'])) throw new \DomainException('recipient_changed');
+        $messages = [];
+        foreach ($this->app->responseFiles((int)$job['id'], 'wa_job_id') as $file) {
+            $messages[] = $file['mime'] === 'application/pdf'
+                ? ['type' => 'document', 'path' => $file['path'], 'filename' => $file['original_name'], 'caption' => null]
+                : ['type' => 'photo', 'path' => $file['path'], 'filename' => $file['original_name'], 'mime' => $file['mime']];
+        }
+        return $messages;
     }
 
     private function historyMessages(array $job): array
@@ -382,6 +413,10 @@ final class WhatsApp
             ]);
             if (empty($media['id'])) throw new WhatsAppTransportError('media_upload_without_id', true);
             $payload += ['type' => 'document', 'document' => ['id' => $media['id'], 'filename' => $message['filename'], 'caption' => $message['caption']]];
+        } elseif ($message['type'] === 'photo') {
+            $media = $this->call('media', ['messaging_product' => 'whatsapp', 'type' => $message['mime'], 'file' => new \CURLFile($message['path'], $message['mime'], $message['filename'])]);
+            if (empty($media['id'])) throw new WhatsAppTransportError('media_upload_without_id', true);
+            $payload += ['type' => 'image', 'image' => ['id' => $media['id']]];
         } elseif ($message['type'] === 'image') {
             // La página se convierte en el momento del envío; si no se puede, la guía ya indica dónde está.
             $png = PdfPageImage::render($message['path'], $message['page']);
@@ -406,6 +441,8 @@ final class WhatsApp
         $payload = ['to' => $phone, 'type' => $message['type']];
         if ($message['type'] === 'document') {
             $payload += ['data' => base64_encode((string)file_get_contents($message['path'])), 'filename' => $message['filename'], 'caption' => $message['caption']];
+        } elseif ($message['type'] === 'photo') {
+            $payload = ['to' => $phone, 'type' => 'image', 'data' => base64_encode((string)file_get_contents($message['path'])), 'filename' => $message['filename'], 'mimetype' => $message['mime']];
         } elseif ($message['type'] === 'image') {
             $png = PdfPageImage::render($message['path'], $message['page']);
             if ($png === null) return;
@@ -444,6 +481,8 @@ final class WhatsApp
         $account = $this->app->config['zernio_account_id'];
         if ($message['type'] === 'document') {
             $this->zernioCall($path, ['accountId' => $account, 'message' => $message['caption'], 'attachment' => new \CURLFile($message['path'], 'application/pdf', $message['filename'])], $idempotencyKey);
+        } elseif ($message['type'] === 'photo') {
+            $this->zernioCall($path, ['accountId' => $account, 'attachment' => new \CURLFile($message['path'], $message['mime'], $message['filename'])], $idempotencyKey);
         } elseif ($message['type'] === 'image') {
             $png = PdfPageImage::render($message['path'], $message['page']);
             if ($png === null) return;
@@ -512,7 +551,7 @@ final class WhatsApp
     {
         $this->finish($job, 'waiting_window', 'outside_24h_window');
         $template = (string)$this->app->config['whatsapp_template_ready'];
-        if ($template === '' || !$job['request_id'] || !in_array($job['kind'], ['history', 'notice', 'not_registered'], true)) return;
+        if ($template === '' || !$job['request_id'] || !in_array($job['kind'], ['history', 'notice', 'not_registered', 'response'], true)) return;
         $reference = $this->app->request((int)$job['request_id'])['reference'];
         try {
             if ($this->app->config['whatsapp_transport'] === 'zernio') {
