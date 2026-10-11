@@ -197,6 +197,19 @@ if (in_array($page, ['delivery', 'case-history'], true) && ($_GET['fragment'] ??
 }
 if (in_array($page, ['admin','inbox','mail','deliveries','delivery','case-history','history','analytics','templates','whatsapp'], true)) requireAdmin();
 $pendingCount = !empty($_SESSION['admin_id']) ? (new App\AdminDeliveries($app->db))->pendingCount() : 0;
+// La pestaña WhatsApp solo aparece si el bot (servicio QR) está desconectado. Se consulta como máximo cada minuto.
+$whatsappDisconnected = false;
+if (!empty($_SESSION['admin_id']) && ($app->config['whatsapp_transport'] ?? '') === 'qr') {
+    $cached = $_SESSION['wa_health'] ?? null;
+    if (!$cached || time() - $cached['at'] > 60) {
+        $curl = curl_init(rtrim((string)$app->config['whatsapp_qr_url'], '/') . '/health');
+        curl_setopt_array($curl, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 3, CURLOPT_CONNECTTIMEOUT => 2]);
+        $health = json_decode((string)curl_exec($curl), true);
+        curl_close($curl);
+        $cached = $_SESSION['wa_health'] = ['at' => time(), 'connected' => !empty($health['connected'])];
+    }
+    $whatsappDisconnected = !$cached['connected'];
+}
 $analytics = null;
 if ($page === 'analytics') {
     $service = new App\AppointmentAnalytics($app->db);

@@ -580,3 +580,5 @@ Ruta de regreso: con `WA_WEBHOOK_URL` apuntando al webhook de CitaYa (`/whatsapp
 - Elegir una plantilla selecciona su estado. Elegir el estado sugiere la plantilla general (Aprobado → «Historia aprobada»; No Registra → «No registra: general»).
 - WhatsApp ya no antepone «Respuesta a tu solicitud…» cuando el comentario ya nombra el radicado.
 - Validación: `tests/requests-admin.php` 46 (3 nuevas). Las demás suites siguen correctas.
+
+**Ajuste: pestaña WhatsApp oculta.** A pedido del titular se quitó la pestaña «WhatsApp» del panel mientras el bot está conectado. Solo aparece, junto con un aviso rojo («El WhatsApp del bot está desconectado… Vincularlo de nuevo →»), cuando el servicio QR informa que está desconectado. Así se conserva la forma de volver a vincularlo desde el panel. El estado se consulta a `/health` del servicio QR como máximo una vez por minuto por sesión.
