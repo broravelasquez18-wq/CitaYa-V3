@@ -81,6 +81,14 @@ try {
     check($app->request($late)['whatsapp_phone'] === null, 'Un enlace vencido no vincula el WhatsApp');
     // --- Órdenes médicas ---
     check(App\MedicalOrders::detect(["Nota\nEl paciente refiere que la fórmula médica fue entregada\n"]) === [], 'Una mención dentro de una nota clínica no cuenta como orden');
+    $extramural = App\MedicalOrders::detect([
+        "ORDENES MEDICAS EXTRAMURALES\nLABORATORIOS EXTRAMURAL:\nMEDICAMENTOS EXTRAMURAL:\nINTERCONSULTAS EXTRAMURAL:\n",
+        "SOLICITUD MEDICAMENTOS AMBULATORIOS\nMEDICAMENTOS EXTRAMURAL:\n",
+        "SOLICITUD LABORATORIOS EXTRAMURAL\nLABORATORIOS EXTRAMURAL:\n",
+        "SOLICITUD AYUDAS DIAGNÓSTICAS EXTRAMURAL\nIMAGENES DX EXTRAMURAL:\n",
+        "SOLICITUD INTERCONSULTAS EXTRAMURAL\nINTERCONSULTAS EXTRAMURAL:\n",
+    ]);
+    check($extramural === [['type' => 'formula', 'page' => 2], ['type' => 'laboratorio', 'page' => 3], ['type' => 'imagenes', 'page' => 4], ['type' => 'remision', 'page' => 5]], 'Reconoce el formato «SOLICITUD … EXTRAMURAL» y no cuenta los campos vacíos del resumen');
     check(array_column(App\MedicalOrders::detect(["Hoja 1", "FÓRMULA MÉDICA\nAcetaminofén", "Orden de imágenes diagnósticas:\nRx"]), 'type') === ['formula', 'imagenes'], 'Detecta fórmula e imágenes por título, con tildes y mayúsculas');
 
     // --- Historia cargada después: la solicitud pendiente se envía sola ---

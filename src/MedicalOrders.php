@@ -12,17 +12,19 @@ final class MedicalOrders
 {
     /** tipo => [patrón del título sin tildes y en minúsculas, etiqueta, guía para el paciente] */
     public const TYPES = [
-        'formula' => ['(?:formula(?:s)? medica(?:s)?|formulacion medica|prescripcion medica|formula de medicamentos)', 'Fórmula médica',
+        // Además de los títulos genéricos, los formatos de historia «SOLICITUD … EXTRAMURAL» / «SOLICITUD MEDICAMENTOS AMBULATORIOS».
+        // Los campos del resumen («LABORATORIOS EXTRAMURAL:») no cuentan: pueden aparecer vacíos.
+        'formula' => ['(?:formula(?:s)? medica(?:s)?|formulacion medica|prescripcion medica|formula de medicamentos|solicitud (?:de )?medicamentos(?: ambulatorios| extramural(?:es)?)?)', 'Fórmula médica',
             'Con esta fórmula puedes reclamar tus medicamentos en tu farmacia. Preséntala impresa o desde la imagen que te enviamos.'],
-        'laboratorio' => ['(?:orden(?:es)? de laboratorio(?: clinico)?|orden(?:es)? de examen(?:es)?(?: de laboratorio)?)', 'Orden de laboratorio',
+        'laboratorio' => ['(?:orden(?:es)? de laboratorio(?: clinico)?|orden(?:es)? de examen(?:es)?(?: de laboratorio)?|solicitud (?:de )?laboratorio(?:s)?(?: clinico(?:s)?)?(?: extramural(?:es)?)?)', 'Orden de laboratorio',
             'Preséntala en el laboratorio para realizarte los exámenes indicados.'],
-        'imagenes' => ['(?:orden(?:es)? de (?:imagen(?:es)?(?: diagnostica(?:s)?)?|radiologia|rayos x|ecografia(?:s)?|resonancia(?:s)?|tomografia(?:s)?))', 'Orden de imágenes diagnósticas',
+        'imagenes' => ['(?:orden(?:es)? de (?:imagen(?:es)?(?: diagnostica(?:s)?)?|radiologia|rayos x|ecografia(?:s)?|resonancia(?:s)?|tomografia(?:s)?)|solicitud (?:de )?(?:ayuda(?:s)? diagnostica(?:s)?|imagen(?:es)?(?: diagnostica(?:s)?| dx)?)(?: extramural(?:es)?)?)', 'Orden de imágenes diagnósticas',
             'Con ella puedes agendar el estudio de imágenes indicado (radiografía, ecografía, resonancia, etc.).'],
-        'procedimiento' => ['(?:orden(?:es)? de (?:procedimiento(?:s)?|cirugia(?:s)?))', 'Orden de procedimiento',
+        'procedimiento' => ['(?:orden(?:es)? de (?:procedimiento(?:s)?|cirugia(?:s)?)|solicitud (?:de )?procedimiento(?:s)?(?: quirurgico(?:s)?)?(?: extramural(?:es)?)?)', 'Orden de procedimiento',
             'Presenta esta orden para programar el procedimiento indicado por tu especialista.'],
-        'terapia' => ['(?:orden(?:es)? de (?:terapia(?:s)?|fisioterapia|rehabilitacion))', 'Orden de terapias',
+        'terapia' => ['(?:orden(?:es)? de (?:terapia(?:s)?|fisioterapia|rehabilitacion)|solicitud (?:de )?terapia(?:s)?(?: fisica(?:s)?)?(?: extramural(?:es)?)?)', 'Orden de terapias',
             'Preséntala para programar tus sesiones de terapia.'],
-        'remision' => ['(?:orden(?:es)? de (?:remision|interconsulta)|remision a (?:especialista|especialidad)|solicitud de interconsulta)', 'Remisión o interconsulta',
+        'remision' => ['(?:orden(?:es)? de (?:remision|interconsulta)|remision a (?:especialista|especialidad)|solicitud (?:de )?interconsulta(?:s)?(?: extramural(?:es)?)?)', 'Remisión o interconsulta',
             'Úsala para solicitar tu cita con la especialidad indicada.'],
         'incapacidad' => ['(?:incapacidad(?: medica)?|certificado de incapacidad)', 'Incapacidad médica',
             'Entrégala en tu empresa o entidad cuando te la soliciten.'],

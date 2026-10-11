@@ -543,3 +543,8 @@ Ruta de regreso: con `WA_WEBHOOK_URL` apuntando al webhook de CitaYa (`/whatsapp
   - Si no se encontró al paciente o no hay nada que sugerir, el aviso sale de inmediato, como antes.
 - Al encolar una historia se cancela cualquier aviso de «no encontrada» que siga sin enviar.
 - Validación: `tests/requests-admin.php` 43 (5 nuevas). Las demás suites siguen correctas.
+
+**Corrección: órdenes no detectadas en el formato real de historia.** El bot no enviaba indicaciones porque la historia cargada tenía 0 órdenes detectadas. El formato real titula las páginas de órdenes «SOLICITUD MEDICAMENTOS AMBULATORIOS», «SOLICITUD LABORATORIOS EXTRAMURAL», «SOLICITUD AYUDAS DIAGNOSTICAS EXTRAMURAL» e «SOLICITUD INTERCONSULTAS EXTRAMURAL», y el detector solo reconocía «ORDEN DE …» / «FÓRMULA MÉDICA».
+- `MedicalOrders` reconoce ahora los títulos «SOLICITUD …» (medicamentos → fórmula, laboratorios, ayudas diagnósticas/imágenes, interconsultas → remisión, procedimientos, terapias). Los campos de la página de resumen («LABORATORIOS EXTRAMURAL:») no cuentan, porque pueden ir vacíos.
+- Verificado con 5 historias locales: detecta solo las páginas de órdenes (p. ej., fórmula p. 5 e interconsulta p. 6). Prueba nueva en `tests/whatsapp.php` (46).
+- Para las historias ya cargadas: `php bin/detect-orders.php` (procesa los archivos sin órdenes registradas).
