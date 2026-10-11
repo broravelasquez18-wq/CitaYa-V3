@@ -22,6 +22,20 @@ final class MessageTemplates
             "Hola, {nombre}.\n\nTu solicitud *{radicado}* fue aprobada. Te enviamos adjuntos los documentos de tu historia clínica.\n\nConsérvalos en un lugar privado."],
         'not_registered' => ['No registra', 'Respuesta de la persona encargada cuando el nombre no coincide con el documento o el paciente no existe.', ['radicado', 'nombre', 'enlace'],
             "Respuesta a tu solicitud *{radicado}*.\n\nNo encontramos una historia clínica registrada con el número de documento y el nombre que indicaste.\n\nVerifica nuevamente tu *número de documento* y escribe tus nombres y apellidos completos tal como aparecen en tu documento. Puedes hacer una nueva solicitud aquí:\n{enlace}"],
+        'order_formula' => ['Orden: fórmula médica', 'Indicaciones que acompañan la imagen de esta orden cuando se envía la historia por WhatsApp.', [],
+            "Qué hacer con tu *fórmula médica*:\n1. Lleva esta fórmula (impresa o en tu celular) a la farmacia de tu EPS o a la que te indicaron.\n2. Presenta tu documento de identidad.\n3. Reclama los medicamentos indicados.\n\nTómalos tal como te indicó tu médico."],
+        'order_laboratorio' => ['Orden: laboratorio', 'Indicaciones que acompañan la imagen de esta orden cuando se envía la historia por WhatsApp.', [],
+            "Qué hacer con tu *orden de laboratorio*:\n1. Comunícate con el laboratorio de tu EPS para saber si necesitas cita o ayuno.\n2. El día del examen presenta esta orden y tu documento de identidad.\n3. Cuando tengas los resultados, llévalos a tu próxima cita de control."],
+        'order_imagenes' => ['Orden: imágenes diagnósticas', 'Indicaciones que acompañan la imagen de esta orden cuando se envía la historia por WhatsApp.', [],
+            "Qué hacer con tu *orden de imágenes diagnósticas*:\n1. Solicita la cita para el estudio (radiografía, ecografía, resonancia, etc.) en tu EPS o centro de imágenes.\n2. Pregunta si requiere alguna preparación.\n3. El día del estudio presenta esta orden y tu documento de identidad."],
+        'order_procedimiento' => ['Orden: procedimiento', 'Indicaciones que acompañan la imagen de esta orden cuando se envía la historia por WhatsApp.', [],
+            "Qué hacer con tu *orden de procedimiento*:\n1. Si tu EPS lo exige, solicita la autorización presentando esta orden.\n2. Agenda el procedimiento en la entidad indicada.\n3. Sigue las indicaciones de preparación que te den."],
+        'order_terapia' => ['Orden: terapias', 'Indicaciones que acompañan la imagen de esta orden cuando se envía la historia por WhatsApp.', [],
+            "Qué hacer con tu *orden de terapias*:\n1. Si tu EPS lo exige, solicita la autorización de las sesiones con esta orden.\n2. Agenda tus sesiones de terapia.\n3. Asiste a todas las sesiones indicadas."],
+        'order_remision' => ['Orden: remisión o interconsulta', 'Indicaciones que acompañan la imagen de esta orden cuando se envía la historia por WhatsApp.', [],
+            "Qué hacer con tu *remisión*:\n1. Con esta remisión solicita tu cita con la especialidad indicada en tu EPS.\n2. Lleva la remisión y tu documento de identidad el día de la cita."],
+        'order_incapacidad' => ['Orden: incapacidad médica', 'Indicaciones que acompañan la imagen de esta orden cuando se envía la historia por WhatsApp.', [],
+            "Qué hacer con tu *incapacidad*:\n1. Entrégala a tu empresa o empleador.\n2. Si te lo piden, solicita su transcripción o validación ante tu EPS."],
     ];
 
     public function __construct(private readonly Application $app) {}

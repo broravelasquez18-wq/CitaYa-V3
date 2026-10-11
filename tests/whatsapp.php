@@ -109,8 +109,13 @@ try {
     $preview = json_decode(file_get_contents($config['storage_path'] . '/wa-outbox/' . $sent['id'] . '.json'), true);
     $types = array_column($preview['messages'], 'type');
     check($sent['status'] === 'simulated' && $types === ['text', 'document', 'text', 'image'], 'Envía historia, guía de órdenes y una imagen por página con órdenes');
-    check(str_contains($preview['messages'][3]['caption'], 'Fórmula médica / Orden de laboratorio'), 'La imagen de la página lleva el título de cada orden');
-    check(str_contains($preview['messages'][2]['body'], 'Fórmula médica') && str_contains($preview['messages'][2]['body'], 'reclamar tus medicamentos en tu farmacia') && str_contains($preview['messages'][2]['body'], 'Orden de laboratorio'), 'La guía explica cada orden detectada');
+    check(str_contains($preview['messages'][3]['caption'], '*Fórmula médica*') && str_contains($preview['messages'][3]['caption'], '*Orden de laboratorio*') && str_contains($preview['messages'][3]['caption'], 'Página 1 de tu historia'), 'La imagen de la página lleva el título de cada orden y dónde está');
+    check(str_contains($preview['messages'][2]['body'], '*2* órdenes') && str_contains($preview['messages'][3]['caption'], 'Reclama los medicamentos') && str_contains($preview['messages'][3]['caption'], 'farmacia') && str_contains($preview['messages'][3]['caption'], 'ayuno'), 'Cada orden llega con lo que debe hacer el paciente (fórmula: reclamar en la farmacia; laboratorio: cita o ayuno)');
+    $templates = new App\MessageTemplates($app);
+    $templates->save('order_formula', 'Reclama tus medicamentos en la farmacia Central.', 1);
+    $ordersAgain = (new ReflectionMethod($bot, 'orderMessages'))->invoke($bot, $app->packageFiles($uploaded));
+    check(str_contains($ordersAgain[1]['caption'], 'farmacia Central'), 'Las indicaciones de cada orden se editan en Plantillas');
+    $templates->reset('order_formula', 1);
     check($app->resolveWaitingRequests($uploaded) === [] && $db->one("SELECT COUNT(*) n FROM whatsapp_outbox WHERE request_id=? AND kind='history'", [$pendingId])['n'] == 1, 'Recargar la misma historia no duplica el envío');
 
     // --- WhatsApp escrito en el formulario web (RF-29) ---

@@ -373,8 +373,9 @@ final class WhatsApp
     }
 
     /**
-     * Guía para el paciente sobre cada orden detectada en su historia y la imagen de la página.
-     * Los textos de orientación son administrativos: no reemplazan la indicación del especialista.
+     * Órdenes de la historia: un aviso y, por cada página con órdenes, la imagen de esa página con las indicaciones
+     * de qué hacer con cada orden (plantillas «Orden: …», editables). Si la imagen no se puede generar al enviar,
+     * las mismas indicaciones salen como texto. Son orientaciones administrativas, no reemplazan al especialista.
      */
     private function orderMessages(array $files): array
     {
@@ -382,23 +383,22 @@ final class WhatsApp
         foreach ($files as $index => $file) $position[(int)$file['id']] = $index + 1;
         $orders = $this->app->db->all('SELECT file_id,order_type,page FROM clinical_orders WHERE file_id IN (' . implode(',', array_keys($position)) . ') ORDER BY file_id,page,id');
         if (!$orders) return [];
-        $byType = []; $pages = [];
-        foreach ($orders as $order) {
-            $where = count($files) > 1 ? 'documento ' . $position[(int)$order['file_id']] . ', pág. ' . $order['page'] : 'pág. ' . $order['page'];
-            $byType[$order['order_type']][] = $where;
-            $pages[$order['file_id'] . ':' . $order['page']][] = MedicalOrders::label($order['order_type']);
-        }
-        $lines = [];
-        foreach ($byType as $type => $places) {
-            $lines[] = '*' . MedicalOrders::label($type) . '* (' . implode('; ', array_slice($places, 0, 4)) . ")\n" . MedicalOrders::guidance($type);
-        }
-        $messages = [['type' => 'text', 'body' => "En tu historia encontramos estas órdenes de tu especialista:\n\n" . implode("\n\n", $lines) . "\n\nSi tienes dudas sobre cómo usarlas, consulta en tu servicio de salud."]];
-        if (PdfPageImage::available() || $this->app->config['whatsapp_transport'] === 'local') {
-            $filesById = array_column($files, null, 'id');
-            foreach (array_slice($pages, 0, 6, true) as $key => $labels) {
-                [$fileId, $page] = array_map('intval', explode(':', (string)$key));
-                $messages[] = ['type' => 'image', 'path' => $filesById[$fileId]['path'], 'page' => $page, 'caption' => implode(' / ', array_unique($labels))];
+        $pages = [];
+        foreach ($orders as $order) $pages[$order['file_id'] . ':' . $order['page']][$order['order_type']] = true;
+        $count = count($orders);
+        $messages = [['type' => 'text', 'body' => 'En tu historia vienen *' . $count . '* ' . ($count === 1 ? 'orden' : 'órdenes') . ' de tu especialista. '
+            . "Te enviamos cada una con lo que debes hacer.\n\nEstas indicaciones son administrativas: sigue siempre lo que te indicó tu médico y, si tienes dudas, consulta en tu EPS."]];
+        $filesById = array_column($files, null, 'id');
+        foreach (array_slice($pages, 0, 8, true) as $key => $types) {
+            [$fileId, $page] = array_map('intval', explode(':', (string)$key));
+            $where = count($files) > 1 ? 'Documento ' . $position[$fileId] . ', página ' . $page : 'Página ' . $page;
+            $parts = [];
+            foreach (array_keys($types) as $type) {
+                $guide = isset(MessageTemplates::DEFINITIONS['order_' . $type]) ? $this->templates()->render('order_' . $type) : MedicalOrders::guidance($type);
+                $parts[] = '📄 *' . MedicalOrders::label($type) . "*\n" . $guide;
             }
+            $caption = mb_substr(implode("\n\n", $parts) . "\n\n_" . $where . ' de tu historia_', 0, 1000);
+            $messages[] = ['type' => 'image', 'path' => $filesById[$fileId]['path'], 'page' => $page, 'caption' => $caption];
         }
         return $messages;
     }
@@ -420,7 +420,7 @@ final class WhatsApp
         } elseif ($message['type'] === 'image') {
             // La página se convierte en el momento del envío; si no se puede, la guía ya indica dónde está.
             $png = PdfPageImage::render($message['path'], $message['page']);
-            if ($png === null) return;
+            if ($png === null) { $this->deliver($phone, ['type' => 'text', 'body' => $message['caption']]); return; }
             try {
                 $media = $this->call('media', ['messaging_product' => 'whatsapp', 'type' => 'image/png', 'file' => new \CURLFile($png, 'image/png', 'orden.png')]);
             } finally { @unlink($png); }
@@ -445,7 +445,7 @@ final class WhatsApp
             $payload = ['to' => $phone, 'type' => 'image', 'data' => base64_encode((string)file_get_contents($message['path'])), 'filename' => $message['filename'], 'mimetype' => $message['mime']];
         } elseif ($message['type'] === 'image') {
             $png = PdfPageImage::render($message['path'], $message['page']);
-            if ($png === null) return;
+            if ($png === null) { $this->deliverQr($phone, ['type' => 'text', 'body' => $message['caption']]); return; }
             try { $payload += ['data' => base64_encode((string)file_get_contents($png)), 'filename' => 'orden.png', 'caption' => $message['caption']]; }
             finally { @unlink($png); }
         } else {
@@ -485,7 +485,7 @@ final class WhatsApp
             $this->zernioCall($path, ['accountId' => $account, 'attachment' => new \CURLFile($message['path'], $message['mime'], $message['filename'])], $idempotencyKey);
         } elseif ($message['type'] === 'image') {
             $png = PdfPageImage::render($message['path'], $message['page']);
-            if ($png === null) return;
+            if ($png === null) { $this->deliverZernio($phone, ['type' => 'text', 'body' => $message['caption']], $idempotencyKey); return; }
             try { $this->zernioCall($path, ['accountId' => $account, 'message' => $message['caption'], 'attachment' => new \CURLFile($png, 'image/png', 'orden.png')], $idempotencyKey); }
             finally { @unlink($png); }
         } else {

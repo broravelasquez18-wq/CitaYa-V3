@@ -520,3 +520,10 @@ Ruta de regreso: con `WA_WEBHOOK_URL` apuntando al webhook de CitaYa (`/whatsapp
 - Validación: `tests/requests-admin.php` 38 (2 nuevas), las demás suites correctas y revisión visual en local, incluida la apertura sobre el detalle.
 
 **Ajuste: sin historias del repositorio en el detalle.** A pedido del titular se quitó del detalle la sección «Historias del repositorio con este documento» (asignar una historia y «Cargar el PDF de esta solicitud»). La respuesta se gestiona solo con el cuadro «Aprobado / No Registra» y sus adjuntos. Las acciones del servidor siguen existiendo, pero el panel ya no las ofrece. Se actualizó el texto de Solicitudes. Pruebas correctas.
+
+**Indicaciones por orden médica en WhatsApp.** A pedido del titular: el bot explica qué hacer con cada orden (p. ej., fórmula → reclamar los medicamentos en la farmacia).
+- Antes: un texto con todas las órdenes y una guía breve, y después imágenes con solo el título.
+- Ahora: un aviso con cuántas órdenes vienen y, por cada página con órdenes (máx. 8), la imagen de la página con las indicaciones paso a paso de cada orden y dónde está («Documento 1, página 2 de tu historia»).
+- Las indicaciones son plantillas editables («Orden: fórmula médica», «Orden: laboratorio», imágenes diagnósticas, procedimiento, terapias, remisión, incapacidad) en Acceso interno → Plantillas. Son orientaciones administrativas y el aviso recuerda seguir lo que indicó el médico.
+- Si la página no se puede convertir en imagen al enviar, las mismas indicaciones salen como texto (antes se omitía). Aplica a QR, Meta y Zernio. El contenedor tiene poppler-utils para generar las imágenes.
+- Validación: `tests/whatsapp.php` 45 (pruebas de órdenes actualizadas y una nueva de plantilla editable). Las demás suites siguen correctas.
