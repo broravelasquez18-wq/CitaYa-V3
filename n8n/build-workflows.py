@@ -57,4 +57,13 @@ if (here / 'citaya-followup.js').exists():
     ], 'connections': {'Cada hora': {'main': [[{'node': 'Revisar y avisar', 'type': 'main', 'index': 0}]]}},
         'settings': {'executionOrder': 'v1', 'saveDataSuccessExecution': 'none'}, 'active': False}
     (here / 'citaya-seguimiento.json').write_text(json.dumps(followup, ensure_ascii=False, indent=2), encoding='utf-8')
+if (here / 'citaya-errors.js').exists():
+    # Flujo de errores: en cada flujo de CitaYa, Settings → Error workflow → «CitaYa · Errores». No necesita publicarse.
+    errors_code = code_of('citaya-errors.js') + '\n\n' + HTTP.split('const item')[0] + "return [{ json: await citayaErrorAlert({ error: $input.first().json, env: " + ENV + ", http, crypto }) }];"
+    errors = {'name': 'CitaYa · Errores', 'nodes': [
+        node('Error en un flujo', 'n8n-nodes-base.errorTrigger', 1, [0, 0], {}),
+        node('Avisar al responsable', 'n8n-nodes-base.code', 2, [260, 0], {'mode': 'runOnceForAllItems', 'jsCode': errors_code}),
+    ], 'connections': {'Error en un flujo': {'main': [[{'node': 'Avisar al responsable', 'type': 'main', 'index': 0}]]}},
+        'settings': {'executionOrder': 'v1'}, 'active': False}
+    (here / 'citaya-errores.json').write_text(json.dumps(errors, ensure_ascii=False, indent=2), encoding='utf-8')
 print('flujos generados')

@@ -461,3 +461,17 @@ Ruta de regreso: con `WA_WEBHOOK_URL` apuntando al webhook de CitaYa (`/whatsapp
 - `php tests/n8n-api.php`: 27 comprobaciones (4 nuevas: salud, latido, vencidas y resumen).
 - Regresión completa correcta. Migración aplicada en `citaya_v3`.
 - Los cuatro flujos importables están en `n8n/*.json`, generados con `python n8n/build-workflows.py`.
+
+### Fase 7 · Puesta en marcha en el VPS (SCRUM-44)
+
+**Corrección: firma del servicio QR.** El bot no respondía en el VPS porque `WA_SECRET` (servicio QR) no coincidía con `CITAYA_WA_SECRET` (n8n): el webhook devolvía 401 y el mensaje quedaba en la bandeja. El titular igualó el secreto en Dokploy. Tras el despliegue, el mensaje pendiente se entregó (HTTP 200) y el bot respondió con el menú.
+- El servicio QR ahora registra cada mensaje recibido (solo los últimos 4 dígitos del número), el motivo cuando ignora uno (sin número, `WA_ALLOWED`, sin conexión) y la respuesta HTTP del webhook.
+
+**Flujo de errores «CitaYa · Errores»** (`n8n/citaya-errors.js`, `n8n/citaya-errores.json`).
+- Error Trigger → aviso al responsable por WhatsApp (`message.send`, firmado) con el flujo, el nodo, el error resumido (máx. 160 caracteres, sin números de 7 o más dígitos) y el enlace a la ejecución. Clave por ejecución, así que no se repite.
+- Publicado y asignado como *Error workflow* de Bot WhatsApp, Eventos, Recuperación de envíos y Seguimiento.
+- Validación: `node --test n8n/*.test.js` 28 pruebas (5 nuevas). Prueba real con un flujo temporal que falla a propósito, borrado después.
+
+**Pruebas en el VPS (datos ficticios).**
+- Saludo → menú: correcto.
+- HISTORIA → enlace al formulario: correcto.

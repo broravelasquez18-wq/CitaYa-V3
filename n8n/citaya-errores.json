@@ -1,0 +1,47 @@
+{
+  "name": "CitaYa · Errores",
+  "nodes": [
+    {
+      "id": "be7d325e-e749-5f75-81f3-4f36c51886c2",
+      "name": "Error en un flujo",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "5006e3c1-30fc-5c35-9e36-0fdbfbc1c9f8",
+      "name": "Avisar al responsable",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Flujo de errores de n8n. «CitaYa · Errores» se asigna como Error workflow de los flujos de CitaYa.\n// Cuando una ejecución falla, avisa al responsable (CITAYA_ADMIN_WHATSAPP) por WhatsApp con el flujo, el nodo y un\n// resumen corto del error. La clave por ejecución evita avisos repetidos. No incluye datos de los mensajes procesados.\nasync function citayaErrorAlert({ error, env, http, crypto }) {\n  if (!env.CITAYA_URL || !env.CITAYA_N8N_SECRET) return { result: 'not_configured' };\n  const admin = String(env.CITAYA_ADMIN_WHATSAPP || '').replace(/\\D/g, '');\n  if (!admin) return { result: 'sin_responsable' };\n  const execution = (error && error.execution) || {};\n  const trigger = (error && error.trigger) || {};\n  const workflow = (error && error.workflow && error.workflow.name) || 'Flujo sin nombre';\n  const node = execution.lastNodeExecuted || (trigger.error && trigger.error.node && trigger.error.node.name) || '';\n  const detail = String((execution.error && execution.error.message) || (trigger.error && trigger.error.message) || 'Error sin descripción')\n    .replace(/\\d{7,}/g, '…').replace(/\\s+/g, ' ').trim().slice(0, 160);\n  const text = '🚨 Falló el flujo *' + workflow + '* en n8n' + (node ? ' (nodo «' + node + '»)' : '') + '.\\n' + detail\n    + (execution.url ? '\\n' + execution.url : '');\n  const key = 'n8n-error:' + (execution.id || (trigger.error && trigger.error.timestamp) || Date.now());\n  const body = JSON.stringify({ action: 'message.send', ts: Math.floor(Date.now() / 1000), phone: admin, text, key });\n  const signature = 'sha256=' + crypto.createHmac('sha256', env.CITAYA_N8N_SECRET).update(body).digest('hex');\n  try {\n    const response = await http({ method: 'POST', url: env.CITAYA_URL.replace(/\\/$/, '') + '/n8n.php', body,\n      headers: { 'Content-Type': 'application/json', 'X-CitaYa-Signature': signature } });\n    const parsed = typeof response === 'string' ? JSON.parse(response) : response;\n    return { result: 'aviso: ' + (parsed.status || parsed.error || 'error') };\n  } catch { return { result: 'aviso: unreachable' }; }\n}\n\n\nconst http = async options => {\n  const response = await this.helpers.httpRequest(Object.assign({}, options, { returnFullResponse: true, ignoreHttpStatusErrors: true, json: false }));\n  const body = typeof response.body === 'string' ? response.body : JSON.stringify(response.body);\n  if (response.statusCode >= 400) { const error = new Error('HTTP ' + response.statusCode); error.response = { body }; throw error; }\n  return body;\n};\nconst crypto = require('crypto');\nreturn [{ json: await citayaErrorAlert({ error: $input.first().json, env: { CITAYA_URL: $env.CITAYA_URL, CITAYA_N8N_SECRET: $env.CITAYA_N8N_SECRET, CITAYA_WA_SECRET: $env.CITAYA_WA_SECRET, CITAYA_ADMIN_WHATSAPP: $env.CITAYA_ADMIN_WHATSAPP }, http, crypto }) }];"
+      }
+    }
+  ],
+  "connections": {
+    "Error en un flujo": {
+      "main": [
+        [
+          {
+            "node": "Avisar al responsable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}
