@@ -88,7 +88,16 @@ try {
         "SOLICITUD AYUDAS DIAGNÓSTICAS EXTRAMURAL\nIMAGENES DX EXTRAMURAL:\n",
         "SOLICITUD INTERCONSULTAS EXTRAMURAL\nINTERCONSULTAS EXTRAMURAL:\n",
     ]);
-    check($extramural === [['type' => 'formula', 'page' => 2], ['type' => 'laboratorio', 'page' => 3], ['type' => 'imagenes', 'page' => 4], ['type' => 'remision', 'page' => 5]], 'Reconoce el formato «SOLICITUD … EXTRAMURAL» y no cuenta los campos vacíos del resumen');
+    check(array_map(fn($o) => [$o['type'], $o['page']], $extramural) === [['formula', 2], ['laboratorio', 3], ['imagenes', 4], ['remision', 5]], 'Reconoce el formato «SOLICITUD … EXTRAMURAL» y no cuenta los campos vacíos del resumen');
+    $imaging = App\MedicalOrders::details('imagenes', "SOLICITUD AYUDAS DIAGNOSTICAS EXTRAMURAL\nPLAN DE MANEJO\nCódigo Servicio Cantidad\nIMAGENES DX EXTRAMURAL:\nLateralidad Fecha sugerida\n10/07/2026 9:51:00 a. m.No aplica\t1ECOGRAFIA PELVICA GINECOLOGICA TRANSVAGINAL. 881401              \nIMPRESIÓN DIAGNOSTICA\nDIAGNOSTICO DE PRUEBA\nProfesional:\n180 Vigencia:\n");
+    check($imaging === ['items' => ['*Ecografia pelvica ginecologica transvaginal*'], 'when' => null, 'validity' => 180], 'Lee el estudio ordenado y la vigencia de la orden de imágenes');
+    $labs = App\MedicalOrders::details('laboratorio', "PLAN DE MANEJO\nCódigo Servicio Cantidad\nLABORATORIOS EXTRAMURAL:\n901107              COLORACION GRAM Y LECTURA PARA CUALQUIER MUESTRA. \t1\nDatos Clínicos Relevantes: PRUEBA\n901305              EXAMEN DIRECTO PARA HONGOS (KOH). \t1\nIMPRESIÓN DIAGNOSTICA\n");
+    check($labs['items'] === ['*Coloracion gram y lectura para cualquier muestra*', '*Examen directo para hongos (koh)*'], 'Lee cada examen de la orden de laboratorio');
+    $referral = App\MedicalOrders::details('remision', "PLAN DE MANEJO\nINTERCONSULTAS EXTRAMURAL:\nEspecialidad\nObservaciones:\nCONSULTA DE PRIMERA VEZ POR ESPECIALISTA \nEN CIRUGIA VASCULAR. \n1890201              \nCIRUGIA VASCULAR\nCONSULTA DE CONTROL O DE SEGUIMIENTO POR ESPECIALISTA EN DERMATOLOGIA. \n1890302\n1 MES Y MEDIO\nDERMATOLOGIA\nIMPRESIÓN DIAGNOSTICA\n");
+    check($referral['items'] === ['*Consulta de primera vez por especialista en cirugia vascular*', '*Consulta de control o de seguimiento por especialista en dermatologia*'] && $referral['when'] === '1 mes y medio', 'Lee cada interconsulta (sin mezclar especialidades) y cuándo pedir la cita');
+    $formula = App\MedicalOrders::details('formula', "PLAN DE MANEJO\nMEDICAMENTOS EXTRAMURAL:\nCantidadMedicamento DuraciónDCI En letras\nACETAMINOFEN 500 mg Tableta Administrar 500 mg cada 8 Hora(s) de forma \nORAL por 5 Dia(s)\n5 Días( Quince )\nIndicaciones:\tDESPUES DE COMER\nJustificación clínica PBS:\nIMPRESIÓN DIAGNÓSTICA\n");
+    check($formula['items'] === ['*Acetaminofen 500 mg tableta*: 500 mg cada 8 hora(s) de forma oral por 5 dia(s) (despues de comer)'], 'Lee cada medicamento con su dosis, duración e indicaciones');
+    check(App\MedicalOrders::details('imagenes', "Texto sin formato reconocible") === ['items' => [], 'when' => null, 'validity' => null], 'Sin formato reconocible no inventa detalles');
     check(array_column(App\MedicalOrders::detect(["Hoja 1", "FÓRMULA MÉDICA\nAcetaminofén", "Orden de imágenes diagnósticas:\nRx"]), 'type') === ['formula', 'imagenes'], 'Detecta fórmula e imágenes por título, con tildes y mayúsculas');
 
     // --- Historia cargada después: la solicitud pendiente se envía sola ---

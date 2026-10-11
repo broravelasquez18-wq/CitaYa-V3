@@ -383,10 +383,10 @@ final class WhatsApp
     {
         $position = [];
         foreach ($files as $index => $file) $position[(int)$file['id']] = $index + 1;
-        $orders = $this->app->db->all('SELECT file_id,order_type,page FROM clinical_orders WHERE file_id IN (' . implode(',', array_keys($position)) . ') ORDER BY file_id,page,id');
+        $orders = $this->app->db->all('SELECT file_id,order_type,page,details FROM clinical_orders WHERE file_id IN (' . implode(',', array_keys($position)) . ') ORDER BY file_id,page,id');
         if (!$orders) return [];
         $pages = [];
-        foreach ($orders as $order) $pages[$order['file_id'] . ':' . $order['page']][$order['order_type']] = true;
+        foreach ($orders as $order) $pages[$order['file_id'] . ':' . $order['page']][$order['order_type']] = json_decode((string)$order['details'], true) ?: [];
         $count = count($orders);
         $messages = [['type' => 'text', 'body' => 'En tu historia vienen *' . $count . '* ' . ($count === 1 ? 'orden' : 'órdenes') . ' de tu especialista. '
             . "Te enviamos cada una con lo que debes hacer.\n\nEstas indicaciones son administrativas: sigue siempre lo que te indicó tu médico y, si tienes dudas, consulta en tu EPS."]];
@@ -395,14 +395,26 @@ final class WhatsApp
             [$fileId, $page] = array_map('intval', explode(':', (string)$key));
             $where = count($files) > 1 ? 'Documento ' . $position[$fileId] . ', página ' . $page : 'Página ' . $page;
             $parts = [];
-            foreach (array_keys($types) as $type) {
+            foreach ($types as $type => $details) {
                 $guide = isset(MessageTemplates::DEFINITIONS['order_' . $type]) ? $this->templates()->render('order_' . $type) : MedicalOrders::guidance($type);
-                $parts[] = '📄 *' . MedicalOrders::label($type) . "*\n" . $guide;
+                $parts[] = '📄 *' . MedicalOrders::label($type) . "*\n" . $this->orderDetail($type, $details) . $guide;
             }
             $caption = mb_substr(implode("\n\n", $parts) . "\n\n_" . $where . ' de tu historia_', 0, 1000);
             $messages[] = ['type' => 'image', 'path' => $filesById[$fileId]['path'], 'page' => $page, 'caption' => $caption];
         }
         return $messages;
+    }
+
+    /** Lo que se ordenó (leído del PDF): estudios, exámenes, consultas o medicamentos, cuándo pedir la cita y la vigencia. */
+    private function orderDetail(string $type, array $details): string
+    {
+        $items = array_values(array_filter((array)($details['items'] ?? []), 'is_string'));
+        $text = '';
+        if (count($items) === 1) $text .= ($type === 'formula' ? 'Te formularon: ' : 'Te ordenaron: ') . $items[0] . "\n";
+        elseif ($items) $text .= ($type === 'formula' ? 'Te formularon:' : 'Te ordenaron:') . "\n• " . implode("\n• ", $items) . "\n";
+        if (!empty($details['when'])) $text .= 'Pide la cita para dentro de *' . $details['when'] . "*.\n";
+        if (!empty($details['validity'])) $text .= 'La orden tiene vigencia de *' . (int)$details['validity'] . " días*.\n";
+        return $text === '' ? '' : $text . "\n";
     }
 
     private function deliver(string $phone, array $message): void

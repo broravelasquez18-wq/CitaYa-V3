@@ -548,3 +548,13 @@ Ruta de regreso: con `WA_WEBHOOK_URL` apuntando al webhook de CitaYa (`/whatsapp
 - `MedicalOrders` reconoce ahora los títulos «SOLICITUD …» (medicamentos → fórmula, laboratorios, ayudas diagnósticas/imágenes, interconsultas → remisión, procedimientos, terapias). Los campos de la página de resumen («LABORATORIOS EXTRAMURAL:») no cuentan, porque pueden ir vacíos.
 - Verificado con 5 historias locales: detecta solo las páginas de órdenes (p. ej., fórmula p. 5 e interconsulta p. 6). Prueba nueva en `tests/whatsapp.php` (46).
 - Para las historias ya cargadas: `php bin/detect-orders.php` (procesa los archivos sin órdenes registradas).
+
+**Indicaciones precisas por orden.** A pedido del titular, el mensaje dice exactamente qué se ordenó (p. ej., «Te ordenaron: *Ecografía pélvica ginecológica transvaginal*» y pedir la cita).
+- `MedicalOrders::details` lee la página de la orden (de «PLAN DE MANEJO» a «IMPRESIÓN DIAGNÓSTICA»):
+  - estudios, exámenes e interconsultas: nombre del servicio con su código CUPS, antes o después según cómo se extrae el texto;
+  - medicamentos: nombre, dosis, frecuencia, vía, duración e indicaciones;
+  - cuándo pedir la cita («1 MES Y MEDIO») y la vigencia («Vigencia: 180»).
+  Si el formato no se reconoce, no inventa nada.
+- Se guarda en `clinical_orders.details` (JSON; migración en `bin/setup.php`). `bin/detect-orders.php --refresh` vuelve a leer todos los PDF ya cargados.
+- El texto de cada imagen queda así: título de la orden → «Te ordenaron / Te formularon» con la lista → cuándo pedir la cita → vigencia → pasos de la plantilla editable.
+- Validación: `tests/whatsapp.php` 51 (6 nuevas, con textos del formato real sin datos de pacientes). Vista previa con 2 historias locales: laboratorio (3 exámenes), ecografía con vigencia de 180 días, interconsulta para dentro de 1 mes y medio, y fórmula con 3 medicamentos. Las demás suites siguen correctas.

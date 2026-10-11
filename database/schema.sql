@@ -217,6 +217,7 @@ CREATE TABLE IF NOT EXISTS clinical_orders (
  file_id BIGINT UNSIGNED NOT NULL,
  order_type VARCHAR(20) NOT NULL,
  page INT NOT NULL,
+ details TEXT NULL,
  FOREIGN KEY (file_id) REFERENCES clinical_files(id),
  INDEX order_file (file_id)
 ) ENGINE=InnoDB;

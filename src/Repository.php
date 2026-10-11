@@ -88,7 +88,7 @@ final class Repository
                     $paths[]=$target;
                     if (!hash_equals($file['sha256'],hash_file('sha256',$target))) throw new \DomainException('No se pudo conservar la integridad del PDF.');
                     $fileId=$db->insert('clinical_files',['package_id'=>$packageId,'storage_name'=>$name,'original_name'=>mb_substr(basename($file['name']),0,190),'category'=>'historia_completa','sort_order'=>$i+1,'size_bytes'=>filesize($target),'sha256'=>$file['sha256'],'page_count'=>$file['page_count']]);
-                    foreach($file['orders'] as $order) $db->insert('clinical_orders',['file_id'=>$fileId,'order_type'=>$order['type'],'page'=>$order['page']]);
+                    foreach($file['orders'] as $order) $db->insert('clinical_orders',['file_id'=>$fileId,'order_type'=>$order['type'],'page'=>$order['page'],'details'=>json_encode($order['details'] ?? [],JSON_UNESCAPED_UNICODE)]);
                 }
                 $db->run("UPDATE packages SET status='withdrawn' WHERE encounter_id=? AND status='available'",[$encounterId]);
                 $db->run("UPDATE packages SET status='available',published_at=? WHERE id=?",[$this->app->now(),$packageId]);
