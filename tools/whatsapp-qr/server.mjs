@@ -193,6 +193,8 @@ const server = http.createServer((req, res) => {
     return;
   }
   // Estado para el monitoreo de CitaYa (por la red interna): sin QR ni datos de mensajes.
+  // Vinculación desde el panel de CitaYa (solo administradores; por la red interna): QR vigente y código.
+  if (req.method === 'GET' && req.url === '/link') { res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify({ connected: state.connected, status: state.status, qr: state.qr, pairingCode: state.pairingCode || null })); }
   if (req.method === 'GET' && req.url === '/health') { res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify({ connected: state.connected, pending: inbox.size })); }
   if (!localHost) { res.writeHead(403); return res.end(); }
   if (req.method !== 'GET') { res.writeHead(405); return res.end(); }

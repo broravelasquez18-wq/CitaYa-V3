@@ -177,7 +177,7 @@ if ($page === 'delivery' && ($_GET['fragment'] ?? '') === '1' && empty($_SESSION
     header('Content-Type: text/plain; charset=UTF-8');
     exit('La sesión administrativa venció. Inicia sesión nuevamente.');
 }
-if (in_array($page, ['admin','inbox','mail','deliveries','delivery','history','analytics','templates'], true)) requireAdmin();
+if (in_array($page, ['admin','inbox','mail','deliveries','delivery','history','analytics','templates','whatsapp'], true)) requireAdmin();
 $pendingCount = !empty($_SESSION['admin_id']) ? (new App\AdminDeliveries($app->db))->pendingCount() : 0;
 $analytics = null;
 if ($page === 'analytics') {

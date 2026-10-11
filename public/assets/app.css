@@ -190,3 +190,4 @@ td small,.respond-form small{display:block}
 .template-card textarea{width:100%;font:inherit;font-weight:400;padding:10px;border:1px solid var(--line);border-radius:10px;resize:vertical;margin:6px 0 10px}
 .template-preview{white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px;font:inherit;margin:8px 0 0}
 .wa-confirm{align-items:flex-start}.wa-confirm>div{flex:1}.wa-confirm p{margin:0 0 10px}.wa-code{font-size:22px;font-weight:700;letter-spacing:3px;color:var(--teal);background:#fff;border:1px dashed #9fd3d5;border-radius:10px;padding:10px 14px;display:inline-block}.wa-confirm .button{margin:4px 0 8px}.field-help{margin:-12px 0 18px}
+.wa-link .wa-qr{display:block;margin:18px 0;border:8px solid #fff;border-radius:12px;max-width:100%;height:auto}.wa-link .wa-steps{padding-left:18px;font-size:13px}.wa-link .wa-pair{font-size:20px;letter-spacing:3px;color:var(--teal)}
