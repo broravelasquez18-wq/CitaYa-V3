@@ -470,7 +470,7 @@ Ruta de regreso: con `WA_WEBHOOK_URL` apuntando al webhook de CitaYa (`/whatsapp
 **Flujo de errores «CitaYa · Errores»** (`n8n/citaya-errors.js`, `n8n/citaya-errores.json`).
 - Error Trigger → aviso al responsable por WhatsApp (`message.send`, firmado) con el flujo, el nodo, el error resumido (máx. 160 caracteres, sin números de 7 o más dígitos) y el enlace a la ejecución. Clave por ejecución, así que no se repite.
 - Publicado y asignado como *Error workflow* de Bot WhatsApp, Eventos, Recuperación de envíos y Seguimiento.
-- Validación: `node --test n8n/*.test.js` 28 pruebas (5 nuevas). Prueba real con un flujo temporal que falla a propósito, borrado después.
+- Validación: `node --test n8n/*.test.js` 28 pruebas (5 nuevas). Prueba real con un flujo temporal que falla a propósito (borrado después): el aviso llegó al WhatsApp del responsable.
 
 **Pruebas en el VPS (datos ficticios).**
 - Saludo → menú: correcto.
