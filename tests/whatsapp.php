@@ -97,6 +97,13 @@ try {
     check($referral['items'] === ['*Consulta de primera vez por especialista en cirugia vascular*', '*Consulta de control o de seguimiento por especialista en dermatologia*'] && $referral['when'] === '1 mes y medio', 'Lee cada interconsulta (sin mezclar especialidades) y cuándo pedir la cita');
     $formula = App\MedicalOrders::details('formula', "PLAN DE MANEJO\nMEDICAMENTOS EXTRAMURAL:\nCantidadMedicamento DuraciónDCI En letras\nACETAMINOFEN 500 mg Tableta Administrar 500 mg cada 8 Hora(s) de forma \nORAL por 5 Dia(s)\n5 Días( Quince )\nIndicaciones:\tDESPUES DE COMER\nJustificación clínica PBS:\nIMPRESIÓN DIAGNÓSTICA\n");
     check($formula['items'] === ['*Acetaminofen 500 mg tableta*: 500 mg cada 8 hora(s) de forma oral por 5 dia(s) (despues de comer)'], 'Lee cada medicamento con su dosis, duración e indicaciones');
+    $plain = new ReflectionMethod($bot, 'orderText');
+    $echo = $plain->invoke($bot, 'imagenes', ['items' => ['*Ecografia pelvica ginecologica transvaginal*'], 'when' => null, 'validity' => 180]);
+    check($echo === "🩻 *Ecografia pelvica ginecologica transvaginal*\n👉 Pide una cita en tu EPS para hacerte este examen.\n⏳ Tienes 180 días para usar esta orden.", 'Una orden de imágenes se explica en tres líneas: qué es, qué hacer y vigencia');
+    $visit = $plain->invoke($bot, 'remision', ['items' => ['*Consulta de control o de seguimiento por especialista en dermatologia*'], 'when' => '1 mes y medio', 'validity' => null]);
+    check(str_starts_with($visit, '🩺 *Cita de control con dermatologia*') && str_contains($visit, 'para dentro de *1 mes y medio*'), 'La interconsulta se dice como «Cita de control con …» y para cuándo');
+    $meds = $plain->invoke($bot, 'formula', ['items' => ['*Acetaminofen 500 mg tableta*: 500 mg cada 8 hora(s) de forma oral por 5 dia(s)'], 'when' => null, 'validity' => null]);
+    check(str_contains($meds, '*Acetaminofen 500 mg tableta*: 500 mg cada 8 horas, por boca, durante 5 días'), 'La dosis se escribe en palabras sencillas');
     check(App\MedicalOrders::details('imagenes', "Texto sin formato reconocible") === ['items' => [], 'when' => null, 'validity' => null], 'Sin formato reconocible no inventa detalles');
     check(array_column(App\MedicalOrders::detect(["Hoja 1", "FÓRMULA MÉDICA\nAcetaminofén", "Orden de imágenes diagnósticas:\nRx"]), 'type') === ['formula', 'imagenes'], 'Detecta fórmula e imágenes por título, con tildes y mayúsculas');
 
@@ -126,8 +133,8 @@ try {
     $preview = json_decode(file_get_contents($config['storage_path'] . '/wa-outbox/' . $sent['id'] . '.json'), true);
     $types = array_column($preview['messages'], 'type');
     check($sent['status'] === 'simulated' && $types === ['text', 'document', 'text', 'image'], 'Envía historia, guía de órdenes y una imagen por página con órdenes');
-    check(str_contains($preview['messages'][3]['caption'], '*Fórmula médica*') && str_contains($preview['messages'][3]['caption'], '*Orden de laboratorio*') && str_contains($preview['messages'][3]['caption'], 'Página 1 de tu historia'), 'La imagen de la página lleva el título de cada orden y dónde está');
-    check(str_contains($preview['messages'][2]['body'], '*2* órdenes') && str_contains($preview['messages'][3]['caption'], 'Reclama los medicamentos') && str_contains($preview['messages'][3]['caption'], 'farmacia') && str_contains($preview['messages'][3]['caption'], 'ayuno'), 'Cada orden llega con lo que debe hacer el paciente (fórmula: reclamar en la farmacia; laboratorio: cita o ayuno)');
+    check(str_contains($preview['messages'][3]['caption'], '💊 *Medicamentos*') && str_contains($preview['messages'][3]['caption'], '🧪 *Exámenes de laboratorio*'), 'La imagen de la página lleva cada orden con un título sencillo');
+    check(str_contains($preview['messages'][2]['body'], 'lo que debes hacer') && str_contains($preview['messages'][3]['caption'], 'Reclama tus medicamentos en la farmacia') && str_contains($preview['messages'][3]['caption'], 'ayunas') && mb_strlen($preview['messages'][3]['caption']) < 400, 'Cada orden dice en una línea qué hacer (fórmula: farmacia; laboratorio: cita y ayunas)');
     $templates = new App\MessageTemplates($app);
     $templates->save('order_formula', 'Reclama tus medicamentos en la farmacia Central.', 1);
     $ordersAgain = (new ReflectionMethod($bot, 'orderMessages'))->invoke($bot, $app->packageFiles($uploaded));

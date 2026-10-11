@@ -558,3 +558,11 @@ Ruta de regreso: con `WA_WEBHOOK_URL` apuntando al webhook de CitaYa (`/whatsapp
 - Se guarda en `clinical_orders.details` (JSON; migración en `bin/setup.php`). `bin/detect-orders.php --refresh` vuelve a leer todos los PDF ya cargados.
 - El texto de cada imagen queda así: título de la orden → «Te ordenaron / Te formularon» con la lista → cuándo pedir la cita → vigencia → pasos de la plantilla editable.
 - Validación: `tests/whatsapp.php` 51 (6 nuevas, con textos del formato real sin datos de pacientes). Vista previa con 2 historias locales: laboratorio (3 exámenes), ecografía con vigencia de 180 días, interconsulta para dentro de 1 mes y medio, y fórmula con 3 medicamentos. Las demás suites siguen correctas.
+
+**Mensajes de órdenes más sencillos.** El titular pidió respuestas mucho más fáciles de entender.
+- Cada orden va en pocas líneas: icono y qué es (en palabras simples), una sola acción («👉 Pide una cita en tu EPS para hacerte este examen»), para cuándo pedir la cita y la vigencia («⏳ Tienes 180 días para usar esta orden»).
+- Interconsultas: «Cita de control con dermatología» en vez de «Consulta de control o de seguimiento por especialista en…». Varias órdenes del mismo tipo se agrupan bajo «Exámenes de laboratorio», «Citas con especialistas», etc.
+- Medicamentos: dosis en palabras simples («cada día», «por boca», «sobre la piel», «durante 90 días»).
+- Aviso inicial de una línea. Se quitaron la referencia a la página y los pasos numerados largos.
+- Las plantillas «Orden: …» quedaron como una sola línea de acción (editables).
+- Validación: `tests/whatsapp.php` 54 (3 nuevas: formato de imágenes, interconsulta y dosis).

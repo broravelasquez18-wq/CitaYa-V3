@@ -387,34 +387,52 @@ final class WhatsApp
         if (!$orders) return [];
         $pages = [];
         foreach ($orders as $order) $pages[$order['file_id'] . ':' . $order['page']][$order['order_type']] = json_decode((string)$order['details'], true) ?: [];
-        $count = count($orders);
-        $messages = [['type' => 'text', 'body' => 'En tu historia vienen *' . $count . '* ' . ($count === 1 ? 'orden' : 'órdenes') . ' de tu especialista. '
-            . "Te enviamos cada una con lo que debes hacer.\n\nEstas indicaciones son administrativas: sigue siempre lo que te indicó tu médico y, si tienes dudas, consulta en tu EPS."]];
+        $messages = [['type' => 'text', 'body' => "Estas son tus órdenes médicas y lo que debes hacer con cada una 👇\n_Sigue siempre las indicaciones de tu médico._"]];
         $filesById = array_column($files, null, 'id');
         foreach (array_slice($pages, 0, 8, true) as $key => $types) {
             [$fileId, $page] = array_map('intval', explode(':', (string)$key));
-            $where = count($files) > 1 ? 'Documento ' . $position[$fileId] . ', página ' . $page : 'Página ' . $page;
             $parts = [];
-            foreach ($types as $type => $details) {
-                $guide = isset(MessageTemplates::DEFINITIONS['order_' . $type]) ? $this->templates()->render('order_' . $type) : MedicalOrders::guidance($type);
-                $parts[] = '📄 *' . MedicalOrders::label($type) . "*\n" . $this->orderDetail($type, $details) . $guide;
-            }
-            $caption = mb_substr(implode("\n\n", $parts) . "\n\n_" . $where . ' de tu historia_', 0, 1000);
-            $messages[] = ['type' => 'image', 'path' => $filesById[$fileId]['path'], 'page' => $page, 'caption' => $caption];
+            foreach ($types as $type => $details) $parts[] = $this->orderText($type, $details);
+            $messages[] = ['type' => 'image', 'path' => $filesById[$fileId]['path'], 'page' => $page, 'caption' => mb_substr(implode("\n\n", $parts), 0, 1000)];
         }
         return $messages;
     }
 
-    /** Lo que se ordenó (leído del PDF): estudios, exámenes, consultas o medicamentos, cuándo pedir la cita y la vigencia. */
-    private function orderDetail(string $type, array $details): string
+    private const ORDER_ICONS = ['formula' => '💊', 'laboratorio' => '🧪', 'imagenes' => '🩻', 'procedimiento' => '🏥', 'terapia' => '🤸', 'remision' => '🩺', 'incapacidad' => '📝'];
+    /** Título cuando la orden trae varios elementos (o ninguno leído del PDF). */
+    private const ORDER_GROUPS = ['formula' => 'Medicamentos', 'laboratorio' => 'Exámenes de laboratorio', 'imagenes' => 'Exámenes de imágenes', 'procedimiento' => 'Procedimientos', 'terapia' => 'Terapias', 'remision' => 'Citas con especialistas', 'incapacidad' => 'Incapacidad médica'];
+
+    /**
+     * Texto corto de una orden: qué es (lo leído del PDF, en palabras sencillas), qué hacer (plantilla «Orden: …»),
+     * para cuándo pedir la cita y la vigencia.
+     */
+    private function orderText(string $type, array $details): string
     {
-        $items = array_values(array_filter((array)($details['items'] ?? []), 'is_string'));
-        $text = '';
-        if (count($items) === 1) $text .= ($type === 'formula' ? 'Te formularon: ' : 'Te ordenaron: ') . $items[0] . "\n";
-        elseif ($items) $text .= ($type === 'formula' ? 'Te formularon:' : 'Te ordenaron:') . "\n• " . implode("\n• ", $items) . "\n";
-        if (!empty($details['when'])) $text .= 'Pide la cita para dentro de *' . $details['when'] . "*.\n";
-        if (!empty($details['validity'])) $text .= 'La orden tiene vigencia de *' . (int)$details['validity'] . " días*.\n";
-        return $text === '' ? '' : $text . "\n";
+        $items = array_map(fn($item) => $this->plainOrderItem($type, $item), array_values(array_filter((array)($details['items'] ?? []), 'is_string')));
+        $icon = self::ORDER_ICONS[$type] ?? '📄';
+        $lines = count($items) === 1 && $type !== 'formula'
+            ? [$icon . ' *' . $items[0] . '*']
+            : array_merge([$icon . ' *' . (self::ORDER_GROUPS[$type] ?? MedicalOrders::label($type)) . '*'], array_map(fn($item) => '• ' . $item, $items));
+        $lines[] = isset(MessageTemplates::DEFINITIONS['order_' . $type]) ? $this->templates()->render('order_' . $type) : MedicalOrders::guidance($type);
+        if (!empty($details['when'])) $lines[] = '📅 Pídela para dentro de *' . $details['when'] . '*.';
+        if (!empty($details['validity'])) $lines[] = '⏳ Tienes ' . (int)$details['validity'] . ' días para usar esta orden.';
+        return implode("\n", $lines);
+    }
+
+    /** «Consulta de control o de seguimiento por especialista en dermatologia» → «Cita de control con dermatologia»; dosis en palabras simples. */
+    private function plainOrderItem(string $type, string $item): string
+    {
+        $item = trim(str_replace('*', '', $item));
+        if ($type === 'remision' && preg_match('/^consulta de (primera vez|control(?: o de seguimiento)?) por (?:especialista en )?(.+)$/iu', $item, $m)) {
+            return (str_starts_with(mb_strtolower($m[1]), 'primera') ? 'Cita con ' : 'Cita de control con ') . $m[2];
+        }
+        if ($type === 'formula') {
+            $item = preg_replace(['/\bdia\(s\)/u', '/\bhora\(s\)/u', '/\bsemana\(s\)/u', '/\bmes\(es\)/u', '/\s*de forma oral\b/u', '/\s*de forma (?:dermica|topica)\b/u', '/\b1 a\. ?t\./u', '/\s+por (\d+)/u'],
+                ['días', 'horas', 'semanas', 'meses', ', por boca', ', sobre la piel', '1 aplicación', ', durante $1'], $item);
+            $item = preg_replace(['/\bcada 1 días\b/u', '/\bcada 1 horas\b/u', '/\bcada 1 semanas\b/u'], ['cada día', 'cada hora', 'cada semana'], $item);
+            if (preg_match('/^([^:]+):\s*(.+)$/u', $item, $m)) return '*' . trim($m[1]) . '*: ' . $m[2];
+        }
+        return $item;
     }
 
     private function deliver(string $phone, array $message): void
