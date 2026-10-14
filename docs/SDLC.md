@@ -936,3 +936,25 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
 **Ajuste (2026-10-14, decisión del titular).** Por ahora se permite usar la cédula o el correo como contraseña manual: se quitó esa regla de `Staff::checkPassword` y del texto de ayuda del modal. Se mantienen el mínimo de 10 caracteres y la confirmación. La prueba correspondiente ahora comprueba que la cédula se acepta (`support` 48 en verde).
 
 **Ajuste (2026-10-14, decisión del titular).** El mínimo de la contraseña manual baja de 10 a 6 caracteres para que sirvan cédulas cortas (por ejemplo, de 8 dígitos). Cambian `Staff::checkPassword`, el `minlength` y el texto de ayuda del modal. Nueva comprobación: una cédula de 8 dígitos se acepta. `support` 49 y `run` 158 en verde.
+
+## IP real del cliente detrás de Traefik (límites de intentos)
+
+**Problema.**
+- En producción (Dokploy + Traefik), Apache ve todas las peticiones con la IP interna del proxy, `10.0.1.48`.
+- Por eso los límites por IP los compartían todos los usuarios:
+  - `admin-login:` permitía 10 intentos cada 15 minutos para todo el personal junto;
+  - `request-ip:` permitía 20 solicitudes por hora para todos los pacientes juntos.
+
+**Diseño.**
+- Nueva clase `App\ClientIp::resolve($_SERVER)`.
+- Si `REMOTE_ADDR` es pública, se usa tal cual y se ignora `X-Forwarded-For` (en una conexión directa, el cliente podría falsificarlo).
+- Si `REMOTE_ADDR` es privada o reservada y llega `X-Forwarded-For`, se toma la última IP válida de la lista. Traefik (sin `forwardedHeaders.insecure`) descarta el encabezado que manda el cliente y pone el suyo con la IP real al final.
+- Sin `X-Forwarded-For`, o si no trae ninguna IP válida, se conserva `REMOTE_ADDR`. En XAMPP local (127.0.0.1, sin proxy) no cambia nada.
+
+**Implementación.** Se agregó `src/ClientIp.php`. En `public/index.php`, `$ip` ahora sale de `ClientIp::resolve`.
+
+**Validación.**
+- Nueva prueba `tests/client-ip.php`, 11 en verde: IP pública directa (también con XFF), proxy privado con XFF, varias IP, IPv6, entrada final inválida, XFF inválido o vacío, sin XFF, local y sin `REMOTE_ADDR`.
+- `run` 158, `requests-admin` 46, `resend-ui` 19 y `support` 49 en verde.
+
+**Pendiente (despliegue).** Tras el push a `main`, confirmar en los registros del contenedor que los límites ya se cuentan por cliente.

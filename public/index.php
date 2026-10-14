@@ -56,7 +56,8 @@ $page = (string) ($_GET['page'] ?? 'home');
 $error = null;
 // Mensaje de la acción anterior, mostrado como toast. Tono: success (por defecto), info o error.
 $flash = $_SESSION['flash'] ?? null; $flashTone = $_SESSION['flash_tone'] ?? null; unset($_SESSION['flash'], $_SESSION['flash_tone']);
-$ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+// Detrás de Traefik REMOTE_ADDR es la IP del proxy; los límites usan la del cliente.
+$ip = App\ClientIp::resolve($_SERVER);
 // Enlace personal enviado por el bot de WhatsApp. Viaja en el formulario como campo oculto.
 $whatsappToken = (string) ($_POST['wa'] ?? $_GET['wa'] ?? '');
 $whatsappLink = $whatsappToken === '' ? null : $app->whatsapp()->findLink($whatsappToken);
