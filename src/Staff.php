@@ -111,6 +111,27 @@ final class Staff
         });
     }
 
+    /** Contraseña escrita por el administrador al editar la cuenta. Se valida antes de guardar los demás datos. */
+    public static function checkPassword(string $password, string $confirm, string $document = '', string $email = ''): void
+    {
+        if (trim($password) === '') throw new \DomainException('Escribe la contraseña nueva.');
+        if (mb_strlen($password) < 10) throw new \DomainException('La contraseña debe tener al menos 10 caracteres.');
+        if (strlen($password) > 72) throw new \DomainException('La contraseña es demasiado larga (máximo 72 caracteres).');
+        if (!hash_equals($password, $confirm)) throw new \DomainException('La confirmación no coincide con la contraseña nueva.');
+        $plain = mb_strtolower($password);
+        if (($document !== '' && $plain === mb_strtolower(self::document($document))) || ($email !== '' && $plain === mb_strtolower(trim($email)))) {
+            throw new \DomainException('La contraseña no puede ser la cédula ni el correo de la cuenta.');
+        }
+    }
+
+    public function setPassword(int $id, string $password, string $confirm): void
+    {
+        $staff = $this->require($id);
+        self::checkPassword($password, $confirm, (string)($staff['document_number'] ?? ''), (string)$staff['email']);
+        $this->app->db->run('UPDATE admins SET password_hash=? WHERE id=?', [password_hash($password, PASSWORD_DEFAULT), $id]);
+        $this->app->event(null, 'staff_password_set', (string)$id);
+    }
+
     /** Nueva contraseña aleatoria (se muestra una sola vez). */
     public function resetPassword(int $id): string
     {

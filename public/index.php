@@ -155,9 +155,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 go('employees');
             case 'staff-update':
                 requireAdmin();
-                (new App\Staff($app))->update((int)($_POST['staff_id'] ?? 0), (int)$_SESSION['admin_id'], (string)($_POST['document_number'] ?? ''), (string)($_POST['name'] ?? ''), (string)($_POST['email'] ?? ''), (string)($_POST['role'] ?? ''));
+                // Contraseña manual opcional: se valida antes de tocar los datos para no dejar la edición a medias.
+                $staffId = (int)($_POST['staff_id'] ?? 0);
+                $manualPassword = (string)($_POST['new_password'] ?? '');
+                $manualConfirm = (string)($_POST['new_password_confirm'] ?? '');
+                if ($manualPassword !== '' || $manualConfirm !== '') App\Staff::checkPassword($manualPassword, $manualConfirm, (string)($_POST['document_number'] ?? ''), (string)($_POST['email'] ?? ''));
+                $staffService = new App\Staff($app);
+                $staffService->update($staffId, (int)$_SESSION['admin_id'], (string)($_POST['document_number'] ?? ''), (string)($_POST['name'] ?? ''), (string)($_POST['email'] ?? ''), (string)($_POST['role'] ?? ''));
+                if ($manualPassword !== '') $staffService->setPassword($staffId, $manualPassword, $manualConfirm);
                 $_SESSION['csrf'] = bin2hex(random_bytes(32));
-                $_SESSION['flash'] = 'Datos actualizados.';
+                $_SESSION['flash'] = $manualPassword !== '' ? 'Datos actualizados. La contraseña nueva ya funciona; entrégasela a la persona.' : 'Datos actualizados.';
                 go('employees');
             case 'staff-toggle':
                 requireAdmin();

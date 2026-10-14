@@ -1,7 +1,7 @@
 <?php require_once __DIR__ . '/icons.php'; ?>
 <?php
 // Gestión de empleados (solo administradores, SCRUM-46): CRUD por cédula, contraseña, activación y avance.
-// Crear va en drawer; editar es un formulario corto en modal; la contraseña nueva se avisa en un modal de una sola vez.
+// Crear va en drawer; editar es un formulario corto en modal (con contraseña manual opcional); la contraseña generada se avisa en un modal de una sola vez.
 $newPassword = $_SESSION['staff_password'] ?? null; unset($_SESSION['staff_password']);
 $search = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 80);
 $totals = ['day' => ['requests' => 0, 'reports' => 0], 'month' => ['requests' => 0, 'reports' => 0], 'year' => ['requests' => 0, 'reports' => 0]];
@@ -49,10 +49,16 @@ $posted = static fn(string $field, string $fallback, bool $use): string => $use 
 <div class="grid"><label>Cédula<input class="mono-input" name="document_number" inputmode="numeric" value="<?= h($posted('document_number', (string)($member['document_number'] ?? ''), $reopen)) ?>" required maxlength="15" pattern="[0-9.\s-]{5,15}" autofocus></label><label>Rol<select name="role"><?= $roleOptions($posted('role', (string)$member['role'], $reopen)) ?></select></label></div>
 <label>Nombre completo<input name="name" value="<?= h($posted('name', (string)$member['name'], $reopen)) ?>" required maxlength="120"></label>
 <label>Correo (para iniciar sesión)<input name="email" type="email" value="<?= h($posted('email', (string)$member['email'], $reopen)) ?>" required maxlength="190"></label>
+<fieldset class="password-set"><legend>Cambiar contraseña <span class="optional">(opcional)</span></legend>
+<p class="field-help">Déjala en blanco para conservar la actual. Mínimo 10 caracteres; no puede ser la cédula ni el correo.</p>
+<div class="grid">
+<label for="staff-pass-<?= $id ?>">Contraseña nueva<span class="input-icon has-action"><?= ui_icon('lock', 18) ?><input id="staff-pass-<?= $id ?>" type="password" name="new_password" autocomplete="new-password" minlength="10" maxlength="72" data-password-new><button type="button" class="input-action" data-toggle-password aria-controls="staff-pass-<?= $id ?>" aria-label="Mostrar contraseña" aria-pressed="false" hidden><?= ui_icon('eye', 18, 'eye-show') ?><?= ui_icon('eye-off', 18, 'eye-hide') ?></button></span></label>
+<label for="staff-pass2-<?= $id ?>">Confirmar contraseña<span class="input-icon"><?= ui_icon('lock', 18) ?><input id="staff-pass2-<?= $id ?>" type="password" name="new_password_confirm" autocomplete="new-password" maxlength="72" data-password-confirm></span></label>
+</div></fieldset>
 <div class="sheet-foot"><a class="button secondary" href="#" data-close>Cancelar</a><button class="button primary">Guardar cambios</button></div>
 </form>
 <div class="sheet-extra"><h3>Más acciones</h3><div class="extra-actions">
-<form method="post" action="?page=employees" data-confirm="Se generará una contraseña nueva y la actual dejará de funcionar. La verás una sola vez." data-confirm-title="¿Generar una contraseña nueva para <?= h($member['name']) ?>?" data-confirm-label="Generar contraseña"><?= csrf() ?><input type="hidden" name="action" value="staff-reset"><input type="hidden" name="staff_id" value="<?= $id ?>"><button class="button secondary small"><?= ui_icon('shield', 16) ?>Nueva contraseña</button></form>
+<form method="post" action="?page=employees" data-confirm="Se generará una contraseña nueva y la actual dejará de funcionar. La verás una sola vez." data-confirm-title="¿Generar una contraseña nueva para <?= h($member['name']) ?>?" data-confirm-label="Generar contraseña"><?= csrf() ?><input type="hidden" name="action" value="staff-reset"><input type="hidden" name="staff_id" value="<?= $id ?>"><button class="button secondary small"><?= ui_icon('shield', 16) ?>Generar contraseña aleatoria</button></form>
 <?php if (!$self): ?><form method="post" action="?page=employees" <?= $member['active'] ? 'data-confirm="La persona no podrá iniciar sesión hasta que actives la cuenta de nuevo." data-confirm-title="¿Desactivar la cuenta de ' . h($member['name']) . '?" data-confirm-label="Desactivar cuenta" data-confirm-tone="danger"' : '' ?>><?= csrf() ?><input type="hidden" name="action" value="staff-toggle"><input type="hidden" name="staff_id" value="<?= $id ?>"><input type="hidden" name="active" value="<?= $member['active'] ? '0' : '1' ?>"><button class="button secondary small"><?= $member['active'] ? 'Desactivar cuenta' : 'Activar cuenta' ?></button></form>
 <form method="post" action="?page=employees" data-confirm="Ya no podrá iniciar sesión. Si atendió solicitudes o reportes, ese historial se conserva." data-confirm-title="¿Eliminar la cuenta de <?= h($member['name']) ?>?" data-confirm-label="Eliminar cuenta" data-confirm-tone="danger"><?= csrf() ?><input type="hidden" name="action" value="staff-delete"><input type="hidden" name="staff_id" value="<?= $id ?>"><button class="button danger-outline small">Eliminar cuenta</button></form><?php endif ?>
 </div></div>

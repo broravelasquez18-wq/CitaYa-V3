@@ -1050,3 +1050,12 @@ html:not([data-theme=light]) body.request-page .delivery-note .icon{color:var(--
 html:not([data-theme=light]) body.request-page .request-form .notice{background:rgba(0,172,196,.1);border-color:var(--login-line);color:var(--login-ink)}
 html:not([data-theme=light]) body.request-page .request-form .notice>.icon{color:var(--login-accent)}
 html[data-theme=light] body.request-page .request-hero h1{color:var(--ink)}
+
+/* Contraseña manual en «Editar cuenta». El contenedor del ícono es un span dentro del label: se fuerza a bloque. */
+.input-icon{display:block}
+.input-icon>input,.input-icon>select{margin-top:0}
+.password-set{margin:var(--s2) 0 0}
+.password-set .field-help{margin:0 0 var(--s3);font-size:var(--t-sm);color:var(--muted)}
+.password-set label{margin-bottom:var(--s3)}
+.password-set .input-icon{margin-top:6px}
+.password-set .input-icon input{height:48px;border-radius:var(--radius);border:1.5px solid var(--line-strong);background-color:var(--surface)}

@@ -498,7 +498,17 @@ document.querySelectorAll('[data-theme-toggle]').forEach(button => {
   sync();
 });
 
-// Mostrar u ocultar la contraseña en el inicio de sesión.
+// Contraseña manual al editar una cuenta: si se escribe una nueva, la confirmación es obligatoria y debe coincidir.
+document.addEventListener('input', event => {
+  const form = event.target.form;
+  const fresh = form?.querySelector('[data-password-new]');
+  const confirm = form?.querySelector('[data-password-confirm]');
+  if (!fresh || !confirm) return;
+  confirm.required = fresh.value !== '';
+  confirm.setCustomValidity(confirm.value !== fresh.value && (confirm.value !== '' || fresh.value !== '') ? 'La confirmación no coincide con la contraseña nueva.' : '');
+});
+
+// Mostrar u ocultar la contraseña (inicio de sesión y edición de cuentas).
 document.querySelectorAll('[data-toggle-password]').forEach(button => {
   const input = document.getElementById(button.getAttribute('aria-controls'));
   button.hidden = false;

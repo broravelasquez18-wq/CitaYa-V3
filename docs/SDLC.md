@@ -899,3 +899,36 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
 **Validación.**
 - 360, 390 y 768 px en modo oscuro y claro, sin desbordamiento horizontal.
 - `run` 158 y `resend-ui` 19 en verde.
+
+## Empleados: contraseña manual al editar una cuenta (SCRUM-46)
+
+**Requisito.** El titular pidió que, al editar a una persona, el administrador pueda escribir la contraseña a mano en lugar de solo generarla.
+
+**Diseño.**
+- El modal «Editar cuenta» suma la sección opcional «Cambiar contraseña», con *Contraseña nueva* (con mostrar u ocultar) y *Confirmar contraseña*.
+- En blanco se conserva la actual.
+- «Generar contraseña aleatoria» sigue en «Más acciones».
+
+**Implementación.**
+- `Staff::checkPassword`:
+  - mínimo 10 caracteres y máximo 72 bytes, el límite de bcrypt;
+  - la confirmación debe coincidir (`hash_equals`);
+  - no puede ser la cédula ni el correo.
+- `Staff::setPassword` guarda el hash y registra el evento `staff_password_set`.
+- En `staff-update`, la contraseña se valida **antes** de guardar los demás datos, para no dejar la edición a medias.
+- Si algo falla, el modal se reabre con los datos pero sin la contraseña escrita.
+- En el navegador, la confirmación es obligatoria si se escribe una nueva y se avisa si no coincide.
+- El toast al guardar recuerda entregarle la contraseña a la persona; nunca se muestra en pantalla.
+
+**Validación.**
+- `tests/support.php`: 48 en verde (6 nuevas):
+  - contraseña manual válida;
+  - corta;
+  - confirmación distinta;
+  - igual a la cédula;
+  - un intento rechazado no cambia la contraseña.
+- En local, con una cuenta temporal ya eliminada:
+  - el navegador bloquea una confirmación distinta;
+  - el servidor rechaza una corta y reabre el modal;
+  - una válida se guarda, la anterior deja de funcionar y la nueva permite entrar.
+- `run` 158, `requests-admin` 46, `resend-ui` 19 y `whatsapp` 55 en verde.
