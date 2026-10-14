@@ -73,8 +73,9 @@ try {
     rejects(fn() => $staff->setPassword($employee, 'corta', 'corta'), 'La contraseña manual exige al menos 10 caracteres', '10 caracteres');
     rejects(fn() => $staff->setPassword($employee, 'ClaveManual2026', 'ClaveManual2027'), 'La confirmación debe coincidir', 'confirmación');
     $employeeDocument = (string)$staff->find($employee)['document_number'];
-    rejects(fn() => $staff->setPassword($employee, $employeeDocument, $employeeDocument), 'La contraseña no puede ser la cédula', 'cédula');
     check(password_verify('ClaveManual2026', $db->one('SELECT password_hash FROM admins WHERE id=?', [$employee])['password_hash']), 'Un intento rechazado no cambia la contraseña');
+    $staff->setPassword($employee, $employeeDocument, $employeeDocument);
+    check(password_verify($employeeDocument, $db->one('SELECT password_hash FROM admins WHERE id=?', [$employee])['password_hash']), 'Por ahora se permite usar la cédula como contraseña');
 
     // --- Avance: el empleado responde una solicitud ---
     $phone = '573004440000';

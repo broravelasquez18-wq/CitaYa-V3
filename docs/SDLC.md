@@ -932,3 +932,5 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
   - el servidor rechaza una corta y reabre el modal;
   - una válida se guarda, la anterior deja de funcionar y la nueva permite entrar.
 - `run` 158, `requests-admin` 46, `resend-ui` 19 y `whatsapp` 55 en verde.
+
+**Ajuste (2026-10-14, decisión del titular).** Por ahora se permite usar la cédula o el correo como contraseña manual: se quitó esa regla de `Staff::checkPassword` y del texto de ayuda del modal. Se mantienen el mínimo de 10 caracteres y la confirmación. La prueba correspondiente ahora comprueba que la cédula se acepta (`support` 48 en verde).

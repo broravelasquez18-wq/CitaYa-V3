@@ -118,10 +118,7 @@ final class Staff
         if (mb_strlen($password) < 10) throw new \DomainException('La contraseña debe tener al menos 10 caracteres.');
         if (strlen($password) > 72) throw new \DomainException('La contraseña es demasiado larga (máximo 72 caracteres).');
         if (!hash_equals($password, $confirm)) throw new \DomainException('La confirmación no coincide con la contraseña nueva.');
-        $plain = mb_strtolower($password);
-        if (($document !== '' && $plain === mb_strtolower(self::document($document))) || ($email !== '' && $plain === mb_strtolower(trim($email)))) {
-            throw new \DomainException('La contraseña no puede ser la cédula ni el correo de la cuenta.');
-        }
+        // Por decisión del titular (2026-10-14), por ahora se permite usar la cédula o el correo como contraseña.
     }
 
     public function setPassword(int $id, string $password, string $confirm): void
