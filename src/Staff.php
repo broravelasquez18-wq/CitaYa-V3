@@ -45,7 +45,7 @@ final class Staff
         return ['id' => $id, 'password' => $password];
     }
 
-    public function update(int $id, int $actorId, string $name, string $role, string $phone): void
+    public function update(int $id, int $actorId, string $name, string $role): void
     {
         $staff = $this->require($id);
         $name = trim($name);
@@ -53,7 +53,7 @@ final class Staff
         if (!isset(self::ROLES[$role])) throw new \DomainException('Elige un rol válido.');
         if ($id === $actorId && $role !== 'admin') throw new \DomainException('No puedes quitarte a ti mismo el rol de administrador.');
         if ($staff['role'] === 'admin' && $role !== 'admin') $this->keepOneAdmin($id);
-        $this->app->db->run('UPDATE admins SET name=?,role=?,phone=? WHERE id=?', [$name, $role, $this->phone($phone), $id]);
+        $this->app->db->run('UPDATE admins SET name=?,role=? WHERE id=?', [$name, $role, $id]);
     }
 
     public function setActive(int $id, int $actorId, bool $active): void

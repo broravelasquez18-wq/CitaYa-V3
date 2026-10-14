@@ -52,7 +52,7 @@ try {
     rejects(fn() => $staff->create('Otra Persona', 'laura@example.test', 'employee'), 'No permite dos cuentas con el mismo correo', 'Ya existe');
     rejects(fn() => $staff->create('Otra Persona', 'otra@example.test', 'jefe'), 'Rechaza un rol inventado', 'rol');
     rejects(fn() => $staff->setActive($admin, $admin, false), 'Nadie puede desactivar su propia cuenta', 'propia');
-    rejects(fn() => $staff->update($admin, $employee, 'Admin Prueba', 'employee', ''), 'Debe quedar al menos un administrador activo', 'al menos un administrador');
+    rejects(fn() => $staff->update($admin, $employee, 'Admin Prueba', 'employee'), 'Debe quedar al menos un administrador activo', 'al menos un administrador');
     $other = $staff->create('Pedro Empleado', 'pedro@example.test', 'employee')['id'];
     $staff->setActive($other, $admin, false);
     check(!$staff->find($other)['active'], 'El administrador puede desactivar una cuenta');
@@ -90,10 +90,11 @@ try {
     say($phone, 'Mi segundo apellido está mal escrito');
     $ticket = $db->one("SELECT * FROM support_tickets WHERE phone=? AND status='open'", [$phone]);
     check($ticket && (int)$ticket['assigned_to'] === $employee && $ticket['category'] === 'wrong_data' && str_contains(lastTo($phone), $ticket['reference']), 'Se crea el reporte y se asigna al empleado que respondió esa historia');
-    check(str_contains(lastTo('573001112222'), 'Nuevo reporte de error') && str_contains(lastTo('573001112222'), $ticket['reference']), 'El empleado recibe el aviso en su WhatsApp');
     $employeeView = ['id' => $employee, 'role' => 'employee'];
     $adminView = ['id' => $admin, 'role' => 'admin'];
     check($desk->unreadCount($employeeView) === 1 && count($desk->tickets($employeeView)) === 1, 'El empleado ve el reporte pendiente en su panel');
+    $notices = $desk->notifications($employeeView);
+    check(count($notices) === 1 && $notices[0]['reference'] === $ticket['reference'] && $desk->notifications(['id' => $other, 'role' => 'employee']) === [] && lastTo('573001112222') === '', 'El aviso llega al panel del empleado asignado (no a su WhatsApp ni a otros empleados)');
 
     // --- Chat ---
     say($phone, '¿Me pueden ayudar pronto?');

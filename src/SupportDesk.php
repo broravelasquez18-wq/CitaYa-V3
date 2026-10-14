@@ -7,7 +7,7 @@ namespace App;
  *
  * El bot guía el reporte (qué historia, qué problema, descripción). «No me llegó / no abre» lo resuelve solo
  * reenviando la historia; lo demás abre un caso para el empleado que respondió esa historia (o el de menor carga)
- * y se le avisa. Mientras el caso está abierto, lo que escribe el paciente llega al chat del caso en el sistema y
+ * y se le avisa en el panel (contador y aviso en pantalla). Mientras el caso está abierto, lo que escribe el paciente llega al chat del caso en el sistema y
  * el personal le contesta por el mismo número del bot. Los textos de los mensajes se guardan cifrados.
  */
 final class SupportDesk
@@ -90,7 +90,6 @@ final class SupportDesk
                 if ($resent) {
                     $this->reply($phone, "Listo ✅ Te estamos reenviando tu historia clínica por este chat.\n\nSi aún tienes problemas, responde *2* para reportarlo de nuevo.", $messageId, 'resent');
                 } else {
-                    $this->notifyStaff($ticket);
                     $this->reply($phone, "No pudimos reenviarla automáticamente. Creamos tu reporte *{$ticket['reference']}* y una persona de nuestro equipo te escribirá por este chat.", $messageId, 'resend-failed');
                 }
                 return true;
@@ -104,7 +103,6 @@ final class SupportDesk
             $ticket = $this->createTicket($phone, (int)$data['request_id'], (string)$data['category'], mb_substr($text, 0, 2000), 'open');
             $this->addMessage((int)$ticket['id'], 'in', $text, null, $messageId);
             $this->endSession($phone);
-            $this->notifyStaff($ticket);
             $this->reply($phone, "Recibimos tu reporte *{$ticket['reference']}* 📝\n\nUna persona de nuestro equipo lo revisará y te responderá por este mismo chat.", $messageId, 'created');
             return true;
         }
@@ -154,17 +152,6 @@ final class SupportDesk
         return $row ? (int)$row['id'] : null;
     }
 
-    /** Aviso al empleado asignado: en el panel (contador) y, si tiene WhatsApp registrado, un mensaje del bot. */
-    private function notifyStaff(array $ticket): void
-    {
-        if (!$ticket['assigned_to']) return;
-        $staff = $this->app->db->one('SELECT phone FROM admins WHERE id=? AND active=1', [$ticket['assigned_to']]);
-        if (!$staff || !$staff['phone']) return;
-        $request = $ticket['request_id'] ? $this->app->request((int)$ticket['request_id']) : null;
-        $label = $this->categoryLabel($ticket['category']);
-        $this->app->whatsapp()->queueText($staff['phone'], "🔔 Nuevo reporte de error *{$ticket['reference']}*" . ($request ? ' (historia ' . $request['reference'] . ')' : '') . ":\n{$label}.\n\nRespóndelo en CitaYa → Reportes.", 'staff-ticket:' . $ticket['id']);
-    }
-
     // --- Panel: lista, chat y cierre ---
 
     /** Casos para el panel. El empleado ve los suyos; el administrador, todos. */
@@ -177,6 +164,20 @@ final class SupportDesk
             LEFT JOIN requests r ON r.id=t.request_id LEFT JOIN admins a ON a.id=t.assigned_to WHERE $where ORDER BY t.unread>0 DESC, t.updated_at DESC LIMIT 100", $params);
         foreach ($rows as &$row) $row['category_label'] = $this->categoryLabel($row['category']);
         return $rows;
+    }
+
+    /**
+     * Avisos del panel: reportes abiertos que esperan respuesta (nuevos o con mensajes del paciente sin leer).
+     * Lo consulta el panel cada 15 s para actualizar el contador y mostrar el aviso en pantalla.
+     */
+    public function notifications(array $staff): array
+    {
+        $sql = "SELECT t.id,t.reference,t.category,t.unread,t.updated_at FROM support_tickets t WHERE t.status='open'
+            AND (t.unread>0 OR NOT EXISTS (SELECT 1 FROM support_messages m WHERE m.ticket_id=t.id AND m.direction='out'))";
+        $rows = $staff['role'] === 'admin' ? $this->app->db->all($sql . ' ORDER BY t.updated_at DESC LIMIT 20')
+            : $this->app->db->all($sql . ' AND t.assigned_to=? ORDER BY t.updated_at DESC LIMIT 20', [$staff['id']]);
+        return array_map(fn($row) => ['id' => (int)$row['id'], 'reference' => $row['reference'], 'label' => $this->categoryLabel($row['category']),
+            'unread' => (int)$row['unread'], 'updated_at' => $row['updated_at']], $rows);
     }
 
     public function unreadCount(array $staff): int

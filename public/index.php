@@ -148,13 +148,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 go('reports');
             case 'staff-create':
                 requireAdmin();
-                $created = (new App\Staff($app))->create((string)($_POST['name'] ?? ''), (string)($_POST['email'] ?? ''), (string)($_POST['role'] ?? 'employee'), (string)($_POST['phone'] ?? ''));
+                $created = (new App\Staff($app))->create((string)($_POST['name'] ?? ''), (string)($_POST['email'] ?? ''), (string)($_POST['role'] ?? 'employee'));
                 $_SESSION['csrf'] = bin2hex(random_bytes(32));
                 $_SESSION['staff_password'] = ['id' => $created['id'], 'password' => $created['password']];
                 go('employees');
             case 'staff-update':
                 requireAdmin();
-                (new App\Staff($app))->update((int)($_POST['staff_id'] ?? 0), (int)$_SESSION['admin_id'], (string)($_POST['name'] ?? ''), (string)($_POST['role'] ?? ''), (string)($_POST['phone'] ?? ''));
+                (new App\Staff($app))->update((int)($_POST['staff_id'] ?? 0), (int)$_SESSION['admin_id'], (string)($_POST['name'] ?? ''), (string)($_POST['role'] ?? ''));
                 $_SESSION['csrf'] = bin2hex(random_bytes(32));
                 $_SESSION['flash'] = 'Datos actualizados.';
                 go('employees');
@@ -242,7 +242,13 @@ if (in_array($page, ['delivery', 'case-history', 'report'], true) && ($_GET['fra
     exit('La sesión administrativa venció. Inicia sesión nuevamente.');
 }
 // Empleado: Solicitudes, reportes de error y su avance. Administrador: además el resto del sistema y los empleados.
-if (in_array($page, ['deliveries','delivery','case-history','reports','report','progress'], true)) requireStaff();
+if (in_array($page, ['deliveries','delivery','case-history','reports','report','progress','notifications'], true)) requireStaff();
+if ($page === 'notifications') {
+    // Avisos del panel (reportes de error que esperan respuesta), consultados cada 15 s por app.js.
+    header('Content-Type: application/json; charset=UTF-8');
+    echo json_encode(['items' => (new App\SupportDesk($app))->notifications(currentStaff())], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 if (in_array($page, ['admin','inbox','mail','history','analytics','templates','whatsapp','employees'], true)) requireAdmin();
 $supportCount = !empty($_SESSION['admin_id']) ? (new App\SupportDesk($app))->unreadCount(currentStaff()) : 0;
 $staffList = $page === 'employees' ? (new App\Staff($app))->all() : null;

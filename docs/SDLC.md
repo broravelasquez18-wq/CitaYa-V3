@@ -613,3 +613,9 @@ Ruta de regreso: con `WA_WEBHOOK_URL` apuntando al webhook de CitaYa (`/whatsapp
 - `node --test n8n/*.test.js` 29 (1 nueva).
 - Suites anteriores correctas; se actualizó el texto del menú esperado en 4 pruebas.
 - Revisión visual en local con cuentas de prueba (después borradas): pestañas por rol, reportes, chat, envío y bloqueo de Empleados para el empleado.
+
+**Ajuste: avisos de reportes solo en el sistema.** A pedido del titular, al empleado no se le envía nada por WhatsApp; los avisos llegan al panel y desde ahí responde en el chat.
+- Se quitaron el mensaje del bot al empleado y el campo «WhatsApp para avisos» en Empleados.
+- `SupportDesk::notifications` y la ruta `?page=notifications` (JSON) devuelven los reportes abiertos que esperan respuesta: nuevos o con mensajes del paciente sin leer. El empleado ve los suyos y el administrador todos.
+- `app.js` la consulta cada 15 s en cualquier página del panel: actualiza el contador de «Reportes de error» y, ante un reporte nuevo o un mensaje nuevo del paciente, muestra un aviso en pantalla con «Abrir chat». No avisa del chat que ya está abierto.
+- Validación: `tests/support.php` 32 (el aviso llega al panel del empleado asignado, no a su WhatsApp ni a otros empleados).

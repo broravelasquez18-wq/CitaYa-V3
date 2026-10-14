@@ -410,3 +410,65 @@ document.addEventListener('click', event => {
   });
   input?.form.addEventListener('submit', () => { input.form.querySelector('button').disabled = true; });
 })();
+
+// Avisos de reportes de error en el panel (sin WhatsApp al empleado): cada 15 s se actualiza el contador de la pestaña
+// y, si llega un reporte nuevo o un mensaje del paciente, aparece un aviso con el enlace al chat.
+(() => {
+  const tab = document.querySelector('nav.tabs a[href="?page=reports"]');
+  if (!tab) return;
+  const openReport = new URLSearchParams(location.search).get('page') === 'report' ? new URLSearchParams(location.search).get('id') : null;
+  let known = null;
+  const stack = document.createElement('div');
+  stack.className = 'toast-stack';
+  stack.setAttribute('aria-live', 'polite');
+  document.body.append(stack);
+  const toast = item => {
+    const card = document.createElement('div');
+    card.className = 'toast';
+    const text = document.createElement('p');
+    text.innerHTML = item.isNew ? '🔔 <strong>Nuevo reporte de error</strong>' : '💬 <strong>Nuevo mensaje del paciente</strong>';
+    const detail = document.createElement('small');
+    detail.textContent = item.reference + ' · ' + item.label;
+    const link = document.createElement('a');
+    link.className = 'button primary';
+    link.href = '?page=report&id=' + item.id;
+    link.textContent = 'Abrir chat';
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'toast-close';
+    close.setAttribute('aria-label', 'Cerrar aviso');
+    close.textContent = '×';
+    close.addEventListener('click', () => card.remove());
+    card.append(close, text, detail, link);
+    stack.append(card);
+    setTimeout(() => card.remove(), 15000);
+  };
+  const setCount = count => {
+    let badge = tab.querySelector('.tab-count');
+    if (!count) { badge?.remove(); return; }
+    if (!badge) { badge = document.createElement('span'); badge.className = 'tab-count'; tab.append(' ', badge); }
+    badge.textContent = count;
+    badge.setAttribute('aria-label', count + ' por atender');
+  };
+  const check = async () => {
+    if (document.hidden) return;
+    try {
+      const response = await fetch('?page=notifications', {credentials: 'same-origin', cache: 'no-store'});
+      if (!response.ok || response.redirected) return;
+      const {items} = await response.json();
+      setCount(items.length);
+      const current = new Map(items.map(item => [item.id, item]));
+      if (known) {
+        for (const item of items) {
+          if (String(item.id) === openReport) continue;
+          const before = known.get(item.id);
+          if (!before) toast({...item, isNew: true});
+          else if (item.unread > before.unread) toast({...item, isNew: false});
+        }
+      }
+      known = current;
+    } catch {}
+  };
+  check();
+  setInterval(check, 15000);
+})();
