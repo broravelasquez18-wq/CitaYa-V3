@@ -859,3 +859,15 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
 **Validación.**
 - Chrome sin interfaz a 1440 y 390 px, en ambos modos y con errores de validación visibles. Sin desbordamiento horizontal.
 - `run` 158, `resend-ui` 19 y `requests-admin` 46 en verde.
+
+## Despliegue: autodeploy de Dokploy desde GitHub (SCRUM-49)
+
+**Incidencia.** El push de `ab9ec3a` no se desplegó.
+- El compose `citayav3` en Dokploy usa el proveedor genérico *Git* (`main`, `./docker-compose.yml`, sin rutas vigiladas) con *Autodeploy* activo.
+- Con ese proveedor, el despliegue automático depende de que GitHub llame a la URL de despliegue de Dokploy, y el repositorio no tenía ningún webhook.
+- Los despliegues anteriores se habían lanzado por otra vía.
+
+**Corrección (con autorización del titular).**
+- Despliegue manual de `ab9ec3a` desde Dokploy: el sitio quedó con el formulario y el login nuevos.
+- Webhook en GitHub (Settings → Webhooks) hacia `http://2.25.77.168:3000/api/deploy/compose/<id>`, evento *push*, `application/json`, activo. La primera entrega (ping) fue exitosa.
+- Desde ahora cada push a `main` despliega solo. Este registro se subió con un push para comprobarlo.
