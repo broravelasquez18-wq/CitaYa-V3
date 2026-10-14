@@ -68,7 +68,7 @@ try {
     check($api->handle(['action' => 'inbound.register', 'phone' => $phone, 'message_id' => 'm1'])['new'] === false, 'Un reintento del mismo mensaje se reconoce como duplicado');
 
     // --- Plantillas y respuestas ---
-    check(str_contains($api->handle(['action' => 'template.render', 'code' => 'menu'])['text'], 'HISTORIA') && fails(fn() => $api->handle(['action' => 'template.render', 'code' => 'history_found']), 'unknown_template'), 'Entrega el texto del menú editable y no otras plantillas');
+    check(str_contains($api->handle(['action' => 'template.render', 'code' => 'menu'])['text'], 'Solicitar historia clínica') && fails(fn() => $api->handle(['action' => 'template.render', 'code' => 'history_found']), 'unknown_template'), 'Entrega el texto del menú editable y no otras plantillas');
     $sent = $api->handle(['action' => 'message.send', 'phone' => $phone, 'text' => 'Hola desde n8n', 'key' => 'm1-menu']);
     $last = requests('/send')[0] ?? null;
     check($sent['status'] === 'sent' && $last && $last['ok'] && $last['payload']['to'] === $phone && $last['payload']['body'] === 'Hola desde n8n', 'Envía la respuesta de n8n por el QR al chat que escribió');

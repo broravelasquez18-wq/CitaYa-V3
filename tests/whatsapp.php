@@ -39,7 +39,7 @@ try {
     check(App\WhatsApp::validSignature('{"a":1}', 'sha256=' . hash_hmac('sha256', '{"a":1}', 'secreto'), 'secreto'), 'Acepta firma válida de Meta');
     check(!App\WhatsApp::validSignature('{"a":1}', 'sha256=00', 'secreto') && !App\WhatsApp::validSignature('x', 'sha256=' . hash_hmac('sha256', 'x', ''), ''), 'Rechaza firma inválida o secreto vacío');
 
-    check($bot->receive(inbound('wamid.1', '573001112233', 'Hola buenas')) === 1 && str_contains(lastText(), 'HISTORIA'), 'Saludo recibe el menú');
+    check($bot->receive(inbound('wamid.1', '573001112233', 'Hola buenas')) === 1 && str_contains(lastText(), 'Solicitar historia clínica'), 'Saludo recibe el menú');
     check($bot->receive(inbound('wamid.2', '573001112233', 'Necesito mi historia clínica')) === 1 && str_contains(lastText(), 'https://portal.example.test/?page=home&wa='), 'Solicitud de historia recibe el enlace del formulario');
     check($bot->receive(inbound('wamid.2', '573001112233', 'Necesito mi historia clínica')) === 0, 'Un reintento del webhook no duplica la respuesta');
     $token = linkToken();

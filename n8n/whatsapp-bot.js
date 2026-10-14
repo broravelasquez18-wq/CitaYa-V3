@@ -41,7 +41,11 @@ async function citayaWhatsAppBot({ raw, signature, env, http, crypto }) {
   if (!registered.new) return { status: 200, result: 'duplicate' };
   if (registered.allowed === false) return { status: 200, result: 'rate_limited' };
 
-  // 2. Acción: CONFIRMAR código, HISTORIA o menú.
+  // 2. Reporte de error en curso, opción «2» o chat abierto con el personal: lo atiende CitaYa (SCRUM-47/48).
+  const conversation = await api('conversation.handle', { phone, message_id: id, text });
+  if (conversation.ok && conversation.handled) return { status: 200, result: 'conversation' };
+
+  // 3. Acción: CONFIRMAR código, HISTORIA o menú.
   const words = text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
   const confirm = text.match(/\bconfirmar\s+([a-z0-9]{6})\b/i);
   let action, sent;

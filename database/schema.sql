@@ -141,7 +141,10 @@ CREATE TABLE IF NOT EXISTS admins (
  email VARCHAR(190) NOT NULL UNIQUE,
  name VARCHAR(120) NOT NULL,
  password_hash VARCHAR(255) NOT NULL,
- active TINYINT NOT NULL DEFAULT 1
+ active TINYINT NOT NULL DEFAULT 1,
+ role VARCHAR(16) NOT NULL DEFAULT 'admin',
+ phone VARCHAR(20) NULL,
+ created_at DATETIME NULL
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS whatsapp_inbound (
@@ -246,4 +249,45 @@ CREATE TABLE IF NOT EXISTS response_files (
  FOREIGN KEY (request_id) REFERENCES requests(id),
  INDEX response_job (job_id),
  INDEX response_wa_job (wa_job_id)
+) ENGINE=InnoDB;
+
+-- Reportes de error de la historia clínica (SCRUM-47/48). status: auto_resolved (lo resolvió el bot), open, closed.
+CREATE TABLE IF NOT EXISTS support_tickets (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ reference VARCHAR(24) NOT NULL UNIQUE,
+ phone VARCHAR(20) NOT NULL,
+ request_id BIGINT UNSIGNED NULL,
+ category VARCHAR(30) NOT NULL,
+ description TEXT NULL,
+ status VARCHAR(16) NOT NULL DEFAULT 'open',
+ assigned_to BIGINT UNSIGNED NULL,
+ unread INT NOT NULL DEFAULT 0,
+ created_at DATETIME NOT NULL,
+ updated_at DATETIME NOT NULL,
+ closed_at DATETIME NULL,
+ closed_by BIGINT UNSIGNED NULL,
+ FOREIGN KEY (request_id) REFERENCES requests(id),
+ INDEX ticket_phone (phone, status),
+ INDEX ticket_assigned (assigned_to, status)
+) ENGINE=InnoDB;
+
+-- Mensajes del chat de un reporte. direction: in (paciente), out (personal), system (bot). body cifrado.
+CREATE TABLE IF NOT EXISTS support_messages (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ ticket_id BIGINT UNSIGNED NOT NULL,
+ direction VARCHAR(8) NOT NULL,
+ admin_id BIGINT UNSIGNED NULL,
+ body TEXT NOT NULL,
+ wa_message_id VARCHAR(190) NULL,
+ created_at DATETIME NOT NULL,
+ FOREIGN KEY (ticket_id) REFERENCES support_tickets(id),
+ INDEX message_ticket (ticket_id, id)
+) ENGINE=InnoDB;
+
+-- Paso de la conversación guiada del bot (reporte de error) por número.
+CREATE TABLE IF NOT EXISTS whatsapp_sessions (
+ phone VARCHAR(20) PRIMARY KEY,
+ state VARCHAR(30) NOT NULL,
+ data TEXT NULL,
+ updated_at DATETIME NOT NULL
 ) ENGINE=InnoDB;

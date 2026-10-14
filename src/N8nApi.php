@@ -23,6 +23,7 @@ final class N8nApi
     {
         return match ((string)($payload['action'] ?? '')) {
             'inbound.register' => $this->registerInbound($payload),
+            'conversation.handle' => $this->handleConversation($payload),
             'link.create' => $this->createLink($payload),
             'code.confirm' => $this->confirmCode($payload),
             'requests.list' => $this->listRequests($payload),
@@ -57,10 +58,24 @@ final class N8nApi
         if ($id === '' || strlen($id) > 190) throw new \DomainException('invalid_message_id');
         $new = $this->app->db->run('INSERT IGNORE INTO whatsapp_inbound (wa_message_id,phone,intent,created_at) VALUES (?,?,?,?)', [$id, $phone, 'n8n', $this->app->now()])->rowCount() > 0;
         if (!$new) return ['new' => false];
-        try { $this->app->limit('whatsapp-phone:' . $phone, 20, 3600); }
+        // En un chat abierto con el personal no se limita la cantidad de mensajes.
+        $chatting = (bool)$this->app->db->one("SELECT id FROM support_tickets WHERE phone=? AND status='open'", [$phone]);
+        if (!$chatting) try { $this->app->limit('whatsapp-phone:' . $phone, 20, 3600); }
         catch (\DomainException) { return ['new' => true, 'allowed' => false]; }
         $released = $this->app->db->run("UPDATE whatsapp_outbox SET status='queued',last_error=NULL,available_at=? WHERE phone=? AND status='waiting_window'", [$this->app->now(), $phone])->rowCount();
         return ['new' => true, 'allowed' => true, 'released' => $released];
+    }
+
+    /**
+     * Reporte de error y chat con el personal (SCRUM-47/48). handled=true: CitaYa ya respondió (o el mensaje es del
+     * chat abierto) y n8n no debe seguir; false: n8n continúa con el bot normal (menú, HISTORIA, CONFIRMAR).
+     */
+    private function handleConversation(array $payload): array
+    {
+        $phone = $this->phone($payload);
+        $id = (string)($payload['message_id'] ?? '');
+        if ($id === '' || strlen($id) > 190) throw new \DomainException('invalid_message_id');
+        return ['handled' => (new SupportDesk($this->app))->handle($phone, $id, mb_substr((string)($payload['text'] ?? ''), 0, 4000))];
     }
 
     /** Enlace personal al formulario para el chat que escribió HISTORIA. */

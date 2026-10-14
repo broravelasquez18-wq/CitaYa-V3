@@ -53,7 +53,7 @@ try {
 
     $bot->receive(inbound('wamid.q1', '573001112233', 'hola'));
     check($bot->tick() && requests()[0]['ok'] && requests()[0]['uri'] === '/send', 'Envía al servicio QR con firma válida');
-    check(requests()[0]['payload']['to'] === '573001112233' && requests()[0]['payload']['type'] === 'text' && str_contains(requests()[0]['payload']['body'], 'HISTORIA'), 'El menú llega como texto al número del remitente');
+    check(requests()[0]['payload']['to'] === '573001112233' && requests()[0]['payload']['type'] === 'text' && str_contains(requests()[0]['payload']['body'], 'Solicitar historia clínica'), 'El menú llega como texto al número del remitente');
     check($db->one("SELECT status FROM whatsapp_outbox ORDER BY id LIMIT 1")['status'] === 'sent', 'El mensaje queda como enviado');
 
     $bot->receive(inbound('wamid.q2', '573001112233', 'historia'));

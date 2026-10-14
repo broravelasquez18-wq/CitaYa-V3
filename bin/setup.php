@@ -37,6 +37,10 @@ if ($db->one("SELECT IS_NULLABLE FROM information_schema.COLUMNS WHERE TABLE_SCH
 foreach (['case_reopened_at'=>'DATETIME NULL','case_reopened_by'=>'BIGINT UNSIGNED NULL','case_reopened_after_job_id'=>'BIGINT UNSIGNED NULL','direct_search'=>'TINYINT NOT NULL DEFAULT 0','matched_at'=>'DATETIME NULL','claimed_document_type'=>'VARCHAR(8) NULL','claimed_document_number'=>'VARCHAR(24) NULL','whatsapp_phone'=>'VARCHAR(20) NULL','whatsapp_claimed'=>'VARCHAR(20) NULL','whatsapp_code_hash'=>'CHAR(64) NULL','whatsapp_code_expires'=>'DATETIME NULL','resolved_by'=>'BIGINT UNSIGNED NULL','resolved_at'=>'DATETIME NULL','resolution'=>'VARCHAR(20) NULL','response_note'=>'TEXT NULL'] as $column=>$definition) {
     if (!$db->one('SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=\'requests\' AND COLUMN_NAME=?',[$column])) $db->pdo->exec("ALTER TABLE requests ADD COLUMN $column $definition");
 }
+// Roles del acceso interno (SCRUM-46): los administradores existentes quedan como «admin».
+foreach (['role' => "VARCHAR(16) NOT NULL DEFAULT 'admin'", 'phone' => 'VARCHAR(20) NULL', 'created_at' => 'DATETIME NULL'] as $column => $definition) {
+    if (!$db->one("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='admins' AND COLUMN_NAME=?", [$column])) $db->pdo->exec("ALTER TABLE admins ADD $column $definition");
+}
 // Detalle de cada orden (lo que se ordenó, vigencia) para las indicaciones del bot.
 if (!$db->one("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='clinical_orders' AND COLUMN_NAME='details'")) $db->pdo->exec('ALTER TABLE clinical_orders ADD details TEXT NULL');
 if (!$db->one("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='clinical_files' AND COLUMN_NAME='page_count'")) {

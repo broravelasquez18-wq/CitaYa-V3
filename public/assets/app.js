@@ -387,3 +387,26 @@ document.addEventListener('click', event => {
     opener?.focus();
   });
 })();
+
+// Chat de un reporte de error: baja al último mensaje, se actualiza cada 8 s y Ctrl+Enter envía.
+(() => {
+  const thread = document.querySelector('[data-chat-thread]');
+  if (!thread) return;
+  const bottom = () => { thread.scrollTop = thread.scrollHeight; };
+  bottom();
+  let last = thread.innerHTML;
+  setInterval(async () => {
+    if (document.hidden) return;
+    try {
+      const response = await fetch(thread.dataset.chatUrl, {credentials: 'same-origin', cache: 'no-store'});
+      if (!response.ok || response.redirected) return;
+      const html = await response.text();
+      if (html.trim() && html !== last) { last = html; thread.innerHTML = html; bottom(); }
+    } catch {}
+  }, 8000);
+  const input = document.querySelector('[data-chat-input]');
+  input?.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); input.form.requestSubmit(); }
+  });
+  input?.form.addEventListener('submit', () => { input.form.querySelector('button').disabled = true; });
+})();

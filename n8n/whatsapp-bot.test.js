@@ -24,6 +24,7 @@ function citaya(overrides = {}) {
       case 'link.create': return { ok: true, url: 'https://citaya.example.test/?page=home&wa=abc', hours: 6 };
       case 'code.confirm': return request.code.toUpperCase() === 'K7MP2Q' ? { ok: true, valid: true, reference: 'HC-1', next: 'history' } : { ok: true, valid: false };
       case 'message.send': return { ok: true, status: 'sent' };
+      case 'conversation.handle': return { ok: true, handled: false };
       default: throw new Error('acción inesperada ' + request.action);
     }
   };
@@ -56,7 +57,7 @@ test('saludo: un solo menú, con el texto editable de CitaYa', async () => {
 test('HISTORIA (con tildes o mayúsculas) envía el enlace personal', async () => {
   const fake = citaya();
   assert.equal((await run(fake, inbound('m2', '573001112233', 'Necesito mi HISTORIA clínica'))).result, 'history:sent');
-  assert.deepEqual(fake.calls.map(c => c.action), ['inbound.register', 'link.create', 'template.render', 'message.send']);
+  assert.deepEqual(fake.calls.map(c => c.action), ['inbound.register', 'conversation.handle', 'link.create', 'template.render', 'message.send']);
   assert.match(fake.sent()[0].text, /wa=abc/);
 });
 
@@ -105,4 +106,15 @@ test('ESTADO: muestra solo las solicitudes de este chat', async () => {
   assert.match(fake.sent()[0].text, /\*HC-9\*: Pendiente de revisión/);
   await run(fake, inbound('e2', '573009998877', 'estado'));
   assert.match(fake.sent()[1].text, /No encontramos solicitudes/);
+});
+
+test('reporte de error o chat abierto: si CitaYa lo atiende, el bot no responde nada más', async () => {
+  const fake = citaya({ 'conversation.handle': r => ({ ok: true, handled: r.text === '2' }) });
+  const handled = await run(fake, inbound('c1', '573001112233', '2'));
+  assert.equal(handled.result, 'conversation');
+  assert.equal(fake.sent().length, 0);
+  const call = fake.calls.find(c => c.action === 'conversation.handle');
+  assert.deepEqual([call.phone, call.message_id, call.text], ['573001112233', 'c1', '2']);
+  const menu = await run(fake, inbound('c2', '573001112233', 'hola'));
+  assert.equal(menu.result, 'menu:sent');
 });

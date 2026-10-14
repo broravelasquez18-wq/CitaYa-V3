@@ -582,3 +582,34 @@ Ruta de regreso: con `WA_WEBHOOK_URL` apuntando al webhook de CitaYa (`/whatsapp
 - Validación: `tests/requests-admin.php` 46 (3 nuevas). Las demás suites siguen correctas.
 
 **Ajuste: pestaña WhatsApp oculta.** A pedido del titular se quitó la pestaña «WhatsApp» del panel mientras el bot está conectado. Solo aparece, junto con un aviso rojo («El WhatsApp del bot está desconectado… Vincularlo de nuevo →»), cuando el servicio QR informa que está desconectado. Así se conserva la forma de volver a vincularlo desde el panel. El estado se consulta a `/health` del servicio QR como máximo una vez por minuto por sesión.
+
+## Roles, reporte de errores por WhatsApp y chat con el paciente (SCRUM-45)
+
+**Requisitos (titular).**
+- Rol empleado: responde solicitudes y ve su avance (respondidas hoy y en el mes).
+- Rol administrador: todo el sistema, el análisis y la gestión de empleados (avance por día, mes y año).
+- Menú del bot: 1) Solicitar historia clínica por atención, 2) Reportar un error.
+- El reporte de error es automático con el bot. El bot detecta si requiere a un empleado; si sí, se notifica al empleado que respondió esa historia, que responde por un chat en el sistema, con el mismo número del bot.
+
+**Diseño.**
+- **Roles (SCRUM-46):**
+  - columnas `admins.role` (admin/employee), `phone` y `created_at` (migración: los administradores existentes quedan como admin);
+  - `requireStaff()` para Solicitudes, Reportes y Mi avance; `requireAdmin()` para Repositorio, Historial, Bandeja, Análisis, Plantillas, WhatsApp y Empleados, también en las acciones;
+  - en cada petición se relee el rol y si la cuenta sigue activa;
+  - `Staff`: crear (contraseña aleatoria mostrada una vez), editar, activar o desactivar (no la propia, y siempre queda un administrador activo), nueva contraseña, y avance día/mes/año (`requests.resolved_by` y reportes cerrados).
+- **Bot (SCRUM-47):**
+  - `SupportDesk::handle` decide antes del menú: chat abierto → el mensaje va al caso; reporte en curso → siguiente paso (`whatsapp_sessions`, 30 min; «0» cancela); opción «2» o palabras como «error» o «reportar» → inicia el reporte;
+  - el bot pregunta qué historia (si hay varias enviadas a ese WhatsApp), qué problema (5 opciones) y la descripción;
+  - «No me llegó / no abre el archivo» lo resuelve el bot: `WhatsApp::resendDelivery` vuelve a encolar la historia o la respuesta «Aprobado», y el caso queda `auto_resolved`;
+  - lo demás abre un caso asignado a quien respondió esa historia o, si fue automática, al empleado activo con menos casos abiertos. Se le avisa con un contador en el panel y por WhatsApp si tiene número registrado;
+  - n8n: nueva acción `conversation.handle`, llamada por el bot antes del menú; los mensajes de un chat abierto no cuentan para el límite de 20 por hora.
+- **Chat (SCRUM-48):**
+  - «Reportes de error»: abiertos y resueltos (el empleado ve los suyos, el administrador todos), con mensajes sin leer;
+  - el caso muestra la conversación (`support_messages`, cifrada), que se actualiza cada 8 s; las respuestas salen por el número del bot;
+  - «Marcar como resuelto» cierra el caso, despide al paciente, lo devuelve al menú y cuenta en el avance.
+
+**Validación.**
+- `tests/support.php` 32 comprobaciones nuevas: empleados y reglas de administración, avance, menú, reenvío automático, reporte con empleado, aviso por WhatsApp, chat, permisos entre empleados, cierre, cancelación, varias historias, opción inválida, sin historias y `conversation.handle`.
+- `node --test n8n/*.test.js` 29 (1 nueva).
+- Suites anteriores correctas; se actualizó el texto del menú esperado en 4 pruebas.
+- Revisión visual en local con cuentas de prueba (después borradas): pestañas por rol, reportes, chat, envío y bloqueo de Empleados para el empleado.

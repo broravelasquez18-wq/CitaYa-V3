@@ -30,7 +30,11 @@ function go(string $page): never {
     header('Location: ?page=' . rawurlencode($page)); exit;
 }
 function csrf(): string { return '<input type="hidden" name="csrf" value="' . h($_SESSION['csrf']) . '">'; }
-function requireAdmin(): void { if (empty($_SESSION['admin_id'])) go('admin-login'); }
+/** Cualquier persona del acceso interno (administrador o empleado). */
+function requireStaff(): void { if (empty($_SESSION['admin_id'])) go('admin-login'); }
+/** Solo administradores (SCRUM-46). Un empleado que intenta entrar va a Solicitudes. */
+function requireAdmin(): void { requireStaff(); if (($_SESSION['admin_role'] ?? 'admin') !== 'admin') { $_SESSION['flash'] = 'Esa sección es solo para administradores.'; go('deliveries'); } }
+function currentStaff(): array { return ['id' => (int)$_SESSION['admin_id'], 'role' => (string)($_SESSION['admin_role'] ?? 'admin'), 'name' => (string)($_SESSION['admin_name'] ?? '')]; }
 function requirePatient(): int {
     if (empty($_SESSION['request_access']) || $_SESSION['request_access'] !== ($_SESSION['request_id'] ?? null)) go('home');
     return (int) $_SESSION['request_access'];
@@ -41,6 +45,12 @@ if (isset($_SESSION['last_activity']) && time() - $_SESSION['last_activity'] > $
     session_regenerate_id(true);
 }
 $_SESSION['last_activity'] = time();
+// Una cuenta desactivada o con rol cambiado se aplica en la siguiente petición.
+if (!empty($_SESSION['admin_id'])) {
+    $sessionStaff = $app->db->one('SELECT role,name,active FROM admins WHERE id=?', [$_SESSION['admin_id']]);
+    if (!$sessionStaff || !$sessionStaff['active']) { $_SESSION = []; session_regenerate_id(true); }
+    else { $_SESSION['admin_role'] = $sessionStaff['role']; $_SESSION['admin_name'] = $sessionStaff['name']; }
+}
 $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
 $page = (string) ($_GET['page'] ?? 'home');
 $error = null;
@@ -96,7 +106,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $admin = $app->db->one('SELECT * FROM admins WHERE email=? AND active=1', [trim((string) ($_POST['email'] ?? ''))]);
                 $valid = password_verify((string) ($_POST['password'] ?? ''), $admin['password_hash'] ?? '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi.');
                 if (!$admin || !$valid) throw new DomainException('Credenciales incorrectas.');
-                session_regenerate_id(true); $_SESSION['admin_id'] = (int) $admin['id']; $_SESSION['csrf'] = bin2hex(random_bytes(32)); go('admin');
+                session_regenerate_id(true); $_SESSION['admin_id'] = (int) $admin['id']; $_SESSION['admin_role'] = $admin['role'] ?? 'admin'; $_SESSION['admin_name'] = $admin['name']; $_SESSION['csrf'] = bin2hex(random_bytes(32));
+                go(($admin['role'] ?? 'admin') === 'admin' ? 'admin' : 'deliveries');
             case 'logout': $_SESSION = []; session_regenerate_id(true); go('home');
             case 'reopen-case':
                 requireAdmin();
@@ -105,13 +116,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['flash'] = 'Caso reabierto. Está pendiente de gestión en Solicitudes. No se ha enviado otro correo.';
                 go('deliveries');
             case 'assign-encounter':
-                requireAdmin();
+                requireStaff();
                 $app->assignEncounter((int)($_POST['request_id'] ?? 0), (int)($_POST['encounter_id'] ?? 0), (int)$_SESSION['admin_id']);
                 $_SESSION['csrf'] = bin2hex(random_bytes(32));
                 $_SESSION['flash'] = 'Historia asignada. Se está enviando al paciente por correo' . ($app->request((int)$_POST['request_id'])['whatsapp_phone'] ? ' y WhatsApp.' : '.');
                 go('deliveries');
             case 'respond-case':
-                requireAdmin();
+                requireStaff();
                 $sources = [];
                 foreach (($_FILES['files']['name'] ?? []) as $i => $name) {
                     $error = $_FILES['files']['error'][$i] ?? UPLOAD_ERR_NO_FILE;
@@ -124,14 +135,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['csrf'] = bin2hex(random_bytes(32));
                 $_SESSION['flash'] = $decision === 'approved' ? 'Respuesta «Aprobado» guardada. Se está enviando al paciente con los adjuntos.' : 'Respuesta «No Registra» guardada y enviada al paciente.';
                 go('deliveries');
-            case 'not-registered':
+            case 'report-send':
+                requireStaff();
+                (new App\SupportDesk($app))->send((int)($_POST['ticket_id'] ?? 0), currentStaff(), (string)($_POST['body'] ?? ''));
+                $_SESSION['csrf'] = bin2hex(random_bytes(32));
+                header('Location: ?page=report&id=' . (int)($_POST['ticket_id'] ?? 0)); exit;
+            case 'report-close':
+                requireStaff();
+                (new App\SupportDesk($app))->close((int)($_POST['ticket_id'] ?? 0), currentStaff());
+                $_SESSION['csrf'] = bin2hex(random_bytes(32));
+                $_SESSION['flash'] = 'Reporte cerrado. El paciente recibió el mensaje de cierre por WhatsApp.';
+                go('reports');
+            case 'staff-create':
                 requireAdmin();
+                $created = (new App\Staff($app))->create((string)($_POST['name'] ?? ''), (string)($_POST['email'] ?? ''), (string)($_POST['role'] ?? 'employee'), (string)($_POST['phone'] ?? ''));
+                $_SESSION['csrf'] = bin2hex(random_bytes(32));
+                $_SESSION['staff_password'] = ['id' => $created['id'], 'password' => $created['password']];
+                go('employees');
+            case 'staff-update':
+                requireAdmin();
+                (new App\Staff($app))->update((int)($_POST['staff_id'] ?? 0), (int)$_SESSION['admin_id'], (string)($_POST['name'] ?? ''), (string)($_POST['role'] ?? ''), (string)($_POST['phone'] ?? ''));
+                $_SESSION['csrf'] = bin2hex(random_bytes(32));
+                $_SESSION['flash'] = 'Datos actualizados.';
+                go('employees');
+            case 'staff-toggle':
+                requireAdmin();
+                (new App\Staff($app))->setActive((int)($_POST['staff_id'] ?? 0), (int)$_SESSION['admin_id'], ($_POST['active'] ?? '') === '1');
+                $_SESSION['csrf'] = bin2hex(random_bytes(32));
+                $_SESSION['flash'] = ($_POST['active'] ?? '') === '1' ? 'Cuenta activada.' : 'Cuenta desactivada: ya no puede iniciar sesión.';
+                go('employees');
+            case 'staff-reset':
+                requireAdmin();
+                $staffId = (int)($_POST['staff_id'] ?? 0);
+                $_SESSION['staff_password'] = ['id' => $staffId, 'password' => (new App\Staff($app))->resetPassword($staffId)];
+                $_SESSION['csrf'] = bin2hex(random_bytes(32));
+                go('employees');
+            case 'not-registered':
+                requireStaff();
                 $app->markNotRegistered((int)($_POST['request_id'] ?? 0), (int)$_SESSION['admin_id']);
                 $_SESSION['csrf'] = bin2hex(random_bytes(32));
                 $_SESSION['flash'] = 'Respuesta «No registra» enviada. El paciente recibirá el aviso para verificar su documento.';
                 go('deliveries');
             case 'request-upload':
-                requireAdmin();
+                requireStaff();
                 $requestId = (int)($_POST['request_id'] ?? 0);
                 $app->request($requestId);
                 $uploads = [];
@@ -190,16 +236,24 @@ if ($error !== null && uploadJson()) {
     header('Content-Type: application/json; charset=UTF-8');
     echo json_encode(['error' => $error]); exit;
 }
-if (in_array($page, ['delivery', 'case-history'], true) && ($_GET['fragment'] ?? '') === '1' && empty($_SESSION['admin_id'])) {
+if (in_array($page, ['delivery', 'case-history', 'report'], true) && ($_GET['fragment'] ?? '') === '1' && empty($_SESSION['admin_id'])) {
     http_response_code(401);
     header('Content-Type: text/plain; charset=UTF-8');
     exit('La sesión administrativa venció. Inicia sesión nuevamente.');
 }
-if (in_array($page, ['admin','inbox','mail','deliveries','delivery','case-history','history','analytics','templates','whatsapp'], true)) requireAdmin();
+// Empleado: Solicitudes, reportes de error y su avance. Administrador: además el resto del sistema y los empleados.
+if (in_array($page, ['deliveries','delivery','case-history','reports','report','progress'], true)) requireStaff();
+if (in_array($page, ['admin','inbox','mail','history','analytics','templates','whatsapp','employees'], true)) requireAdmin();
+$supportCount = !empty($_SESSION['admin_id']) ? (new App\SupportDesk($app))->unreadCount(currentStaff()) : 0;
+$staffList = $page === 'employees' ? (new App\Staff($app))->all() : null;
+$myProgress = $page === 'progress' ? ['progress' => (new App\Staff($app))->progress((int)$_SESSION['admin_id']), 'recent' => (new App\Staff($app))->recentResponses((int)$_SESSION['admin_id'])] : null;
+$reportList = $page === 'reports' ? (new App\SupportDesk($app))->tickets(currentStaff(), ($_GET['f'] ?? 'open') === 'closed' ? 'closed' : 'open') : null;
+$reportDetail = null;
+if ($page === 'report') { $reportDetail = (new App\SupportDesk($app))->ticket((int)($_GET['id'] ?? 0), currentStaff()); if (!$reportDetail) http_response_code(404); }
 $pendingCount = !empty($_SESSION['admin_id']) ? (new App\AdminDeliveries($app->db))->pendingCount() : 0;
 // La pestaña WhatsApp solo aparece si el bot (servicio QR) está desconectado. Se consulta como máximo cada minuto.
 $whatsappDisconnected = false;
-if (!empty($_SESSION['admin_id']) && ($app->config['whatsapp_transport'] ?? '') === 'qr') {
+if (!empty($_SESSION['admin_id']) && ($_SESSION['admin_role'] ?? 'admin') === 'admin' && ($app->config['whatsapp_transport'] ?? '') === 'qr') {
     $cached = $_SESSION['wa_health'] ?? null;
     if (!$cached || time() - $cached['at'] > 60) {
         $curl = curl_init(rtrim((string)$app->config['whatsapp_qr_url'], '/') . '/health');
@@ -260,6 +314,13 @@ $steps = ['home' => 1, 'verify' => 2, 'appointments' => 2, 'status' => 3];
 $labels = ['matched'=>'Datos coincidentes','no_matches'=>'Sin coincidencias','awaiting_selection'=>'Selecciona una atención','not_eligible'=>'Entrega no habilitada','pending_verification'=>'Pendiente de verificación','verified'=>'Verificada','queued'=>'En cola de envío','sending'=>'Preparando el envío','retry'=>'Reintento programado','sent'=>'Correo enviado','simulated'=>'Entrega simulada','failed'=>'No se pudo enviar','uncertain'=>'Resultado por confirmar','unavailable'=>'Historia no disponible','expired'=>'Solicitud vencida','cancelled'=>'Cancelado','waiting_window'=>'Esperando que el paciente escriba','not_registered'=>'No registra'];
 if ($recentSuggestion && $request['approximate_date'] === null) $labels['no_matches'] = 'Consulta más reciente encontrada';
 if (!empty($dateGiven)) $labels['no_matches'] = 'Solicitud registrada';
+if ($page === 'report' && ($_GET['fragment'] ?? '') === '1') {
+    // Actualización automática del chat: solo la lista de mensajes.
+    header('Content-Type: text/html; charset=UTF-8');
+    $reportFragment = true;
+    require dirname(__DIR__) . '/templates/report.php';
+    exit;
+}
 if ($page === 'case-history' && ($_GET['fragment'] ?? '') === '1') {
     header('Content-Type: text/html; charset=UTF-8');
     $historyModal = true;

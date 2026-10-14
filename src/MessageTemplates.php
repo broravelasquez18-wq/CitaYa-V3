@@ -10,8 +10,8 @@ final class MessageTemplates
 {
     /** código => [nombre, descripción, variables permitidas, texto predeterminado] */
     public const DEFINITIONS = [
-        'menu' => ['Bienvenida', 'Respuesta a cualquier mensaje que no pide la historia.', [],
-            "Hola, soy el asistente de *CitaYa*.\n\nPara solicitar tu historia clínica escribe *HISTORIA* y te enviaré el enlace del formulario."],
+        'menu' => ['Bienvenida (menú)', 'Respuesta a cualquier mensaje que no es una opción. La opción 1 envía el formulario y la 2 inicia el reporte de error.', [],
+            "Hola, soy el asistente de *CitaYa* 👋\n\nResponde con el número de la opción:\n\n*1.* Solicitar historia clínica por atención\n*2.* Reportar un error en mi historia clínica"],
         'form_link' => ['Enlace al formulario', 'Respuesta cuando el paciente pide su historia.', ['enlace', 'vigencia'],
             "Con gusto te ayudamos con tu historia clínica.\n\nCompleta este formulario con los datos de tu atención:\n{enlace}\n\nEl enlace es personal y vence en {vigencia} horas. Si encontramos tu historia te la enviaremos por este chat y al correo que indiques."],
         'history_found' => ['Historia encontrada', 'Primer mensaje antes de enviar los PDF por WhatsApp.', ['radicado', 'nombre', 'documentos', 'correo'],

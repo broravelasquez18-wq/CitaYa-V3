@@ -87,7 +87,7 @@ try {
 
     // --- Envío de texto ---
     check($bot->tick() && last()['auth'] && last()['method'] === 'POST' && last()['uri'] === '/api/v1/inbox/conversations/conv_573001112233/messages', 'Responde en la conversación con el token de la API');
-    check(last()['fields']['accountId'] === 'acc_citaya' && str_contains(last()['fields']['message'], 'HISTORIA') && str_starts_with((string)last()['key'], 'citaya-'), 'El menú sale como texto con la cuenta y clave de idempotencia');
+    check(last()['fields']['accountId'] === 'acc_citaya' && str_contains(last()['fields']['message'], 'Solicitar historia clínica') && str_starts_with((string)last()['key'], 'citaya-'), 'El menú sale como texto con la cuenta y clave de idempotencia');
     check(lastOutbox()['status'] === 'sent', 'El mensaje queda como enviado');
 
     // --- Historia completa ---

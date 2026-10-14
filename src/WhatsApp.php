@@ -150,6 +150,8 @@ final class WhatsApp
         // Meta y Zernio reintentan el webhook: el id del mensaje evita respuestas duplicadas.
         $new = $this->app->db->run('INSERT IGNORE INTO whatsapp_inbound (wa_message_id,phone,intent,created_at) VALUES (?,?,?,?)', [$id, $phone, $intent, $this->app->now()])->rowCount();
         if (!$new) return false;
+        // Reporte de error en curso o chat con el personal (SCRUM-47/48): lo atiende SupportDesk, sin límite de mensajes.
+        if ((new SupportDesk($this->app))->handle($phone, $id, $text)) return true;
         try { $this->app->limit('whatsapp-phone:' . $phone, 20, 3600); }
         catch (\DomainException) { return false; }
         // Si había mensajes esperando porque la ventana de 24 h estaba cerrada, ya pueden salir.
@@ -256,6 +258,28 @@ final class WhatsApp
         $body = str_contains($comment, $request['reference']) ? $comment : "Respuesta a tu solicitud *{$request['reference']}*.\n\n" . $comment;
         return $this->queue($request['whatsapp_phone'], $kind, $body, $requestId, null, 'wa:response:' . $requestId . ':' . $unique,
             $decision === 'approved' ? 'historia.disponible' : 'solicitud.no_registra');
+    }
+
+    /**
+     * Reenvía por WhatsApp la última historia (o respuesta «Aprobado») de la solicitud: el paciente reportó que no le
+     * llegó o no la puede abrir. Vuelve a poner en cola el mismo envío desde el principio. Devuelve false si no hay qué reenviar.
+     */
+    public function resendDelivery(int $requestId): bool
+    {
+        $request = $this->app->request($requestId);
+        $job = $this->app->db->one("SELECT * FROM whatsapp_outbox WHERE request_id=? AND kind IN ('history','response') ORDER BY id DESC LIMIT 1", [$requestId]);
+        if (!$job || !$request['whatsapp_phone'] || in_array($job['status'], ['queued', 'sending', 'retry'], true)) return (bool)$job && in_array($job['status'], ['queued', 'sending', 'retry'], true);
+        $body = null;
+        if ($job['kind'] === 'response') {
+            if (!$request['response_note']) return false;
+            $comment = Crypto::open($request['response_note'], $this->app->config['app_key']);
+            $body = Crypto::seal(str_contains($comment, $request['reference']) ? $comment : "Respuesta a tu solicitud *{$request['reference']}*.\n\n" . $comment, $this->app->config['app_key']);
+        }
+        $this->app->db->run("UPDATE whatsapp_outbox SET status='queued',attempts=0,progress=0,last_error=NULL,locked_at=NULL,sent_at=NULL,available_at=?,encrypted_body=? WHERE id=?",
+            [$this->app->now(), $body, $job['id']]);
+        $this->app->event($requestId, 'whatsapp_' . $job['kind'], 'resend_requested');
+        $this->automation()->emit('historia.disponible', ['job_id' => (int)$job['id'], 'kind' => $job['kind'], 'reference' => $request['reference']], 'wa-resend:' . $job['id'] . ':' . time());
+        return true;
     }
 
     /** Encola un texto libre (lo usa n8n para las respuestas del bot). Devuelve el id del mensaje en la cola. */
