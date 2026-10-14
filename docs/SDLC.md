@@ -871,3 +871,31 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
 - Despliegue manual de `ab9ec3a` desde Dokploy: el sitio quedó con el formulario y el login nuevos.
 - Webhook en GitHub (Settings → Webhooks) hacia `http://2.25.77.168:3000/api/deploy/compose/<id>`, evento *push*, `application/json`, activo. La primera entrega (ping) fue exitosa.
 - Desde ahora cada push a `main` despliega solo. Este registro se subió con un push para comprobarlo.
+
+## Login y formulario del paciente: responsive en tableta y móvil (SCRUM-49)
+
+**Requisito.** El titular pidió estructurar mejor el responsive móvil del inicio de sesión y del formulario.
+
+**Problemas encontrados** en capturas de página completa a 360, 390 y 768 px:
+- En el encabezado se amontonaban los dos enlaces y el botón de tema, aunque uno lleva a la página en la que ya se está.
+- En el login, la marca grande se repetía debajo de la tarjeta (el emblema con anillos tocaba el borde) y las seis tarjetas de «Qué hace CitaYa» alargaban mucho la página.
+- En tableta, la tarjeta de acceso ocupaba todo el ancho.
+- El botón «Radicar solicitud de historia» se partía en dos líneas.
+
+**Cambios** (`responsive.css`, sección «Login y formulario del paciente»):
+- **Tableta (≤ 900 px):** tarjeta de acceso centrada a 520 px y bloque de marca a 620 px.
+- **Móvil, encabezado (≤ 640 px):** solo el enlace a la otra página, en forma de pastilla, junto al botón de tema. Se oculta el subtítulo del logo.
+- **Móvil, login:**
+  - tarjeta más compacta;
+  - la marca repetida queda oculta a la vista (se mantiene para lectores de pantalla);
+  - «Qué hace CitaYa» pasa a dos columnas con ícono y título.
+  - La página baja de 1.516 a 1.186 px de alto a 360 px.
+- **Móvil, formulario:**
+  - título más corto de alto y tarjeta más ancha;
+  - menos espacio entre campos;
+  - botones de 52 px;
+  - el botón dice «Radicar solicitud» en una sola línea.
+
+**Validación.**
+- 360, 390 y 768 px en modo oscuro y claro, sin desbordamiento horizontal.
+- `run` 158 y `resend-ui` 19 en verde.

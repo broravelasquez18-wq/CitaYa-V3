@@ -57,7 +57,7 @@ $linkedPhone = $whatsappLink ? $app->whatsapp()->linkPhone($whatsappLink) : null
 
 <div class="form-actions">
 <button type="reset" class="button outline">Cancelar</button>
-<button class="button cta" type="submit" data-review-submit><?= ui_icon('arrow-right', 20) ?>Radicar solicitud de historia</button>
+<button class="button cta" type="submit" data-review-submit><?= ui_icon('arrow-right', 20) ?>Radicar solicitud<span class="cta-extra"> de historia</span></button>
 </div>
 <?php if ($app->config['mail_transport'] === 'local'): ?><p class="delivery-note"><?= ui_icon('info', 18) ?><span>Modo de prueba: el correo se prepara en la bandeja local, no sale a Internet.</span></p><?php endif ?>
 <aside class="consent-note"><h3>Autorización de tratamiento de datos personales</h3><p>Al enviar este formulario autorizas el tratamiento de tus datos personales para atender esta solicitud, de acuerdo con la Política de Tratamiento de Datos Personales y la Ley 1581 de 2012.</p></aside>
