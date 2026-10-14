@@ -47,7 +47,7 @@ if (isset($_SESSION['last_activity']) && time() - $_SESSION['last_activity'] > $
 $_SESSION['last_activity'] = time();
 // Una cuenta desactivada o con rol cambiado se aplica en la siguiente petición.
 if (!empty($_SESSION['admin_id'])) {
-    $sessionStaff = $app->db->one('SELECT role,name,active FROM admins WHERE id=?', [$_SESSION['admin_id']]);
+    $sessionStaff = $app->db->one('SELECT role,name,active FROM admins WHERE id=? AND deleted_at IS NULL', [$_SESSION['admin_id']]);
     if (!$sessionStaff || !$sessionStaff['active']) { $_SESSION = []; session_regenerate_id(true); }
     else { $_SESSION['admin_role'] = $sessionStaff['role']; $_SESSION['admin_name'] = $sessionStaff['name']; }
 }
@@ -103,7 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             case 'new': unset($_SESSION['request_id'], $_SESSION['request_access']); go('home');
             case 'login':
                 $app->limit('admin-login:' . $ip, 10, 900);
-                $admin = $app->db->one('SELECT * FROM admins WHERE email=? AND active=1', [trim((string) ($_POST['email'] ?? ''))]);
+                $admin = $app->db->one('SELECT * FROM admins WHERE email=? AND active=1 AND deleted_at IS NULL', [trim((string) ($_POST['email'] ?? ''))]);
                 $valid = password_verify((string) ($_POST['password'] ?? ''), $admin['password_hash'] ?? '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi.');
                 if (!$admin || !$valid) throw new DomainException('Credenciales incorrectas.');
                 session_regenerate_id(true); $_SESSION['admin_id'] = (int) $admin['id']; $_SESSION['admin_role'] = $admin['role'] ?? 'admin'; $_SESSION['admin_name'] = $admin['name']; $_SESSION['csrf'] = bin2hex(random_bytes(32));
@@ -148,13 +148,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 go('reports');
             case 'staff-create':
                 requireAdmin();
-                $created = (new App\Staff($app))->create((string)($_POST['name'] ?? ''), (string)($_POST['email'] ?? ''), (string)($_POST['role'] ?? 'employee'));
+                $created = (new App\Staff($app))->create((string)($_POST['document_number'] ?? ''), (string)($_POST['name'] ?? ''), (string)($_POST['email'] ?? ''), (string)($_POST['role'] ?? 'employee'));
                 $_SESSION['csrf'] = bin2hex(random_bytes(32));
                 $_SESSION['staff_password'] = ['id' => $created['id'], 'password' => $created['password']];
                 go('employees');
             case 'staff-update':
                 requireAdmin();
-                (new App\Staff($app))->update((int)($_POST['staff_id'] ?? 0), (int)$_SESSION['admin_id'], (string)($_POST['name'] ?? ''), (string)($_POST['role'] ?? ''));
+                (new App\Staff($app))->update((int)($_POST['staff_id'] ?? 0), (int)$_SESSION['admin_id'], (string)($_POST['document_number'] ?? ''), (string)($_POST['name'] ?? ''), (string)($_POST['email'] ?? ''), (string)($_POST['role'] ?? ''));
                 $_SESSION['csrf'] = bin2hex(random_bytes(32));
                 $_SESSION['flash'] = 'Datos actualizados.';
                 go('employees');
@@ -163,6 +163,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 (new App\Staff($app))->setActive((int)($_POST['staff_id'] ?? 0), (int)$_SESSION['admin_id'], ($_POST['active'] ?? '') === '1');
                 $_SESSION['csrf'] = bin2hex(random_bytes(32));
                 $_SESSION['flash'] = ($_POST['active'] ?? '') === '1' ? 'Cuenta activada.' : 'Cuenta desactivada: ya no puede iniciar sesión.';
+                go('employees');
+            case 'staff-delete':
+                requireAdmin();
+                $removed = (new App\Staff($app))->delete((int)($_POST['staff_id'] ?? 0), (int)$_SESSION['admin_id']);
+                $_SESSION['csrf'] = bin2hex(random_bytes(32));
+                $_SESSION['flash'] = $removed ? 'Cuenta eliminada.' : 'Cuenta eliminada. Ya no puede iniciar sesión; se conservan las solicitudes y reportes que atendió, y sus reportes abiertos pasaron a otra persona.';
                 go('employees');
             case 'staff-reset':
                 requireAdmin();
@@ -251,7 +257,7 @@ if ($page === 'notifications') {
 }
 if (in_array($page, ['admin','inbox','mail','history','analytics','templates','whatsapp','employees'], true)) requireAdmin();
 $supportCount = !empty($_SESSION['admin_id']) ? (new App\SupportDesk($app))->unreadCount(currentStaff()) : 0;
-$staffList = $page === 'employees' ? (new App\Staff($app))->all() : null;
+$staffList = $page === 'employees' ? (new App\Staff($app))->all((string)($_GET['q'] ?? '')) : null;
 $myProgress = $page === 'progress' ? ['progress' => (new App\Staff($app))->progress((int)$_SESSION['admin_id']), 'recent' => (new App\Staff($app))->recentResponses((int)$_SESSION['admin_id'])] : null;
 $reportList = $page === 'reports' ? (new App\SupportDesk($app))->tickets(currentStaff(), ($_GET['f'] ?? 'open') === 'closed' ? 'closed' : 'open') : null;
 $reportDetail = null;

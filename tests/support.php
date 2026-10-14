@@ -45,17 +45,27 @@ try {
     $admin = $db->insert('admins', ['email' => 'admin@example.test', 'name' => 'Admin Prueba', 'role' => 'admin', 'password_hash' => 'x', 'active' => 1]);
 
     // --- Empleados (SCRUM-46) ---
-    $created = $staff->create('Laura Empleada', 'Laura@Example.test', 'employee', '300 111 2222');
+    $created = $staff->create('1.088.000.111', 'Laura  Empleada', 'Laura@Example.test', 'employee');
     $employee = $created['id'];
+    $laura = $staff->find($employee);
     check(strlen($created['password']) === 16 && password_verify($created['password'], $db->one('SELECT password_hash FROM admins WHERE id=?', [$employee])['password_hash'])
-        && $staff->find($employee)['role'] === 'employee' && $staff->find($employee)['email'] === 'laura@example.test' && $staff->find($employee)['phone'] === '573001112222', 'Crea un empleado con contraseña aleatoria, correo en minúsculas y WhatsApp normalizado');
-    rejects(fn() => $staff->create('Otra Persona', 'laura@example.test', 'employee'), 'No permite dos cuentas con el mismo correo', 'Ya existe');
-    rejects(fn() => $staff->create('Otra Persona', 'otra@example.test', 'jefe'), 'Rechaza un rol inventado', 'rol');
+        && $laura['role'] === 'employee' && $laura['email'] === 'laura@example.test' && $laura['document_number'] === '1088000111' && $laura['name'] === 'Laura Empleada', 'Crea un empleado con cédula (sin puntos), contraseña aleatoria y correo en minúsculas');
+    check((int)$staff->findByDocument('1088000111')['id'] === $employee && count($staff->all('1088000')) === 1 && count($staff->all('laura')) === 1, 'Se encuentra por cédula y se busca por cédula, nombre o correo');
+    rejects(fn() => $staff->create('1088000111', 'Otra Persona', 'otra@example.test', 'employee'), 'No permite dos cuentas con la misma cédula', 'cédula');
+    rejects(fn() => $staff->create('2000', 'Otra Persona', 'otra@example.test', 'employee'), 'Rechaza una cédula inválida', 'cédula');
+    rejects(fn() => $staff->create('2000000001', 'Otra Persona', 'laura@example.test', 'employee'), 'No permite dos cuentas con el mismo correo', 'Ya existe');
+    rejects(fn() => $staff->create('2000000001', 'Otra Persona', 'otra@example.test', 'jefe'), 'Rechaza un rol inventado', 'rol');
     rejects(fn() => $staff->setActive($admin, $admin, false), 'Nadie puede desactivar su propia cuenta', 'propia');
-    rejects(fn() => $staff->update($admin, $employee, 'Admin Prueba', 'employee'), 'Debe quedar al menos un administrador activo', 'al menos un administrador');
-    $other = $staff->create('Pedro Empleado', 'pedro@example.test', 'employee')['id'];
+    rejects(fn() => $staff->update($admin, $employee, '9000000001', 'Admin Prueba', 'admin@example.test', 'employee'), 'Debe quedar al menos un administrador activo', 'al menos un administrador');
+    $other = $staff->create('2000000002', 'Pedro Empleado', 'pedro@example.test', 'employee')['id'];
+    rejects(fn() => $staff->update($other, $admin, '1088000111', 'Pedro Empleado', 'pedro@example.test', 'employee'), 'Al editar no se puede usar la cédula de otra cuenta', 'cédula');
+    $staff->update($other, $admin, '2000000003', 'Pedro Pérez', 'pedro.perez@example.test', 'employee');
+    check($staff->find($other)['document_number'] === '2000000003' && $staff->find($other)['email'] === 'pedro.perez@example.test' && $staff->find($other)['name'] === 'Pedro Pérez', 'Editar cambia cédula, nombre y correo');
     $staff->setActive($other, $admin, false);
     check(!$staff->find($other)['active'], 'El administrador puede desactivar una cuenta');
+    $temporary = $staff->create('2000000004', 'Cuenta Temporal', 'temporal@example.test', 'employee')['id'];
+    check($staff->delete($temporary, $admin) === true && !$db->one('SELECT id FROM admins WHERE id=?', [$temporary]), 'Eliminar una cuenta sin actividad la borra del todo');
+    rejects(fn() => $staff->delete($admin, $admin), 'Nadie puede eliminar su propia cuenta', 'propia');
     $newPassword = $staff->resetPassword($employee);
     check($newPassword !== $created['password'] && password_verify($newPassword, $db->one('SELECT password_hash FROM admins WHERE id=?', [$employee])['password_hash']), 'Restablecer genera una contraseña nueva');
 
@@ -126,6 +136,17 @@ try {
     say($phone, '1'); say($phone, '4'); say($phone, 'Esa no es mi cita');
     $byAdmin = $db->one("SELECT * FROM support_tickets WHERE phone=? AND status='open'", [$phone]);
     check($byAdmin && (int)$byAdmin['assigned_to'] === $admin && (int)$byAdmin['request_id'] === $second, 'El reporte va a quien respondió esa historia (aquí, el administrador)');
+
+    // --- Eliminar una cuenta con actividad: se conserva el historial y sus reportes pasan a otra persona ---
+    $helper = $staff->create('2000000005', 'Empleado de Relevo', 'relevo@example.test', 'employee')['id'];
+    $openOfAdmin = (int)$byAdmin['id'];
+    $db->run('UPDATE support_tickets SET assigned_to=? WHERE id=?', [$employee, $openOfAdmin]);
+    check($staff->delete($employee, $admin) === false, 'Eliminar una cuenta con actividad la archiva');
+    $archived = $db->one('SELECT * FROM admins WHERE id=?', [$employee]);
+    check($archived['deleted_at'] && !$archived['active'] && $archived['document_number'] === null && $staff->find($employee) === null && $staff->findByDocument('1088000111') === null
+        && count(array_filter($staff->all(), fn($m) => (int)$m['id'] === $employee)) === 0, 'La cuenta eliminada no aparece, no puede entrar y libera su cédula y correo');
+    check((int)$db->one('SELECT resolved_by FROM requests WHERE id=?', [$requestId])['resolved_by'] === $employee && (int)$db->one('SELECT assigned_to FROM support_tickets WHERE id=?', [$openOfAdmin])['assigned_to'] === $helper, 'Se conserva quién respondió y sus reportes abiertos pasan a otro empleado');
+    check($staff->create('1088000111', 'Laura Empleada', 'laura@example.test', 'employee')['id'] !== $employee, 'La cédula y el correo de una cuenta eliminada se pueden volver a usar');
 
     // --- Interfaz para n8n ---
     $api = new App\N8nApi($app);

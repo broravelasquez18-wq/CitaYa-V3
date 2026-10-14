@@ -3,7 +3,9 @@ declare(strict_types=1);
 namespace App;
 
 /**
- * Personal del acceso interno (SCRUM-46): roles admin / employee, gestión de empleados y avance.
+ * Personal del acceso interno (SCRUM-46): roles admin / employee, gestión (CRUD) de empleados y avance.
+ * La cédula identifica a cada persona: es obligatoria y no se repite. Internamente se conserva el id numérico porque
+ * las solicitudes respondidas, los reportes y el avance apuntan a él; así eliminar una cuenta no borra su historial.
  * El avance cuenta solicitudes respondidas (requests.resolved_by) y reportes de error cerrados (support_tickets.closed_by).
  */
 final class Staff
@@ -14,13 +16,26 @@ final class Staff
 
     public function find(int $id): ?array
     {
-        return $this->app->db->one('SELECT id,email,name,role,phone,active,created_at FROM admins WHERE id=?', [$id]);
+        return $this->app->db->one('SELECT id,document_number,email,name,role,phone,active,created_at FROM admins WHERE id=? AND deleted_at IS NULL', [$id]);
     }
 
-    /** Todo el personal con su avance de hoy, del mes y del año. */
-    public function all(): array
+    public function findByDocument(string $document): ?array
     {
-        $rows = $this->app->db->all('SELECT id,email,name,role,phone,active,created_at FROM admins ORDER BY active DESC, role, name');
+        return $this->app->db->one('SELECT id,document_number,email,name,role,phone,active,created_at FROM admins WHERE document_number=? AND deleted_at IS NULL', [self::document($document)]);
+    }
+
+    /** Personal no eliminado, con su avance de hoy, del mes y del año. $query busca por cédula, nombre o correo. */
+    public function all(string $query = ''): array
+    {
+        $sql = 'SELECT id,document_number,email,name,role,phone,active,created_at FROM admins WHERE deleted_at IS NULL';
+        $params = [];
+        $query = trim($query);
+        if ($query !== '') {
+            $term = '%' . strtr(mb_substr($query, 0, 80), ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
+            $sql .= " AND (document_number LIKE ? ESCAPE '!' OR name LIKE ? ESCAPE '!' OR email LIKE ? ESCAPE '!')";
+            $params = [$term, $term, $term];
+        }
+        $rows = $this->app->db->all($sql . ' ORDER BY active DESC, role, name', $params);
         foreach ($rows as &$row) $row['progress'] = $this->progress((int)$row['id']);
         return $rows;
     }
@@ -29,31 +44,28 @@ final class Staff
      * Crea un empleado (o administrador) con una contraseña aleatoria que se muestra una sola vez.
      * @return array{id:int,password:string}
      */
-    public function create(string $name, string $email, string $role, string $phone = ''): array
+    public function create(string $document, string $name, string $email, string $role): array
     {
-        $name = trim($name);
-        $email = strtolower(trim($email));
-        if (mb_strlen($name) < 3 || mb_strlen($name) > 120) throw new \DomainException('Escribe el nombre completo (entre 3 y 120 caracteres).');
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 190) throw new \DomainException('Escribe un correo válido.');
-        if (!isset(self::ROLES[$role])) throw new \DomainException('Elige un rol válido.');
-        $phone = $this->phone($phone);
+        [$document, $name, $email] = $this->validate($document, $name, $email, $role);
+        if ($this->app->db->one('SELECT id FROM admins WHERE document_number=?', [$document])) throw new \DomainException('Ya existe una cuenta con esa cédula.');
         if ($this->app->db->one('SELECT id FROM admins WHERE email=?', [$email])) throw new \DomainException('Ya existe una cuenta con ese correo.');
         $password = self::password();
-        $id = $this->app->db->insert('admins', ['email' => $email, 'name' => $name, 'role' => $role, 'phone' => $phone,
+        $id = $this->app->db->insert('admins', ['document_number' => $document, 'email' => $email, 'name' => $name, 'role' => $role,
             'password_hash' => password_hash($password, PASSWORD_DEFAULT), 'active' => 1, 'created_at' => $this->app->now()]);
         $this->app->event(null, 'staff_created', $role . ':' . $id);
         return ['id' => $id, 'password' => $password];
     }
 
-    public function update(int $id, int $actorId, string $name, string $role): void
+    public function update(int $id, int $actorId, string $document, string $name, string $email, string $role): void
     {
         $staff = $this->require($id);
-        $name = trim($name);
-        if (mb_strlen($name) < 3 || mb_strlen($name) > 120) throw new \DomainException('Escribe el nombre completo (entre 3 y 120 caracteres).');
-        if (!isset(self::ROLES[$role])) throw new \DomainException('Elige un rol válido.');
+        [$document, $name, $email] = $this->validate($document, $name, $email, $role);
+        if ($this->app->db->one('SELECT id FROM admins WHERE document_number=? AND id<>?', [$document, $id])) throw new \DomainException('Esa cédula ya pertenece a otra cuenta.');
+        if ($this->app->db->one('SELECT id FROM admins WHERE email=? AND id<>?', [$email, $id])) throw new \DomainException('Ese correo ya pertenece a otra cuenta.');
         if ($id === $actorId && $role !== 'admin') throw new \DomainException('No puedes quitarte a ti mismo el rol de administrador.');
         if ($staff['role'] === 'admin' && $role !== 'admin') $this->keepOneAdmin($id);
-        $this->app->db->run('UPDATE admins SET name=?,role=? WHERE id=?', [$name, $role, $id]);
+        $this->app->db->run('UPDATE admins SET document_number=?,name=?,email=?,role=? WHERE id=?', [$document, $name, $email, $role, $id]);
+        $this->app->event(null, 'staff_updated', (string)$id);
     }
 
     public function setActive(int $id, int $actorId, bool $active): void
@@ -63,6 +75,40 @@ final class Staff
         if (!$active && $staff['role'] === 'admin') $this->keepOneAdmin($id);
         $this->app->db->run('UPDATE admins SET active=? WHERE id=?', [$active ? 1 : 0, $id]);
         $this->app->event(null, $active ? 'staff_activated' : 'staff_deactivated', (string)$id);
+    }
+
+    /**
+     * Elimina una cuenta. Sin actividad se borra del todo; si ya respondió solicitudes o reportes, se marca como
+     * eliminada (no aparece ni puede entrar) para conservar el historial y el avance. Sus reportes abiertos pasan a
+     * otra persona activa. Devuelve true si se borró del todo.
+     */
+    public function delete(int $id, int $actorId): bool
+    {
+        $staff = $this->require($id);
+        if ($id === $actorId) throw new \DomainException('No puedes eliminar tu propia cuenta.');
+        if ($staff['role'] === 'admin') $this->keepOneAdmin($id);
+        return $this->app->db->transaction(function () use ($id) {
+            $db = $this->app->db;
+            $open = $db->all("SELECT id FROM support_tickets WHERE assigned_to=? AND status='open'", [$id]);
+            foreach ($open as $ticket) {
+                $next = $db->one("SELECT a.id FROM admins a WHERE a.active=1 AND a.deleted_at IS NULL AND a.id<>? ORDER BY a.role='employee' DESC,
+                    (SELECT COUNT(*) FROM support_tickets t WHERE t.assigned_to=a.id AND t.status='open'), a.id LIMIT 1", [$id]);
+                $db->run('UPDATE support_tickets SET assigned_to=? WHERE id=?', [$next['id'] ?? null, $ticket['id']]);
+            }
+            $used = $db->one('SELECT 1 x FROM requests WHERE resolved_by=? OR case_reopened_by=? LIMIT 1', [$id, $id])
+                || $db->one('SELECT 1 x FROM support_tickets WHERE assigned_to=? OR closed_by=? LIMIT 1', [$id, $id])
+                || $db->one('SELECT 1 x FROM support_messages WHERE admin_id=? LIMIT 1', [$id])
+                || $db->one('SELECT 1 x FROM message_templates WHERE updated_by=? LIMIT 1', [$id]);
+            if ($used) {
+                // El correo y la cédula quedan libres para una cuenta nueva; el historial conserva el nombre.
+                $db->run("UPDATE admins SET active=0,deleted_at=?,document_number=NULL,email=CONCAT('eliminado-',id,'@citaya.invalid'),password_hash='!' WHERE id=?", [$this->app->now(), $id]);
+                $this->app->event(null, 'staff_deleted', 'archived:' . $id);
+                return false;
+            }
+            $db->run('DELETE FROM admins WHERE id=?', [$id]);
+            $this->app->event(null, 'staff_deleted', 'removed:' . $id);
+            return true;
+        });
     }
 
     /** Nueva contraseña aleatoria (se muestra una sola vez). */
@@ -95,6 +141,25 @@ final class Staff
         return $this->app->db->all('SELECT reference,claimed_name,resolution,resolved_at FROM requests WHERE resolved_by=? ORDER BY resolved_at DESC LIMIT ' . max(1, min(50, $limit)), [$id]);
     }
 
+    /** @return array{0:string,1:string,2:string} cédula, nombre y correo normalizados */
+    private function validate(string $document, string $name, string $email, string $role): array
+    {
+        $document = self::document($document);
+        if (!preg_match('/^\d{5,12}$/', $document)) throw new \DomainException('Escribe la cédula (solo números, entre 5 y 12 dígitos).');
+        $name = trim(preg_replace('/\s+/', ' ', $name));
+        if (mb_strlen($name) < 3 || mb_strlen($name) > 120) throw new \DomainException('Escribe el nombre completo (entre 3 y 120 caracteres).');
+        $email = strtolower(trim($email));
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 190) throw new \DomainException('Escribe un correo válido.');
+        if (!isset(self::ROLES[$role])) throw new \DomainException('Elige un rol válido.');
+        return [$document, $name, $email];
+    }
+
+    /** «1.088.255.893» → «1088255893». */
+    private static function document(string $value): string
+    {
+        return preg_replace('/[\s.\-]/', '', trim($value));
+    }
+
     private function require(int $id): array
     {
         $staff = $this->find($id);
@@ -104,14 +169,8 @@ final class Staff
 
     private function keepOneAdmin(int $leaving): void
     {
-        $others = (int)$this->app->db->one("SELECT COUNT(*) n FROM admins WHERE role='admin' AND active=1 AND id<>?", [$leaving])['n'];
+        $others = (int)$this->app->db->one("SELECT COUNT(*) n FROM admins WHERE role='admin' AND active=1 AND deleted_at IS NULL AND id<>?", [$leaving])['n'];
         if ($others === 0) throw new \DomainException('Debe quedar al menos un administrador activo.');
-    }
-
-    private function phone(string $phone): ?string
-    {
-        if (trim($phone) === '') return null;
-        return WhatsApp::normalizePhone($phone);
     }
 
     private static function password(): string

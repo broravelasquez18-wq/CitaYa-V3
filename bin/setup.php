@@ -38,7 +38,7 @@ foreach (['case_reopened_at'=>'DATETIME NULL','case_reopened_by'=>'BIGINT UNSIGN
     if (!$db->one('SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=\'requests\' AND COLUMN_NAME=?',[$column])) $db->pdo->exec("ALTER TABLE requests ADD COLUMN $column $definition");
 }
 // Roles del acceso interno (SCRUM-46): los administradores existentes quedan como «admin».
-foreach (['role' => "VARCHAR(16) NOT NULL DEFAULT 'admin'", 'phone' => 'VARCHAR(20) NULL', 'created_at' => 'DATETIME NULL'] as $column => $definition) {
+foreach (['role' => "VARCHAR(16) NOT NULL DEFAULT 'admin'", 'phone' => 'VARCHAR(20) NULL', 'created_at' => 'DATETIME NULL', 'document_number' => 'VARCHAR(20) NULL UNIQUE', 'deleted_at' => 'DATETIME NULL'] as $column => $definition) {
     if (!$db->one("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='admins' AND COLUMN_NAME=?", [$column])) $db->pdo->exec("ALTER TABLE admins ADD $column $definition");
 }
 // Detalle de cada orden (lo que se ordenó, vigencia) para las indicaciones del bot.

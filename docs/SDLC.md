@@ -619,3 +619,13 @@ Ruta de regreso: con `WA_WEBHOOK_URL` apuntando al webhook de CitaYa (`/whatsapp
 - `SupportDesk::notifications` y la ruta `?page=notifications` (JSON) devuelven los reportes abiertos que esperan respuesta: nuevos o con mensajes del paciente sin leer. El empleado ve los suyos y el administrador todos.
 - `app.js` la consulta cada 15 s en cualquier página del panel: actualiza el contador de «Reportes de error» y, ante un reporte nuevo o un mensaje nuevo del paciente, muestra un aviso en pantalla con «Abrir chat». No avisa del chat que ya está abierto.
 - Validación: `tests/support.php` 32 (el aviso llega al panel del empleado asignado, no a su WhatsApp ni a otros empleados).
+
+**Empleados: cédula y CRUD completo.** A pedido del titular:
+- **Cédula** como identificador de cada persona: se pide primero, es obligatoria al crear (5 a 12 dígitos; se quitan puntos y espacios) y es única (`admins.document_number UNIQUE`). Internamente se conserva el id numérico como llave técnica, porque las solicitudes respondidas, los reportes y el avance apuntan a él; cambiarla rompería ese historial. Las cuentas anteriores aparecen como «Sin cédula» hasta editarlas.
+- **CRUD:**
+  - crear (cédula, nombre, correo y rol);
+  - ver, con búsqueda por cédula, nombre o correo;
+  - editar cédula, nombre, correo y rol (sin repetir cédula ni correo);
+  - eliminar, con confirmación. Sin actividad se borra del todo. Con actividad se archiva (`deleted_at`): no aparece ni puede entrar, libera su cédula y correo, se conserva el historial y sus reportes abiertos pasan al empleado activo con menos carga. Nadie puede eliminarse a sí mismo y siempre queda un administrador activo.
+  - Se mantienen activar/desactivar y nueva contraseña. El inicio de sesión excluye las cuentas eliminadas.
+- Validación: `tests/support.php` 43 (11 nuevas) y prueba en local de crear y eliminar desde el formulario.
