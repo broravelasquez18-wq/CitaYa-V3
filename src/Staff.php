@@ -115,7 +115,8 @@ final class Staff
     public static function checkPassword(string $password, string $confirm, string $document = '', string $email = ''): void
     {
         if (trim($password) === '') throw new \DomainException('Escribe la contraseña nueva.');
-        if (mb_strlen($password) < 10) throw new \DomainException('La contraseña debe tener al menos 10 caracteres.');
+        // Mínimo de 6 para que sirvan cédulas cortas (decisión del titular, 2026-10-14).
+        if (mb_strlen($password) < 6) throw new \DomainException('La contraseña debe tener al menos 6 caracteres.');
         if (strlen($password) > 72) throw new \DomainException('La contraseña es demasiado larga (máximo 72 caracteres).');
         if (!hash_equals($password, $confirm)) throw new \DomainException('La confirmación no coincide con la contraseña nueva.');
         // Por decisión del titular (2026-10-14), por ahora se permite usar la cédula o el correo como contraseña.
