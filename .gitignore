@@ -3,3 +3,6 @@
 /storage/
 /config/local.php
 /entregables/
+/.impeccable/review/
+/.impeccable/build/
+/.impeccable/mocks/

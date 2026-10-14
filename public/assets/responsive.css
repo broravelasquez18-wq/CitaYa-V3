@@ -1,120 +1,146 @@
-/* Shared sizing prevents long names, emails and grid children widening the page. */
-.shell,.card,.patient-layout>*,.grid>*,.admin-heading>*,.upload-option-copy{min-width:0}
-.grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-.identity-grid{grid-template-columns:minmax(0,1fr) minmax(0,1.2fr)}
-.grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}
-.card,.alert,.encounter,.mail-item{overflow-wrap:anywhere}
-.notice>span,.mini-icon{flex-shrink:0}
+/* CitaYa v2 · adaptación. Escritorio primero; la consola pasa de rail lateral a barra deslizable y las tablas a tarjetas. */
+.shell,.card,.patient-layout>*,.grid>*,.upload-option-copy,.console-main{min-width:0}
+.card,.alert,.encounter,.mail-item,.notice{overflow-wrap:anywhere}
 .button{white-space:normal;text-align:center}
-.upload-zone input{max-width:100%}
-.delivery-facts{grid-template-columns:repeat(2,minmax(0,1fr))}
-.table-wrap{max-width:100%}
 
-@media(max-width:850px){
-  .grid.three{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .header nav a,.tabs a{display:flex;align-items:center;justify-content:center;min-height:44px}
-  .tabs{gap:8px 20px}
-  .admin-heading h1{line-height:1.2;letter-spacing:-.7px}
-  .responsive-table{font-size:13px}
+@media(max-width:1180px){
+  .shell{padding:var(--s5) var(--s5) var(--s7)}
+  .header{padding:0 var(--s5)}
+  .footer{margin:0 var(--s5)}
+  .console-main{padding:var(--s5) var(--s5) var(--s7)}
+  .upload-flow{grid-template-columns:repeat(3,minmax(0,1fr));row-gap:var(--s4)}
+}
+
+@media(max-width:960px){
+  .patient-layout{grid-template-columns:minmax(0,1fr)}
+  .sidebar{position:static}
+  .console{grid-template-columns:minmax(0,1fr)}
+  .rail{position:sticky;top:63px;z-index:15;height:auto;border-right:0;border-bottom:1px solid var(--line);flex-direction:row;align-items:center;padding:var(--s2) var(--s3);overflow:visible}
+  .rail-nav{flex-direction:row;gap:var(--s1);overflow-x:auto;scroll-snap-type:x proximity;scrollbar-width:none;flex:1;min-width:0;padding-bottom:2px}
+  .rail-nav::-webkit-scrollbar{display:none}
+  .rail-nav{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 32px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 32px),transparent);padding-right:24px}
+  .console{background:none}
+  .call-state h2{white-space:normal}
+  .rail-nav a{flex-shrink:0;scroll-snap-align:start;min-height:44px;white-space:nowrap}
+  .rail-nav a.selected::before{left:var(--s3);right:var(--s3);top:auto;bottom:-2px;width:auto;height:3px;border-radius:3px 3px 0 0}
+  .rail-nav a:nth-child(3){margin-bottom:0;margin-right:var(--s3)}
+  .rail-nav a:nth-child(3)::after{left:auto;right:calc(var(--s2) * -1);top:10px;bottom:10px;width:1px;height:auto}
+  .rail-session{border-top:0;border-left:1px solid var(--line);padding:0 0 0 var(--s3);flex-shrink:0}
+  .rail-user{display:none}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .stat:nth-child(3){border-left:0}
+  .stat:nth-child(n+3){border-top:1px solid var(--line)}
+  .case-layout{grid-template-columns:minmax(0,1fr)}
+  .case-info{border-right:0;border-bottom:1px solid var(--line)}
+  .report-layout{grid-template-columns:minmax(0,1fr)}
+  .analytics-heading{flex-direction:column;align-items:stretch}
+  .analytics-filter{flex-wrap:wrap}
+  .activity-grid{grid-template-columns:minmax(0,1fr)}
+  .activity-period+.activity-period{border-left:0;border-top:1px solid var(--line)}
 }
 
 @media(max-width:700px){
-  /* Each table row becomes a labelled card; column headings stay accessible. */
-  .responsive-table{display:block;margin-top:16px;white-space:normal}
+  /* Cada fila es una tarjeta con etiquetas; los encabezados siguen disponibles para lectores de pantalla. */
+  .table-wrap{border:0;overflow:visible}
+  .responsive-table{display:block;font-size:var(--t-sm)}
   .responsive-table thead{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-  .responsive-table tbody{display:grid;gap:14px}
-  .responsive-table tbody tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 16px;border:1px solid var(--line);border-radius:12px;padding:16px;background:#fff}
-  .responsive-table td{display:block;border:0;padding:0;min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
-  .responsive-table td::before{content:attr(data-label);display:block;font-size:11px;letter-spacing:0;font-weight:600;color:var(--muted);margin-bottom:5px}
+  .responsive-table tbody{display:grid;gap:var(--s3)}
+  .responsive-table tbody tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s3) var(--s4);border:1px solid var(--line);border-radius:var(--radius);padding:var(--s4);background:var(--surface)}
+  .responsive-table tbody tr:hover td{background:none}
+  .responsive-table td{display:block;border:0;padding:0;min-width:0;white-space:normal;overflow-wrap:anywhere}
+  .responsive-table td::before{content:attr(data-label);display:block;font-family:var(--sans);font-size:var(--t-xs);font-weight:600;color:var(--muted);margin-bottom:2px}
+  .responsive-table td.empty-cell{grid-column:1/-1}
+  .responsive-table td.empty-cell::before{content:none}
   .responsive-table td[data-label="Paciente"],.responsive-table td[data-label="Radicado / fecha"],
   .responsive-table td[data-label="Correo de entrega"],.responsive-table td[data-label="Atención médica"],
   .responsive-table td[data-label="Atención"],.responsive-table td[data-label="Tipo de requerimiento"],
   .responsive-table td[data-label="Archivos"],.responsive-table td[data-label="Paciente / atención"],
-  .responsive-table td[data-label="Resultado"]{grid-column:1/-1}
-  .responsive-table td:last-child{grid-column:1/-1;border-top:1px solid #edf2f4;padding-top:12px}
-  .responsive-table td:last-child .button,.responsive-table .text-button{min-width:44px;min-height:44px}
-  .history-actions{gap:12px}
-  .responsive-table .pill,.history-approved,.history-closed,.history-type,.history-date{font-size:11px;max-width:100%}
-  .responsive-table small{font-size:12px}
+  .responsive-table td[data-label="Resultado"],.responsive-table td[data-label="Persona"]{grid-column:1/-1}
+  .responsive-table td:last-child{grid-column:1/-1;border-top:1px solid var(--line);padding-top:var(--s3)}
+  .responsive-table td[data-label="Radicado / fecha"]{order:-1}
+  .delivery-email{min-width:0}
 }
 
 @media(max-width:650px){
-  .header,.patient-portal .header{height:auto;min-height:0;flex-wrap:wrap;gap:10px;padding:14px 16px 10px}
-  .header .brand{font-size:25px;min-height:36px}
-  .header nav{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .header nav a{font-size:12px;border-radius:8px;background:#f3f8f9;color:#36636b;padding:8px}
-  .shell,.patient-portal .shell{padding:22px 16px 36px}
-  .card,.main-card{padding:22px 18px;border-radius:14px}
-  h1,.login-card h1{font-size:28px;letter-spacing:-.7px}
-  h2{font-size:20px;line-height:1.35}
-  h3{font-size:17px}
-  .patient-portal .intro h1{font-size:28px}
-  .patient-layout{gap:18px}
-  .card-heading{align-items:flex-start;gap:10px}
-  .card-heading h2{font-size:18px}
-  .grid,.grid.three,.identity-grid{grid-template-columns:minmax(0,1fr);gap:0}
-  label{font-size:13px}
-  input,select{font-size:16px;min-height:48px}
-  input[type=checkbox]{min-height:0}
-  .check{min-height:44px;align-items:center;margin-bottom:12px;gap:12px}
-  .check input{width:20px;height:20px;margin:0}
-  #date-help{margin:-4px 0 22px;line-height:1.6}
-  .button{font-size:14px;min-height:48px}
+  .header{min-height:56px;padding:0 var(--s4);gap:var(--s2)}
+  body.staff .header{padding:0 var(--s4)}
+  .brand-context{display:none}
+  .header-nav a{padding:0 var(--s2);font-size:var(--t-xs);min-height:44px}
+  .shell{padding:var(--s4) var(--s4) var(--s6)}
+  body.staff .shell{padding:0}
+  .rail{top:56px}
+  .console-main{padding:var(--s4) var(--s4) var(--s6)}
+  .footer{margin:0 var(--s4);flex-direction:column;gap:var(--s1);padding-bottom:max(var(--s5),env(safe-area-inset-bottom))}
+  .card{padding:var(--s4)}
+  .main-card{padding:var(--s4) var(--s4) var(--s5)}
+  .intro{margin-bottom:var(--s4)}
+  .intro p{font-size:var(--t-base)}
+  .steps li{flex-direction:column;align-items:flex-start;gap:var(--s1);font-size:var(--t-xs)}
+  .grid,.grid.three,.identity-grid{grid-template-columns:minmax(0,1fr)}
+  .check{min-height:44px}
+  .button{min-height:48px}
   .text-button,.back-link{min-height:44px;display:inline-flex;align-items:center}
-  summary{min-height:44px;align-content:center;font-size:13px}
-  .request-help details{padding:5px 0}
-  .request-help summary{font-size:13px}
-  .request-help details p{margin:2px 0 12px}
-  .notice{padding:12px;align-items:flex-start}
-  .notice p,.card-heading p,.muted{font-size:13px}
-  .notice:has(>strong){flex-direction:column;gap:6px}
-  .form-footnote,small{font-size:12px}
-  .steps{gap:0}
-  .steps li{font-size:12px;gap:6px;flex-direction:column}
-  .steps li:not(:last-child):after{position:absolute;top:14px;left:calc(50% + 18px);width:calc(100% - 36px);margin:0}
-  .steps li>span{z-index:1;width:30px;height:30px}
-  .encounter{flex-direction:column;align-items:stretch;padding:15px}
-  .encounter .button{width:100%;white-space:normal;font-size:14px}
-  .encounter strong{font-size:14px}
-  .encounter p{font-size:12px}
-  .admin-heading{display:block}
-  .admin-heading h1{font-size:28px;margin:8px 0 12px}
-  .admin-heading form{margin-top:12px}
-  .admin-heading .button{margin:0}
-  .tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border:0;gap:8px;margin:20px 0}
-  .tabs a{padding:10px 8px;border:1px solid var(--line);border-radius:9px;background:#fff;font-size:12px;text-align:center}
-  .tabs .selected{border:1px solid var(--teal);background:var(--soft);font-weight:700}
-  .stat{padding:14px;min-width:0}
-  .stat strong{font-size:26px}
-  .stat span{font-size:12px}
-  .stats{gap:10px;margin-bottom:20px}
-  .delivery-search{gap:10px;margin-top:16px}
-  .delivery-search label{flex-basis:100%;min-width:0}
+  details>summary{min-height:44px}
+  /* En móvil el resultado manda: placa a lo ancho, estado debajo del número. */
+  .call-plate{grid-template-columns:minmax(0,1fr);margin:calc(var(--s4) * -1) calc(var(--s4) * -1) var(--s5);border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding:var(--s5) var(--s4)}
+  .call-state{justify-self:stretch}
+  .encounter{grid-template-columns:auto minmax(0,1fr)}
+  .encounter .button{grid-column:1/-1;width:100%}
+  .page-head h1{font-size:var(--t-lg)}
+  .stats{margin-bottom:var(--s4)}
+  .stat{padding:var(--s3) var(--s4)}
+  .stat dd{font-size:var(--t-lg)}
   .delivery-search .button{flex:1}
-  .delivery-pagination{gap:12px;margin-top:20px}
-  .delivery-pagination .button{padding:10px 12px}
-  .delivery-facts{grid-template-columns:minmax(0,1fr);gap:16px}
-  .mail-item{padding:16px}
-  .mail-top{display:block}
-  .mail-top .pill{margin-top:8px}
-  .upload-center{padding:22px 18px}
-  .upload-option{min-width:0}
-  .upload-option-copy>span{font-size:13px}
-  .upload-panel .check{font-size:13px}
-  .upload-panel input[type=file]{padding:10px;font-size:13px}
-  .upload-panel .upload-zone{padding:14px}
-  .upload-panel input[type=file]::file-selector-button{display:block;margin:0 0 8px;padding:10px 12px;min-height:44px}
-  .login-card{margin:8px auto}
-  .code-input{font-size:26px;letter-spacing:6px}
-  .delivery-modal{width:calc(100% - 16px);max-height:calc(100vh - 16px);max-height:calc(100dvh - 16px);border-radius:14px}
-  .delivery-modal-header{padding:12px;gap:8px}
-  .delivery-modal-header h2{font-size:17px}
-  .delivery-modal-header .button{flex-shrink:0;min-height:44px;padding:8px 12px;font-size:13px}
-  .delivery-modal-content{padding:0 10px 16px}
-  .delivery-modal-content>.card{padding:18px 14px}
-  .reopen-modal{padding:24px 18px 20px;width:min(420px,calc(100% - 24px));max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px)}
-  .reopen-buttons .button{min-height:46px;font-size:14px}
-  footer{margin:0 16px;padding-bottom:max(24px,env(safe-area-inset-bottom));font-size:11px;flex-wrap:wrap;gap:10px}
+  .segmented{display:flex}
+  .segmented a{flex:1;justify-content:center}
+  .upload-heading{flex-direction:column}
+  .upload-flow{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .upload-options{grid-template-columns:minmax(0,1fr)}
+  .upload-panel .button{width:100%}
+  .load-data{grid-template-columns:minmax(0,1fr)}
+  .load-data>div+div{border-left:0;border-top:1px solid var(--line)}
+  .delivery-facts{grid-template-columns:minmax(0,1fr)}
+  .mail-top{flex-direction:column;align-items:flex-start}
+  .case-respond-head{flex-direction:column}
+  .case-tools{width:100%}
+  .case-tools .case-menu{flex:1}
+  .case-menu-list{left:0;right:auto}
+  .case-actions{flex-direction:column-reverse}
+  .case-actions .button{width:100%}
+  .case-pair{grid-template-columns:minmax(0,1fr)}
+  .chat-message{max-width:92%}
+  .chat-form{flex-direction:column;align-items:stretch}
+  .report-item{flex-direction:column;align-items:flex-start}
+  .report-meta{flex-direction:row;align-items:center;flex-wrap:wrap}
+  .case-info{padding:var(--s4) var(--s3)}
+  .case-main{padding:var(--s2) var(--s3) var(--s4)}
+  .case-history .history-actions{margin:0 calc(var(--s3) * -1);padding:var(--s3)}
 }
 
-@media(prefers-reduced-motion:reduce){.button,.upload-option{transition:none}}
+@media(max-width:380px){
+  .brand-name{font-size:1.2rem}
+  .header-nav a{padding:0 6px}
+}
+
+/* Superficies en móvil: el drawer ocupa la pantalla y el modal sube desde abajo. */
+@media(max-width:640px){
+  .drawer,.drawer.drawer-wide{width:100vw;border-radius:0}
+  .modal,.modal.modal-wide,.modal.modal-md{inset:auto 0 0 0;width:100vw;max-width:100vw;max-height:calc(100dvh - 24px);margin:auto 0 0;border-radius:var(--radius-lg) var(--radius-lg) 0 0}
+  .modal[open]{animation:sheet-up .3s var(--ease-out)}
+  .modal.is-closing{animation:sheet-down .2s ease-in forwards}
+  .sheet-head{padding:var(--s3) var(--s4)}
+  .sheet-body{padding:var(--s4)}
+  .sheet-foot{bottom:calc(var(--s4) * -1);margin:auto calc(var(--s4) * -1) calc(var(--s4) * -1);padding:var(--s3) var(--s4) max(var(--s3),env(safe-area-inset-bottom))}
+  .sheet-body>form .sheet-foot,div.sheet-body>.sheet-foot{margin-top:var(--s4)}
+  .drawer>div.sheet-body>.sheet-foot{margin-top:auto}
+  .sheet-foot .button{flex:1}
+  .sheet-foot .foot-start{flex-basis:100%;margin:0}
+  .sheet-foot .foot-start .button{width:100%}
+  .sheet-extra{padding:var(--s4)}
+  .alert-modal-actions{flex-direction:column-reverse}
+  .alert-modal-actions .button{min-height:48px}
+  .item-row{flex-wrap:wrap}
+  .toast-stack,.toast-stack[popover]{inset:auto var(--s4) var(--s4) var(--s4);width:auto}
+}
+@keyframes sheet-up{from{transform:translateY(100%)}}
+@keyframes sheet-down{to{transform:translateY(100%)}}

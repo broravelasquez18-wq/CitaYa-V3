@@ -33,7 +33,7 @@ function csrf(): string { return '<input type="hidden" name="csrf" value="' . h(
 /** Cualquier persona del acceso interno (administrador o empleado). */
 function requireStaff(): void { if (empty($_SESSION['admin_id'])) go('admin-login'); }
 /** Solo administradores (SCRUM-46). Un empleado que intenta entrar va a Solicitudes. */
-function requireAdmin(): void { requireStaff(); if (($_SESSION['admin_role'] ?? 'admin') !== 'admin') { $_SESSION['flash'] = 'Esa sección es solo para administradores.'; go('deliveries'); } }
+function requireAdmin(): void { requireStaff(); if (($_SESSION['admin_role'] ?? 'admin') !== 'admin') { $_SESSION['flash'] = 'Esa sección es solo para administradores.'; $_SESSION['flash_tone'] = 'error'; go('deliveries'); } }
 function currentStaff(): array { return ['id' => (int)$_SESSION['admin_id'], 'role' => (string)($_SESSION['admin_role'] ?? 'admin'), 'name' => (string)($_SESSION['admin_name'] ?? '')]; }
 function requirePatient(): int {
     if (empty($_SESSION['request_access']) || $_SESSION['request_access'] !== ($_SESSION['request_id'] ?? null)) go('home');
@@ -54,13 +54,14 @@ if (!empty($_SESSION['admin_id'])) {
 $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
 $page = (string) ($_GET['page'] ?? 'home');
 $error = null;
-$flash = $_SESSION['flash'] ?? null; unset($_SESSION['flash']);
+// Mensaje de la acción anterior, mostrado como toast. Tono: success (por defecto), info o error.
+$flash = $_SESSION['flash'] ?? null; $flashTone = $_SESSION['flash_tone'] ?? null; unset($_SESSION['flash'], $_SESSION['flash_tone']);
 $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
 // Enlace personal enviado por el bot de WhatsApp. Viaja en el formulario como campo oculto.
 $whatsappToken = (string) ($_POST['wa'] ?? $_GET['wa'] ?? '');
 $whatsappLink = $whatsappToken === '' ? null : $app->whatsapp()->findLink($whatsappToken);
 if ($whatsappToken !== '' && !$whatsappLink && $_SERVER['REQUEST_METHOD'] === 'GET') {
-    $flash = 'El enlace de WhatsApp venció o ya fue usado. Escribe HISTORIA al WhatsApp para recibir uno nuevo, o completa el formulario para recibir la historia solo por correo.';
+    $flashTone = 'info'; $flash = 'El enlace de WhatsApp venció o ya fue usado. Escribe HISTORIA al WhatsApp para recibir uno nuevo, o completa el formulario para recibir la historia solo por correo.';
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
@@ -193,8 +194,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['csrf'] = bin2hex(random_bytes(32));
                 if ($app->request($requestId)['status'] === 'queued') { $_SESSION['flash'] = 'Historia cargada. Coincidió con la solicitud y ya se está enviando al paciente.'; go('deliveries'); }
                 $candidate = array_values(array_filter($app->candidateEncounters($requestId), fn($row) => (int)$row['id'] === $encounterId))[0] ?? null;
-                if (!$candidate) { $_SESSION['flash'] = 'La historia se guardó en el repositorio, pero pertenece a otro número de documento. No se envió a esta solicitud.'; go('deliveries'); }
-                if (!$candidate['name_matches']) { $_SESSION['flash'] = 'La historia se guardó, pero el nombre del PDF no coincide con el de la solicitud. No se envió; si corresponde, responde «No registra».'; go('deliveries'); }
+                if (!$candidate) { $_SESSION['flash'] = 'La historia se guardó en el repositorio, pero pertenece a otro número de documento. No se envió a esta solicitud.'; $_SESSION['flash_tone'] = 'info'; go('deliveries'); }
+                if (!$candidate['name_matches']) { $_SESSION['flash'] = 'La historia se guardó, pero el nombre del PDF no coincide con el de la solicitud. No se envió; si corresponde, responde «No registra».'; $_SESSION['flash_tone'] = 'info'; go('deliveries'); }
                 $app->assignEncounter($requestId, $encounterId, (int)$_SESSION['admin_id']);
                 $_SESSION['flash'] = 'Historia cargada y asignada. Se está enviando al paciente.';
                 go('deliveries');
@@ -320,7 +321,7 @@ if (in_array($page, ['appointments','status'], true)) {
             if (!in_array($request['status'], ['verified','matched','awaiting_selection','no_matches','unavailable'], true)) go('status');
             $encounters = $app->search($id);
         }
-    } catch (DomainException $e) { unset($_SESSION['request_access']); $_SESSION['flash'] = $e->getMessage(); go('home'); }
+    } catch (DomainException $e) { unset($_SESSION['request_access']); $_SESSION['flash'] = $e->getMessage(); $_SESSION['flash_tone'] = 'error'; go('home'); }
 }
 $steps = ['home' => 1, 'verify' => 2, 'appointments' => 2, 'status' => 3];
 $labels = ['matched'=>'Datos coincidentes','no_matches'=>'Sin coincidencias','awaiting_selection'=>'Selecciona una atención','not_eligible'=>'Entrega no habilitada','pending_verification'=>'Pendiente de verificación','verified'=>'Verificada','queued'=>'En cola de envío','sending'=>'Preparando el envío','retry'=>'Reintento programado','sent'=>'Correo enviado','simulated'=>'Entrega simulada','failed'=>'No se pudo enviar','uncertain'=>'Resultado por confirmar','unavailable'=>'Historia no disponible','expired'=>'Solicitud vencida','cancelled'=>'Cancelado','waiting_window'=>'Esperando que el paciente escriba','not_registered'=>'No registra'];

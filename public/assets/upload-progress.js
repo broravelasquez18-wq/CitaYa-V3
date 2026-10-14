@@ -62,6 +62,7 @@
         progress.setAttribute('aria-valuetext', 'Carga sin confirmar');
         note.textContent = 'Cierra este mensaje para volver al formulario.';
         if (opener) { opener.disabled = false; opener.removeAttribute('aria-busy'); }
+        window.CitaYa?.toast({tone: 'error', title: 'La carga no se confirmó', text});
         const bulkNotice = form.querySelector('[data-bulk-progress]');
         if (bulkNotice) bulkNotice.hidden = true;
         close.focus();

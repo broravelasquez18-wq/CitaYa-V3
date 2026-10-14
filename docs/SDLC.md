@@ -629,3 +629,233 @@ Ruta de regreso: con `WA_WEBHOOK_URL` apuntando al webhook de CitaYa (`/whatsapp
   - eliminar, con confirmación. Sin actividad se borra del todo. Con actividad se archiva (`deleted_at`): no aparece ni puede entrar, libera su cédula y correo, se conserva el historial y sus reportes abiertos pasan al empleado activo con menos carga. Nadie puede eliminarse a sí mismo y siempre queda un administrador activo.
   - Se mantienen activar/desactivar y nueva contraseña. El inicio de sesión excluye las cuentas eliminadas.
 - Validación: `tests/support.php` 43 (11 nuevas) y prueba en local de crear y eliminar desde el formulario.
+
+## Frontend v2: rediseño completo del portal y del acceso interno (SCRUM-49, RF-30 = SCRUM-50)
+
+**Alcance (fase 1).** El titular pidió una versión 2 de todo el frontend usando las skills instaladas, y decidió:
+- reemplazar la v1, sin interruptor entre versiones;
+- usuarios: pacientes (sobre todo en móvil, a menudo desde WhatsApp) y personal de la clínica;
+- de la identidad anterior solo se conserva el nombre CitaYa.
+
+El contexto de producto quedó en `PRODUCT.md`.
+
+**Requisitos (fase 2).**
+- **RF-30.** Un único sistema visual para todas las vistas: portal, inicio de sesión, consola interna, modales y ventanas de progreso.
+- **RNF:** se conservan:
+  - rutas, formularios con CSRF, atributos `data-*` del JS y funcionamiento sin JavaScript;
+  - la CSP sin estilos en línea y con fuentes servidas desde el propio servidor;
+  - contraste AA, campos de 16 px, objetivos táctiles de 44 px y ausencia de desbordamiento horizontal.
+
+**Diseño (fase 3).** Dirección «Tablero de turnos», elegida por el titular en la página de decisión de la skill *impeccable*. Toma la pantalla de turnos de las salas de espera colombianas:
+- **Radicado como turno llamado:** en el estado de la solicitud y en el detalle del caso aparece en una placa azul noche, con número en cifras tabulares y estado con ícono.
+- **Colores:** encabezado y rail interno azul noche y suelo claro frío. El ámbar es exclusivo de lo que está en curso (en cola, enviando, pendientes); verde confirma, rojo detiene, siempre con ícono y texto.
+- **Tipografía:** Atkinson Hyperlegible Next y Mono (Braille Institute, licencia OFL), autoalojadas en `public/assets/fonts/`.
+- **Consola interna:** rail lateral con secciones y contadores. En Pendientes, un tablero con la cantidad en espera y «Atender la más antigua».
+- **Análisis:** barras de participación en la tabla, sin gráfico circular.
+
+**Implementación (fase 4).**
+- `app.css` y `responsive.css` reescritos con tokens.
+- `templates/icons.php` agrega íconos SVG (`ui_icon`) que reemplazan los caracteres Unicode, y el tono de estado (`ui_tone`).
+- `layout.php` y `admin.php` reestructurados (consola con rail).
+- Las plantillas internas pierden los rótulos sobre los títulos y los números de sección.
+- Ventanas de progreso con barra lineal, sin cambios en `upload-progress.js`.
+- `app.js`: el aviso de reportes busca el contador en el rail; se quitan los emojis; en móvil el rail muestra la sección actual.
+
+**Validación (fase 5).**
+- Pruebas que no dependen del servidor web, sin cambios en verde: `run` 158, `requests-admin` 46, `resend-ui` 19, `support` 43, `whatsapp` 55, `n8n-api` 28, `whatsapp-qr` 8, `whatsapp-zernio` 22, `analytics`, `upload-progress.cjs`.
+- `http`, `admin-http`, `bulk-http` y `upload` siguen fallando como antes: apuntan a `localhost/CitaYaV2`.
+- Detector de diseño sin hallazgos.
+- Capturas en Chrome sin interfaz a 1440 y 390 px de 17 vistas más el modal, sin desbordamiento horizontal. Los estados del paciente se generaron con datos ficticios.
+- Revisión final independiente (subagente) con una ronda de 8 correcciones.
+- Las capturas quedan en `.impeccable/review/`, excluida del repositorio porque muestra datos de la base local.
+- Decisión abierta: si el logo conserva el ámbar (SCRUM-51).
+- Sin verificar: el tablero de turnos con solicitudes en espera (en local había 0).
+
+## Frontend v2: superficies comunes — drawer, modal, aviso y toast (SCRUM-49)
+
+**Requisitos (fase 2).** El titular pidió reestructurar el HTML con cuatro superficies de uso fijo:
+- **drawer** para formularios (agregar empleado, cargar historias, editar plantilla);
+- **modal** para detalles (solicitud, historial del caso, resultado de carga) y formularios cortos (editar cuenta, ajustar fecha o especialidad);
+- **aviso** (modal de alerta) para algo importante o para confirmar una acción (WhatsApp desconectado, contraseña nueva, retirar, reabrir, desactivar, eliminar, restaurar plantilla, cerrar reporte);
+- **toast** para fallos, confirmación de acciones y novedades (reportes nuevos, mensajes del paciente).
+
+RNF: se mantienen el funcionamiento sin JavaScript (enlace `#id` + `:target`), la CSP sin estilos en línea y los objetivos táctiles de 44 px.
+
+**Diseño (fase 3).**
+- El drawer entra por la derecha; en móvil ocupa toda la pantalla.
+- El modal se centra; en móvil sube desde abajo como hoja.
+- Encabezado común (`ui_sheet_head`), pie de acciones fijo abajo y zona «Más acciones».
+- Toasts abajo a la derecha, con tono por borde e ícono. Éxito e información se ocultan solos (pausa al pasar el ratón o con foco). Un fallo queda hasta cerrarlo.
+
+**Implementación (fase 4).**
+- `app.js` expone `window.CitaYa` con `open`, `close`, `toast` y `confirm`. Gestiona animación de entrada y salida, Escape, clic en el fondo, foco de regreso, bloqueo de scroll, `data-auto-open` (reabrir el formulario tras un error) y `data-once`.
+- `data-confirm` usa el aviso propio en lugar de `window.confirm`, también en contenido cargado después. `alert()` y `confirm()` del cuadro de respuesta pasan a toast y aviso.
+- Los toasts van en la capa superior (`popover`) para verse sobre un modal abierto.
+- El detalle y el historial del caso comparten `remoteModal` y la plantilla `templates/detail-modals.php`. Se eliminan los diálogos propios de detalle, historial, reapertura y resultado de carga.
+- «Reabrir caso» pasa a ser un formulario con confirmación común.
+- El servidor indica el tono del toast con `$_SESSION['flash_tone']` (`info` o `error`).
+
+**Validación (fase 5).**
+- Sin cambios en verde: `run` 158, `requests-admin` 46, `resend-ui` 19, `support` 43, `whatsapp` 55, `n8n-api` 28, `whatsapp-qr` 8, `whatsapp-zernio` 22, `analytics`, `upload-progress.cjs`.
+- Chrome sin interfaz a 1440 y 390 px: drawers de empleado, plantilla y carga; modal de edición; confirmación y cancelación; detalle con historial encima; toasts sobre un modal. Sin desbordamiento horizontal. Se usó una cuenta temporal que se eliminó al terminar.
+- Sin verificar con datos: la confirmación de reapertura (el historial local tenía 0 casos).
+
+## Frontend v2: regreso a la paleta de la versión 2 (SCRUM-49)
+
+**Requisito.** El titular pidió usar los colores de la versión 2. Es la paleta de `CitaYaV2`, igual a la del último commit de V3:
+- cian `#00acc4`, teal `#008f98`;
+- tinta `#203648`, fondo `#f5f9fa`, líneas `#dfe9ed`, suave `#e9f8f8`;
+- éxito `#276b59`/`#e2f5ef` y error `#973f3f`/`#fff0ef`.
+
+Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer, modal, aviso, toast) no cambia.
+
+**Implementación.**
+- Tokens de `app.css` reasignados. Nuevo `--brand` `#00808a`: el teal de la v2 un poco más profundo para que el texto blanco cumpla AA (4,71). Es el color de botones principales, pasos, selección y foco.
+- Encabezado y rail vuelven a ser blancos, con la sección activa en teal sobre `#e9f8f8`.
+- Las superficies oscuras (placa del radicado, toasts, tablero de espera) usan la tinta `#203648`.
+- El ámbar se mantiene solo para lo que está en curso.
+- Logo con el cuadro cian y «Ya» en cian, como en la v2. `theme-color` blanco. `DESIGN.md` actualizado.
+
+**Validación.**
+- Contrastes AA: botón 4,71; texto atenuado 4,70; enlaces 5,61; sección activa 5,74; éxito 5,56; error 6,12.
+- Capturas a 1440 y 390 px sin desbordamiento horizontal.
+- Mismas comprobaciones de superficies en verde. `resend-ui` 19 en verde.
+
+## Portal del paciente: formulario de solicitud guiado (SCRUM-49)
+
+**Requisito.** El titular pidió que el formulario de `?page=home` sea mucho más intuitivo para el paciente, que suele llegar desde el celular por WhatsApp.
+
+**Diseño.**
+- El formulario se divide en tres pasos cortos, cada uno con una pregunta:
+  1. ¿De quién es la historia clínica?
+  2. ¿Cuándo fue la atención?
+  3. ¿Dónde te la enviamos?
+- Barra «Paso N de 3» y un solo botón principal. En móvil la barra de acciones queda fija abajo.
+- El tipo de documento sigue siendo una lista desplegable (decisión del titular), junto al número en escritorio.
+- «No recuerdo la fecha» es una tarjeta que explica qué pasará.
+- WhatsApp lleva el prefijo +57 visible.
+- Antes de enviar, un modal «Revisa tus datos» resume paciente, atención y entrega, con «Cambiar» por sección.
+
+**Implementación.**
+- `templates/request-form.php` (nuevo) reemplaza el formulario de `layout.php`. Los nombres de campo, el CSRF y el contrato del servidor no cambian.
+- En `app.js`, el módulo del formulario guiado:
+  - valida al salir del campo con mensajes claros, las mismas reglas del servidor;
+  - quita puntos, espacios y guiones del documento y cambia el teclado según el tipo;
+  - sugiere el dominio del correo cuando hay un error de escritura (por ejemplo `gmial.com` → `gmail.com`);
+  - con Enter avanza de paso;
+  - antes de enviar valida todo y abre la revisión.
+- Si el servidor rechaza un dato, la página vuelve al paso que corresponde (documento o nombre → 1, fecha o especialidad → 2, correo o WhatsApp → 3) con lo escrito y un toast de error.
+- Sin JavaScript, los tres pasos se ven seguidos y el botón envía con la validación nativa.
+
+**Validación.**
+- Recorrido en Chrome sin interfaz a 1440 y 390 px: errores en línea, limpieza del documento, sugerencia de correo, revisión y «Cambiar», sin desbordamiento horizontal. No se envió ninguna solicitud.
+- Un POST con correo inválido devuelve el paso 3 con TI, número, nombre y fecha conservados.
+- `run` 158, `resend-ui` 19 y `requests-admin` 46 en verde.
+
+## Portal del paciente: formulario en una sola tarjeta (SCRUM-49)
+
+**Requisito.** El titular pidió un formulario más intuitivo y compartió una referencia: una sola tarjeta centrada con secciones numeradas.
+
+**Diseño.** Reemplaza al formulario por pasos.
+- En `?page=home` hay un título centrado y una tarjeta. No se muestran la introducción, los pasos del proceso ni la ayuda lateral; las demás páginas del portal no cambian.
+- Tres secciones con título en mayúsculas: 1. Datos del paciente, 2. Atención médica, 3. Datos de contacto.
+- Etiquetas en mayúsculas y campos con ícono. Fecha y especialidad, y correo y celular, van lado a lado en escritorio.
+- Acciones «Cancelar» (limpia el formulario) y «Radicar solicitud de historia».
+- Recuadro «Autorización de tratamiento de datos personales» (Ley 1581 de 2012). Debe validarse con la política de datos de la IPS.
+- No se agregó el selector «Resultado de estudios / Historia clínica» de la referencia: el sistema solo gestiona historias clínicas.
+- Se conservan la validación en línea, la limpieza del documento, la sugerencia de correo y el modal «Revisa tus datos».
+
+**Accesibilidad.**
+- Títulos de sección en `#007d8f` (4,85:1).
+- El botón principal es `#0097ad` con texto de 19 px en negrita, que cuenta como texto grande (3,48:1, mínimo 3:1).
+
+**Validación.**
+- Chrome sin interfaz a 1440 y 390 px: errores al radicar incompleto, sugerencia de correo, revisión, «Cambiar» enfoca la sección y «Cancelar» limpia. Sin desbordamiento horizontal.
+- Un POST con error conserva lo escrito.
+- `run` 158, `resend-ui` 19 y `requests-admin` 46 en verde.
+
+## Acceso interno: nuevo inicio de sesión (SCRUM-49)
+
+**Requisito.** El titular compartió una referencia de inicio de sesión: panel oscuro con marca y módulos a la izquierda y la tarjeta de acceso a la derecha. Pidió hacerla con los colores actuales.
+
+**Diseño.**
+- El fondo usa la tinta de la v2 (`#16273a`–`#203648`), con retícula fina y halos cian y teal. El encabezado del sitio pasa a oscuro en esta página.
+- A la izquierda: emblema, «CitaYa · Acceso interno», una línea de propósito y «Qué hace CitaYa» en seis tarjetas (a pedido del titular, en lugar de los módulos): lee los PDF, encuentra la historia, envía por correo, avisa por WhatsApp, organiza lo pendiente y mide la gestión.
+- A la derecha, la tarjeta «Iniciar sesión»: correo y contraseña con ícono, botón para mostrar u ocultar la contraseña y botón cian «Acceder al portal».
+- Al pie de la tarjeta, ayuda para recuperar la contraseña: un administrador genera una nueva desde Empleados.
+- En móvil la tarjeta va primero.
+- No se copiaron elementos de la referencia que el sistema no tiene o que serían afirmaciones sin respaldo:
+  - «Mantener conexión», recuperación automática de clave e instalación como app;
+  - sellos «SSL 256-bit», «HIPAA/HL7 FHIR» y «Servidores en línea»;
+  - módulos ajenos (Agendamiento, Recursos humanos) y la marca QUALISYS.
+
+**Implementación.**
+- `templates/login.php` (nuevo).
+- Íconos `plus`, `lock`, `eye` y `eye-off` en `icons.php`.
+- Estilos de `body.login` en `app.css`.
+- Mostrar u ocultar la contraseña con `aria-pressed`, en `app.js`. Sin JavaScript el botón no aparece.
+
+**Validación.**
+- Contrastes: textos pequeños en cian claro `#3fd2df` (6,41:1); botón con tinta sobre cian (4,57:1); texto atenuado (6,81:1).
+- Capturas a 1440 y 390 px sin desbordamiento horizontal.
+- Credenciales erróneas: toast «Credenciales incorrectas» y correo conservado.
+- `run` 158 en verde.
+
+## Acceso interno: animaciones del inicio de sesión (SCRUM-49)
+
+**Requisito.** El titular pidió animar el inicio de sesión: que se muevan las cajas de los módulos, que se vean brillos moviéndose al fondo y que haya pastillas y cápsulas detrás.
+
+**Implementación.** Solo CSS (respeta la CSP), animando únicamente `transform` y `opacity`.
+- **Fondo** (`.login-glow`, fija y recortada):
+  - tres halos cian y teal que derivan entre 22 y 30 s;
+  - un barrido de luz sobre la retícula;
+  - 14 chispas que suben y titilan;
+  - 10 pastillas y cápsulas de dos tonos que flotan y giran despacio, algunas desenfocadas para dar profundidad.
+- **Contenido:**
+  - entrada escalonada de la marca y los módulos, y la tarjeta de acceso entra desde la derecha;
+  - los módulos flotan con desfase y les pasa un reflejo; al pasar el ratón se elevan con borde cian;
+  - el emblema emite anillos y los puntos de estado parpadean;
+  - el botón «Acceder al portal» tiene un reflejo periódico suave.
+- Con «reducir movimiento» todo queda quieto y las chispas se ocultan.
+- En móvil se ocultan tres pastillas y baja su opacidad.
+
+**Validación.**
+- Chrome sin interfaz: las transformaciones cambian entre capturas a los 3 y 6 s (66 animaciones activas). Con `prefers-reduced-motion: reduce` quedan sin transformación.
+- 1440 y 390 px sin desbordamiento horizontal: se corrigió uno de 8 px en móvil con `overflow: clip` y `contain: strict` en la capa de fondo.
+
+## Acceso interno: modo claro y oscuro en el inicio de sesión (SCRUM-49)
+
+**Requisito.** El titular pidió un botón para cambiar el inicio de sesión entre modo claro y oscuro.
+
+**Implementación.**
+- Botón «Modo claro / Modo oscuro» con ícono de sol y luna, en el encabezado del inicio de sesión (a pedido del titular). En móvil queda solo el ícono, con etiqueta accesible. Usa `aria-pressed` y una etiqueta que dice a qué modo cambia.
+- La elección se guarda en `localStorage` (`citaya-theme`). `public/assets/theme.js` se carga en `<head>` sin `defer` (CSP `script-src 'self'`) y aplica `data-theme` antes de pintar, sin parpadeo.
+- El modo oscuro es el predeterminado.
+- El modo claro reasigna las variables `--login-*` (fondo `#eef6f8`, tarjetas blancas, tinta `#203648`, acento `#00737c`) y suaviza los halos, chispas, pastillas y cápsulas. Las animaciones se mantienen.
+- `theme-color` del navegador acompaña el tema.
+- Sin JavaScript el botón no aparece.
+
+**Validación.**
+- Chrome sin interfaz: clic → claro y guardado; recarga → sigue claro; clic → vuelve a oscuro.
+- 1440 y 390 px sin desbordamiento.
+- Contraste del acento claro sobre el fondo ≥ 4,5:1.
+- `run` 158 en verde.
+
+## Portal del paciente: fondo animado y modo claro u oscuro en el formulario (SCRUM-49)
+
+**Requisito.** El titular pidió adaptar al formulario de solicitud lo hecho en el inicio de sesión.
+
+**Implementación.**
+- El fondo animado (halos, barrido, chispas, pastillas y cápsulas) pasa a `templates/ambient.php`, compartido.
+- `layout.php` marca con `body.ambient` las páginas `admin-login` y `home`: incluye el fondo y muestra el botón de tema en el encabezado.
+- Los estilos `body.login` del fondo, el encabezado, el pie y el tema pasan a `body.ambient`.
+- La elección de tema es la misma en ambas páginas (`citaya-theme`).
+- En `body.request-page`:
+  - entrada escalonada del título, la tarjeta y las tres secciones, con reflejo periódico en «Radicar»;
+  - el modo oscuro (predeterminado) usa la tarjeta en tinta con campos blancos, títulos en cian claro, ayudas atenuadas y errores en `#ff9c94` (5,82:1), con «Cancelar» y «Radicar» en el estilo del login;
+  - el modo claro conserva la tarjeta blanca.
+- El modal de revisión y las demás páginas del portal no cambian.
+
+**Validación.**
+- Chrome sin interfaz a 1440 y 390 px, en ambos modos y con errores de validación visibles. Sin desbordamiento horizontal.
+- `run` 158, `resend-ui` 19 y `requests-admin` 46 en verde.

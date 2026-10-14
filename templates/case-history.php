@@ -1,3 +1,4 @@
+<?php require_once __DIR__ . '/icons.php'; ?>
 <?php
 // Historial del caso: línea de tiempo de la solicitud (se abre en su propia ventana desde Solicitudes o el detalle).
 if (!$caseHistory): ?><section class="card spaced"><h2>Solicitud no encontrada</h2><p class="muted">El radicado indicado no está disponible.</p></section>
@@ -46,6 +47,6 @@ $currentTone = $record['awaiting'] ? 'pending' : $tone($record['status']);
 </li>
 <?php endforeach ?>
 </ol>
-<div class="history-actions"><?php if (empty($historyModal)): ?><a class="button secondary" href="?page=delivery&amp;id=<?= (int)$record['id'] ?>">Volver al detalle</a><?php else: ?><button type="button" class="button secondary" data-close-history>Cerrar</button><?php endif ?></div>
+<div class="history-actions"><?php if (empty($historyModal)): ?><a class="button secondary" href="?page=delivery&amp;id=<?= (int)$record['id'] ?>">Volver al detalle</a><?php else: ?><button type="button" class="button secondary" data-close>Cerrar</button><?php endif ?></div>
 </div>
 <?php endif ?>

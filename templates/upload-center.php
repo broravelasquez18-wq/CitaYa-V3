@@ -1,9 +1,10 @@
-<?php
+<?php require_once __DIR__ . '/icons.php';
 $uploadLimits=App\BulkImport::limits();
 $uploadMode=(($_POST['action'] ?? '')==='bulk-upload' || (empty($_POST['action']) && ($_SESSION['upload_mode'] ?? '')==='bulk')) ? 'bulk' : 'single';
 ?>
-<section class="card upload-center" aria-labelledby="upload-heading" data-upload-center data-upload-mode="<?= $uploadMode ?>">
-<div class="upload-heading"><div><h2 id="upload-heading">Cargar historias clínicas</h2><p class="muted">Sube los PDF de CEDIM tal como salen del sistema. CitaYa los lee y los deja listos para entregar al paciente.</p></div><span class="upload-format">Documentos PDF</span></div>
+<dialog <?= ui_dialog_attrs('upload-drawer', 'drawer', ui_reopen('upload', 'bulk-upload'), 'drawer-wide') ?>>
+<?= ui_sheet_head('upload-drawer', 'Cargar historias clínicas', 'Sube los PDF de CEDIM tal como salen del sistema. Solo PDF con texto.') ?>
+<div class="sheet-body upload-center" data-upload-center data-upload-mode="<?= $uploadMode ?>">
 <ol class="upload-flow" aria-label="Qué hace el sistema al cargar">
 <li><strong>Lee el PDF</strong><span>Extrae el texto de cada página. Un PDF escaneado sin texto no se puede leer.</span></li>
 <li><strong>Identifica la atención</strong><span>Paciente, documento, ingreso, fecha y especialidad.</span></li>
@@ -29,7 +30,8 @@ $uploadMode=(($_POST['action'] ?? '')==='bulk-upload' || (empty($_POST['action']
 <h3>Carga masiva de PDF</h3><p class="muted upload-panel-description">Selecciona los PDF de varias atenciones, de uno o varios pacientes, mezclados. El sistema los agrupa por paciente e ingreso, guarda cada atención por separado y al final te muestra qué guardó, qué ya existía y qué debes revisar.</p>
 <?php require __DIR__ . '/bulk-upload.php'; ?>
 </div>
-</section>
+</div>
+</dialog>
 <?php require __DIR__ . '/upload-result.php'; ?>
 <?php require __DIR__ . '/upload-progress.php'; ?>
 <script src="assets/upload-progress.js?v=<?= filemtime(dirname(__DIR__) . '/public/assets/upload-progress.js') ?>" defer></script>

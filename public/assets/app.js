@@ -1,3 +1,212 @@
+// Superficies comunes (drawer, modal, aviso) y toasts. Las demás piezas usan window.CitaYa.
+// Sin JavaScript los enlaces #id abren la superficie por :target; aquí se convierten en diálogos modales.
+window.CitaYa = (() => {
+  const supported = typeof HTMLDialogElement === 'function' && typeof HTMLDialogElement.prototype.showModal === 'function';
+  const openers = new WeakMap();
+  const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const syncBody = () => document.body.classList.toggle('overlay-open', !!document.querySelector('dialog.drawer[open],dialog.modal[open],dialog.alert-modal[open]'));
+  const clearHash = id => { if (location.hash === '#' + id) history.replaceState(null, '', location.pathname + location.search); };
+
+  const open = (dialog, opener = document.activeElement) => {
+    if (!dialog) return;
+    if (!supported) { location.hash = dialog.id; return; }
+    if (dialog.open && dialog.matches(':modal')) return;
+    if (dialog.open) dialog.close();
+    dialog.classList.remove('is-closing');
+    if (opener instanceof HTMLElement) openers.set(dialog, opener);
+    dialog.showModal();
+    syncBody();
+    if (!dialog.querySelector('[autofocus]')) dialog.querySelector('.sheet-close,[data-close]')?.focus();
+  };
+
+  const close = (dialog, value) => {
+    if (!dialog?.open || dialog.classList.contains('is-closing')) return;
+    const finish = () => { dialog.classList.remove('is-closing'); dialog.close(value); };
+    if (reduced()) { finish(); return; }
+    dialog.classList.add('is-closing');
+    let done = false;
+    const once = () => { if (!done) { done = true; finish(); } };
+    dialog.addEventListener('animationend', once, {once: true});
+    setTimeout(once, 260);
+  };
+
+  document.addEventListener('close', event => {
+    const dialog = event.target;
+    if (!(dialog instanceof HTMLDialogElement)) return;
+    syncBody();
+    clearHash(dialog.id);
+    if (dialog.dataset.once) try { sessionStorage.setItem('citaya-seen-' + dialog.dataset.once, '1'); } catch {}
+    const opener = openers.get(dialog);
+    openers.delete(dialog);
+    if (opener?.isConnected) opener.focus();
+  }, true);
+
+  // Escape y clic en el fondo cierran con animación, salvo los avisos que exigen una acción.
+  document.addEventListener('cancel', event => {
+    const dialog = event.target;
+    if (!dialog.matches?.('.drawer,.modal,.alert-modal')) return;
+    event.preventDefault();
+    if (!dialog.hasAttribute('data-persistent')) close(dialog);
+  }, true);
+  document.addEventListener('click', event => {
+    const opener = event.target.closest('[data-open]');
+    if (opener && supported) {
+      event.preventDefault();
+      open(document.getElementById(opener.dataset.open), opener);
+      return;
+    }
+    const closer = event.target.closest('[data-close]');
+    if (closer) {
+      const dialog = closer.closest('dialog');
+      if (!dialog) return;
+      event.preventDefault();
+      close(dialog);
+      return;
+    }
+    const dialog = event.target;
+    if (dialog instanceof HTMLDialogElement && dialog.matches('.drawer,.modal,.alert-modal') && !dialog.hasAttribute('data-persistent')) {
+      const box = dialog.getBoundingClientRect();
+      if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) close(dialog);
+    }
+  });
+
+  // Toasts. tone: success | error | info | novelty. Los fallos no se ocultan solos.
+  const icons = {
+    success: '<circle cx="12" cy="12" r="9"/><path d="m8 12.2 2.8 2.8L16 9.6"/>',
+    error: '<path d="M12 3.5 2.8 19.5h18.4Z"/><path d="M12 10v4.5M12 17.2h.01"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8h.01"/>',
+    novelty: '<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>'
+  };
+  const svg = path => `<svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
+  const stack = () => {
+    let element = document.querySelector('[data-toasts]');
+    if (!element) {
+      element = document.createElement('div');
+      element.className = 'toast-stack';
+      element.dataset.toasts = '';
+      element.setAttribute('aria-live', 'polite');
+      document.body.append(element);
+    }
+    return element;
+  };
+  // Los toasts van en la capa superior (popover) para verse también sobre un modal abierto.
+  const host = () => {
+    const element = stack();
+    if (typeof element.showPopover !== 'function') return element;
+    element.popover = 'manual';
+    const modalOpen = [...document.querySelectorAll('dialog[open]')].some(dialog => dialog.matches(':modal'));
+    try {
+      if (modalOpen && element.matches(':popover-open')) element.hidePopover();
+      if (!element.matches(':popover-open')) element.showPopover();
+    } catch {}
+    return element;
+  };
+  const settle = () => {
+    const element = stack();
+    if (!element.children.length && element.matches?.(':popover-open')) try { element.hidePopover(); } catch {}
+  };
+  const dismiss = card => {
+    if (!card.isConnected || card.classList.contains('is-leaving')) return;
+    if (reduced()) { card.remove(); settle(); return; }
+    card.classList.add('is-leaving');
+    const remove = () => { card.remove(); settle(); };
+    card.addEventListener('animationend', remove, {once: true});
+    setTimeout(remove, 300);
+  };
+  const arm = card => {
+    card.querySelector('[data-toast-close]')?.addEventListener('click', () => dismiss(card));
+    if (card.classList.contains('error')) return;
+    let left = Number(card.dataset.timeout || 6000);
+    let started = Date.now();
+    let timer = setTimeout(() => dismiss(card), left);
+    const pause = () => { clearTimeout(timer); left -= Date.now() - started; };
+    const resume = () => { started = Date.now(); timer = setTimeout(() => dismiss(card), Math.max(1500, left)); };
+    card.addEventListener('mouseenter', pause);
+    card.addEventListener('mouseleave', resume);
+    card.addEventListener('focusin', pause);
+    card.addEventListener('focusout', resume);
+  };
+  const toast = ({tone = 'info', title = '', text = '', action = null, timeout = 6000} = {}) => {
+    const card = document.createElement('div');
+    card.className = 'toast ' + tone;
+    card.setAttribute('role', tone === 'error' ? 'alert' : 'status');
+    card.dataset.toast = '';
+    card.dataset.timeout = String(timeout);
+    card.innerHTML = svg(icons[tone] || icons.info) + '<div class="toast-body"><strong></strong><p></p></div><button type="button" class="toast-close" data-toast-close aria-label="Cerrar aviso">' + svg('<path d="M6 6l12 12M18 6 6 18"/>') + '</button>';
+    card.querySelector('strong').textContent = title;
+    const body = card.querySelector('p');
+    if (text) body.textContent = text; else body.remove();
+    if (action) {
+      const link = document.createElement('a');
+      link.className = 'button';
+      link.href = action.href;
+      link.textContent = action.label;
+      card.querySelector('.toast-body').append(link);
+    }
+    const element = host();
+    element.append(card);
+    while (element.children.length > 4) element.firstElementChild.remove();
+    arm(card);
+    return card;
+  };
+  document.querySelectorAll('[data-toasts] [data-toast]').forEach(arm);
+
+  // Confirmación con el aviso común; devuelve una promesa con true si la persona acepta.
+  const confirmDialog = ({title = '¿Confirmas esta acción?', text = '', label = 'Confirmar', tone = ''} = {}) => {
+    const dialog = document.querySelector('#confirm-dialog');
+    if (!dialog || !supported) return Promise.resolve(window.confirm([title, text].filter(Boolean).join('\n\n')));
+    dialog.querySelector('[data-confirm-title]').textContent = title;
+    dialog.querySelector('[data-confirm-text]').textContent = text;
+    dialog.querySelector('[data-confirm-text]').hidden = !text;
+    const accept = dialog.querySelector('[data-confirm-accept]');
+    accept.textContent = label;
+    dialog.classList.toggle('danger', tone === 'danger');
+    return new Promise(resolve => {
+      let accepted = false;
+      const onAccept = () => { accepted = true; close(dialog); };
+      accept.addEventListener('click', onAccept, {once: true});
+      dialog.addEventListener('close', () => { accept.removeEventListener('click', onAccept); resolve(accepted); }, {once: true});
+      open(dialog);
+    });
+  };
+
+  // Superficies que el servidor pide abrir al cargar (un error reabre su formulario) o enlazadas por #id.
+  const boot = () => {
+    document.querySelectorAll('dialog[data-auto-open]').forEach(dialog => {
+      if (dialog.dataset.once) try { if (sessionStorage.getItem('citaya-seen-' + dialog.dataset.once)) return; } catch {}
+      open(dialog, null);
+    });
+    const target = location.hash.length > 1 && document.getElementById(decodeURIComponent(location.hash.slice(1)));
+    if (target?.matches?.('dialog.drawer,dialog.modal')) open(target, null);
+  };
+  if (supported) boot();
+  if (stack().children.length) host();
+
+  return {open, close, toast, confirm: confirmDialog};
+})();
+
+// Formularios: confirmación previa (data-confirm) y botón ocupado mientras se envía. También en contenido cargado después.
+document.addEventListener('submit', event => {
+  const form = event.target;
+  if (event.defaultPrevented || !(form instanceof HTMLFormElement)) return;
+  if (form.dataset.confirm && form.dataset.confirmed !== '1') {
+    event.preventDefault();
+    const submitter = event.submitter;
+    window.CitaYa.confirm({title: form.dataset.confirmTitle, text: form.dataset.confirm, label: form.dataset.confirmLabel, tone: form.dataset.confirmTone}).then(ok => {
+      if (!ok) return;
+      form.dataset.confirmed = '1';
+      form.requestSubmit(submitter && form.contains(submitter) ? submitter : undefined);
+      delete form.dataset.confirmed;
+    });
+    return;
+  }
+  const button = event.submitter;
+  if (button) setTimeout(() => { if (!event.defaultPrevented) { button.disabled = true; button.setAttribute('aria-busy', 'true'); } });
+});
+window.addEventListener('pageshow', event => {
+  if (event.persisted) document.querySelectorAll('[aria-busy="true"]').forEach(button => { button.disabled = false; button.removeAttribute('aria-busy'); });
+});
+
 const uploadCenter = document.querySelector('[data-upload-center]');
 if (uploadCenter) {
   const choices = Array.from(uploadCenter.querySelectorAll('[data-upload-choice]'));
@@ -26,36 +235,9 @@ if (uploadCenter) {
   selectUpload(uploadCenter.dataset.uploadMode === 'bulk' ? 'bulk' : 'single');
   uploadCenter.querySelector('[data-upload-options]').hidden = false;
 }
-const reopenModal = document.querySelector('#reopen-modal');
-if (reopenModal && typeof reopenModal.showModal === 'function') {
-  let reopenOpener;
-  document.querySelectorAll('[data-reopen-case]').forEach(button => {
-    button.disabled = false;
-    button.addEventListener('click', () => {
-      reopenOpener = button;
-      reopenModal.querySelector('[data-reopen-reference]').textContent = button.dataset.reference;
-      const form = reopenModal.querySelector('form');
-      form.elements.request_id.value = button.dataset.requestId;
-      form.elements.expected_job_id.value = button.dataset.jobId;
-      reopenModal.showModal();
-      document.body.classList.add('delivery-modal-open');
-    });
-  });
-  reopenModal.querySelector('[data-cancel-reopen]').addEventListener('click', () => reopenModal.close());
-  reopenModal.addEventListener('click', event => {
-    if (event.target !== reopenModal) return;
-    const bounds = reopenModal.getBoundingClientRect();
-    if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) reopenModal.close();
-  });
-  reopenModal.addEventListener('close', () => {
-    document.body.classList.remove('delivery-modal-open');
-    reopenOpener?.focus();
-  });
-}
 const bulkForm = document.querySelector('[data-bulk-upload]');
 if (bulkForm) {
   const input = bulkForm.elements['bulk_pdfs[]'];
-  const notice = bulkForm.querySelector('[data-bulk-error]');
   const validateBulk = () => {
     const files = Array.from(input.files);
     const bytes = files.reduce((total, file) => total + file.size, 0);
@@ -66,25 +248,16 @@ if (bulkForm) {
     else if (files.some(file => !file.name.toLowerCase().endsWith('.pdf'))) error = 'Selecciona únicamente archivos PDF.';
     else if (files.some(file => file.size > Number(bulkForm.dataset.maxFileBytes))) error = 'Un archivo supera el tamaño permitido. Revisa los límites indicados.';
     else if (bytes > Number(bulkForm.dataset.maxTotalBytes)) error = 'El lote supera el tamaño total permitido. Selecciona menos archivos.';
-    notice.textContent = error;
-    notice.hidden = !error;
+    if (error) window.CitaYa.toast({tone: 'error', title: 'Revisa los PDF seleccionados', text: error});
     input.setCustomValidity(error);
     return !error && files.length > 0;
   };
   input.addEventListener('change', validateBulk);
   bulkForm.addEventListener('submit', event => {
-    if (!validateBulk()) { event.preventDefault(); input.reportValidity(); return; }
+    if (!validateBulk()) { event.preventDefault(); if (!input.files.length) input.reportValidity(); return; }
     bulkForm.querySelector('[data-bulk-progress]').hidden = false;
   });
 }
-document.querySelectorAll('form').forEach(form => {
-  form.addEventListener('submit', event => {
-    if (event.defaultPrevented) return;
-    if (form.dataset.confirm && !window.confirm(form.dataset.confirm)) { event.preventDefault(); return; }
-    const button = event.submitter;
-    if (button) { button.disabled = true; button.setAttribute('aria-busy', 'true'); }
-  });
-});
 const queueProgress = document.querySelector('#queue-progress');
 if (queueProgress && typeof queueProgress.showModal === 'function') {
   const messages = {
@@ -126,21 +299,217 @@ if (queueProgress && typeof queueProgress.showModal === 'function') {
 } else if (document.querySelector('[data-refresh]')) {
   setTimeout(() => window.location.reload(), 5000);
 }
-const unknownDate = document.querySelector('[name="date_unknown"]');
-if (unknownDate) {
-  const dateInput = unknownDate.form.elements.approximate_date;
-  const dateHelp = document.querySelector('[data-date-help]');
-  const syncDate = () => {
-    dateInput.disabled = unknownDate.checked;
-    dateInput.required = !unknownDate.checked;
-    dateHelp.textContent = unknownDate.checked
-      ? 'Te mostraremos la consulta más reciente disponible para que elijas si deseas recibirla.'
-      : 'Si no hay historia ese día, te sugeriremos la consulta más reciente disponible.';
+// Formulario de solicitud del paciente: validación en lenguaje claro, ayudas al escribir y revisión antes de radicar.
+(() => {
+  const form = document.querySelector('[data-request-form]');
+  if (!form) return;
+  const el = form.elements;
+  const field = name => form.querySelector(`[data-field="${name}"]`);
+  const today = el.approximate_date?.max || '';
+  const numericTypes = ['CC', 'TI', 'RC'];
+  const docType = () => el.document_type.value || 'CC';
+  const typeLabel = () => el.document_type.selectedOptions[0]?.textContent || '';
+
+  // Mismas reglas que el servidor; devuelven el mensaje de error o ''.
+  const rules = {
+    document_number: () => {
+      const value = el.document_number.value.trim();
+      if (!value) return 'Escribe el número de documento.';
+      const numeric = numericTypes.includes(docType());
+      if (numeric ? !/^[0-9]{3,20}$/.test(value) : !/^[A-Za-z0-9]{3,24}$/.test(value)) return numeric ? 'El número debe tener solo dígitos (mínimo 3).' : 'Usa solo letras y números (mínimo 3).';
+      return '';
+    },
+    full_name: () => {
+      const value = el.full_name.value.trim();
+      if (value.length < 3) return 'Escribe el nombre completo del paciente.';
+      if (value.split(/\s+/).length < 2) return 'Escribe nombres y apellidos, no solo el nombre.';
+      return '';
+    },
+    approximate_date: () => {
+      if (el.date_unknown.checked) return '';
+      const value = el.approximate_date.value;
+      if (!value) return 'Elige la fecha o marca «No recuerdo la fecha».';
+      if (today && value > today) return 'La fecha no puede ser posterior a hoy.';
+      return '';
+    },
+    specialty_id: () => el.specialty_id.value === '' ? 'Elige la especialidad o «No recuerdo la especialidad».' : '',
+    email: () => {
+      const value = el.email.value.trim();
+      if (!value) return 'Escribe el correo donde quieres recibir la historia.';
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value)) return 'Revisa el correo: debe tener la forma nombre@dominio.com.';
+      return '';
+    },
+    whatsapp: () => {
+      if (!el.whatsapp) return '';
+      const digits = el.whatsapp.value.replace(/\D/g, '');
+      if (!digits || (digits.length === 10 && digits[0] === '3')) return '';
+      if (digits.length < 10 || digits.length > 15) return 'Escribe un celular de 10 dígitos (ej.: 300 123 4567) o el número con indicativo.';
+      return '';
+    }
   };
-  unknownDate.addEventListener('change', syncDate);
+  const order = ['document_number', 'full_name', 'approximate_date', 'specialty_id', 'email', 'whatsapp'];
+  const touched = new Set();
+  const show = (name, message) => {
+    const box = field(name);
+    if (!box) return true;
+    const error = box.querySelector('.field-error');
+    const input = box.querySelector('input,select');
+    error.textContent = message;
+    error.hidden = !message;
+    box.classList.toggle('has-error', !!message);
+    box.classList.toggle('is-valid', !message && input.value.trim() !== '' && !input.disabled);
+    input.setAttribute('aria-invalid', message ? 'true' : 'false');
+    return !message;
+  };
+  const check = name => show(name, rules[name]());
+  const validateAll = () => {
+    const bad = order.filter(name => { touched.add(name); return !check(name); });
+    if (bad.length) {
+      el[bad[0]].focus({preventScroll: true});
+      field(bad[0]).scrollIntoView({block: 'center', behavior: 'smooth'});
+    }
+    return bad.length === 0;
+  };
+
+  // Ayudas al escribir.
+  const syncDocument = () => {
+    const numeric = numericTypes.includes(docType());
+    el.document_number.inputMode = numeric ? 'numeric' : 'text';
+    el.document_number.placeholder = numeric ? 'Ej.: 1023456789' : 'Ej.: AB123456';
+    form.querySelector('[data-document-help]').textContent = numeric ? 'Solo números. Quitamos puntos y espacios por ti.' : 'Letras y números, sin espacios ni guiones.';
+  };
+  el.document_number.addEventListener('input', () => {
+    const clean = numericTypes.includes(docType()) ? el.document_number.value.replace(/\D/g, '') : el.document_number.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+    if (clean !== el.document_number.value) el.document_number.value = clean;
+  });
+  el.document_type.addEventListener('change', () => { syncDocument(); if (touched.has('document_number')) check('document_number'); });
+  el.full_name.addEventListener('blur', () => { el.full_name.value = el.full_name.value.replace(/\s+/g, ' ').trim(); });
+
+  const domains = ['gmail.com', 'hotmail.com', 'outlook.com', 'yahoo.com', 'yahoo.es', 'icloud.com', 'live.com', 'hotmail.es', 'outlook.es'];
+  const distance = (a, b) => {
+    const row = Array.from({length: b.length + 1}, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      let prev = row[0]; row[0] = i;
+      for (let j = 1; j <= b.length; j++) { const tmp = row[j]; row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = tmp; }
+    }
+    return row[b.length];
+  };
+  const suggestBox = form.querySelector('[data-email-suggest]');
+  el.email.addEventListener('blur', () => {
+    const [user, domain] = el.email.value.trim().toLowerCase().split('@');
+    suggestBox.hidden = true;
+    if (!user || !domain || domains.includes(domain)) return;
+    const [best, cost] = domains.map(d => [d, distance(domain, d)]).sort((a, b) => a[1] - b[1])[0];
+    if (cost === 0 || cost > 2) return;
+    const fix = Object.assign(document.createElement('button'), {type: 'button', textContent: `${user}@${best}`});
+    fix.addEventListener('click', () => { el.email.value = `${user}@${best}`; suggestBox.hidden = true; check('email'); el.email.focus(); });
+    suggestBox.replaceChildren('¿Quisiste decir ', fix, '?');
+    suggestBox.hidden = false;
+  });
+
+  const dateHelp = form.querySelector('[data-date-help]');
+  const syncDate = () => {
+    const unknown = el.date_unknown.checked;
+    el.approximate_date.disabled = unknown;
+    el.approximate_date.required = !unknown;
+    dateHelp.textContent = unknown ? 'Te mostraremos la consulta más reciente disponible para que elijas si deseas recibirla.' : 'Buscaremos la consulta más reciente del paciente.';
+    if (unknown || touched.has('approximate_date')) check('approximate_date');
+  };
+  el.date_unknown.addEventListener('change', syncDate);
   window.addEventListener('pageshow', syncDate);
+
+  // Validación al salir del campo; después, mientras se corrige.
+  order.forEach(name => {
+    const input = el[name];
+    if (!input) return;
+    const instant = input.tagName === 'SELECT' || input.type === 'date';
+    input.addEventListener('blur', () => { if (input.value.trim() !== '') touched.add(name); if (touched.has(name)) check(name); });
+    input.addEventListener(instant ? 'change' : 'input', () => { if (instant) touched.add(name); if (touched.has(name)) check(name); });
+  });
+  form.addEventListener('reset', () => setTimeout(() => {
+    touched.clear();
+    order.forEach(name => field(name) && show(name, ''));
+    form.querySelectorAll('.field').forEach(box => box.classList.remove('is-valid'));
+    suggestBox.hidden = true;
+    syncDocument(); syncDate();
+    el.document_number.focus();
+  }));
+
+  // Revisión antes de radicar.
+  const modal = form.querySelector('#review-modal');
+  const fill = (key, text) => { form.querySelector(`[data-review="${key}"]`).textContent = text; };
+  let confirmed = false;
+  form.noValidate = true;
+  form.addEventListener('submit', event => {
+    if (confirmed) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (!validateAll()) { window.CitaYa?.toast({tone: 'error', title: 'Falta completar un dato', text: 'Revisa el campo marcado en rojo.'}); return; }
+    fill('full_name', el.full_name.value.trim());
+    fill('document', `${typeLabel()} ${el.document_number.value.trim()}`);
+    fill('date', el.date_unknown.checked ? 'No recuerda la fecha' : el.approximate_date.value.split('-').reverse().join('/'));
+    fill('specialty', el.specialty_id.selectedOptions[0]?.textContent || '');
+    fill('email', el.email.value.trim());
+    const phone = el.whatsapp?.value.trim();
+    fill('whatsapp', phone ? `WhatsApp ${phone}` : (el.wa ? 'También por este chat de WhatsApp' : 'Sin WhatsApp'));
+    if (window.CitaYa) window.CitaYa.open(modal, event.submitter); else { confirmed = true; form.submit(); }
+  }, true);
+  modal.addEventListener('click', event => {
+    const edit = event.target.closest('[data-review-edit]');
+    if (edit) {
+      const section = form.querySelector(`[data-section="${edit.dataset.reviewEdit}"]`);
+      window.CitaYa.close(modal);
+      setTimeout(() => { section.scrollIntoView({block: 'start', behavior: 'smooth'}); section.querySelector('input:not([type=checkbox]),select').focus({preventScroll: true}); }, 220);
+      return;
+    }
+    const accept = event.target.closest('[data-review-confirm]');
+    if (accept) {
+      confirmed = true;
+      accept.disabled = true;
+      accept.setAttribute('aria-busy', 'true');
+      accept.lastChild.textContent = 'Radicando…';
+      form.submit();
+    }
+  });
+
+  syncDocument();
   syncDate();
-}
+  // Tras un error del servidor se marcan los datos que hay que corregir.
+  if (document.querySelector('[data-toasts] .toast.error')) setTimeout(validateAll, 0);
+})();
+
+// Cambio de tema claro u oscuro en el inicio de sesión; la elección queda guardada en este navegador.
+document.querySelectorAll('[data-theme-toggle]').forEach(button => {
+  const root = document.documentElement;
+  const label = button.querySelector('[data-theme-label]');
+  const sync = () => {
+    const light = root.dataset.theme === 'light';
+    button.setAttribute('aria-pressed', String(light));
+    label.textContent = light ? 'Modo oscuro' : 'Modo claro';
+    button.setAttribute('aria-label', light ? 'Cambiar a modo oscuro' : 'Cambiar a modo claro');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', light ? '#ffffff' : '#16273a');
+  };
+  button.hidden = false;
+  button.addEventListener('click', () => {
+    root.dataset.theme = root.dataset.theme === 'light' ? 'dark' : 'light';
+    try { localStorage.setItem('citaya-theme', root.dataset.theme); } catch {}
+    sync();
+  });
+  sync();
+});
+
+// Mostrar u ocultar la contraseña en el inicio de sesión.
+document.querySelectorAll('[data-toggle-password]').forEach(button => {
+  const input = document.getElementById(button.getAttribute('aria-controls'));
+  button.hidden = false;
+  button.addEventListener('click', () => {
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    button.setAttribute('aria-pressed', String(show));
+    button.setAttribute('aria-label', show ? 'Ocultar contraseña' : 'Mostrar contraseña');
+    input.focus();
+  });
+});
 const resendButton = document.querySelector('[data-resend-wait]');
 if (resendButton) {
   const readyAt = Date.now() + Number(resendButton.dataset.resendWait) * 1000;
@@ -152,70 +521,64 @@ if (resendButton) {
   }, 1000);
 }
 
-const deliveryModal = document.querySelector('#delivery-modal');
-if (deliveryModal && typeof deliveryModal.showModal === 'function') {
-  const content = deliveryModal.querySelector('[data-delivery-content]');
-  const modalTitle = deliveryModal.querySelector('#delivery-modal-title');
-  const defaultTitle = modalTitle.textContent;
-  let pendingDelivery = null;
-  let deliveryOpener = null;
-  document.querySelectorAll('[data-delivery-modal]').forEach(link => {
-    link.addEventListener('click', async event => {
-      if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-      event.preventDefault();
-      pendingDelivery?.abort();
-      const controller = new AbortController();
-      pendingDelivery = controller;
-      deliveryOpener = link;
-      content.textContent = 'Cargando información del envío…';
-      content.setAttribute('aria-busy', 'true');
-      if (!deliveryModal.open) deliveryModal.showModal();
-      document.body.classList.add('delivery-modal-open');
-      const url = new URL(link.href);
-      url.searchParams.set('fragment', '1');
-      try {
-        const response = await fetch(url, {signal: controller.signal, credentials: 'same-origin', cache: 'no-store'});
-        if (controller.signal.aborted || pendingDelivery !== controller) return;
-        if (response.status === 401 || response.redirected) {
-          content.textContent = 'Tu sesión administrativa venció. ';
-          const login = document.createElement('a');
-          login.href = '?page=admin-login';
-          login.textContent = 'Volver a iniciar sesión';
-          content.append(login);
-          return;
-        }
-        if (!response.ok && response.status !== 404) throw new Error('delivery_unavailable');
-        const html = await response.text();
-        if (!controller.signal.aborted && pendingDelivery === controller) {
-          content.innerHTML = html;
-          const caseTitle = content.querySelector('[data-case-title]');
-          if (caseTitle) modalTitle.textContent = caseTitle.textContent;
-        }
-      } catch (error) {
-        if (error.name !== 'AbortError' && pendingDelivery === controller) {
-          content.textContent = 'No se pudo cargar el envío. Cierra esta ventana e inténtalo nuevamente.';
-        }
-      } finally {
-        if (pendingDelivery === controller) content.removeAttribute('aria-busy');
+// Modales de detalle que cargan su contenido del servidor: detalle del envío e historial del caso.
+// El historial puede abrirse encima del detalle; cada uno conserva su propio enlace de origen para el foco.
+const remoteModal = (selector, trigger, loading, failed, onLoad) => {
+  const dialog = document.querySelector(selector);
+  if (!dialog || typeof dialog.showModal !== 'function') return;
+  const content = dialog.querySelector('[data-remote-content]');
+  let pending = null;
+  document.addEventListener('click', async event => {
+    const link = event.target.closest(trigger);
+    if (!link || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    pending?.abort();
+    const controller = new AbortController();
+    pending = controller;
+    content.textContent = loading;
+    content.setAttribute('aria-busy', 'true');
+    onLoad(dialog, null);
+    window.CitaYa.open(dialog, link);
+    const url = new URL(link.href);
+    url.searchParams.set('fragment', '1');
+    try {
+      const response = await fetch(url, {signal: controller.signal, credentials: 'same-origin', cache: 'no-store'});
+      if (pending !== controller) return;
+      if (response.status === 401 || response.redirected) {
+        content.textContent = 'Tu sesión venció. ';
+        const login = document.createElement('a');
+        login.href = '?page=admin-login';
+        login.textContent = 'Volver a iniciar sesión';
+        content.append(login);
+        window.CitaYa.toast({tone: 'error', title: 'Sesión vencida', text: 'Vuelve a iniciar sesión para continuar.'});
+        return;
       }
-    });
+      if (!response.ok && response.status !== 404) throw new Error('unavailable');
+      content.innerHTML = await response.text();
+      onLoad(dialog, content);
+    } catch (error) {
+      if (error.name === 'AbortError' || pending !== controller) return;
+      content.textContent = failed;
+      window.CitaYa.toast({tone: 'error', title: 'No se pudo cargar', text: failed});
+    } finally {
+      if (pending === controller) content.removeAttribute('aria-busy');
+    }
   });
-  deliveryModal.querySelector('[data-close-delivery]').addEventListener('click', () => deliveryModal.close());
-  deliveryModal.addEventListener('click', event => {
-    if (event.target !== deliveryModal) return;
-    const bounds = deliveryModal.getBoundingClientRect();
-    if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) deliveryModal.close();
-  });
-  deliveryModal.addEventListener('close', () => {
-    pendingDelivery?.abort();
-    pendingDelivery = null;
+  dialog.addEventListener('close', () => {
+    pending?.abort();
+    pending = null;
     content.replaceChildren();
-    modalTitle.textContent = defaultTitle;
-    content.removeAttribute('aria-busy');
-    document.body.classList.remove('delivery-modal-open');
-    deliveryOpener?.focus();
+    onLoad(dialog, null);
   });
-}
+};
+remoteModal('#delivery-modal', '[data-delivery-modal]', 'Cargando la solicitud…', 'No se pudo cargar la solicitud. Inténtalo nuevamente.', (dialog, content) => {
+  const title = dialog.querySelector('h2');
+  title.dataset.default ??= title.textContent;
+  title.textContent = content?.querySelector('[data-case-title]')?.textContent || title.dataset.default;
+});
+remoteModal('#history-modal', '[data-history-modal]', 'Cargando el historial…', 'No se pudo cargar el historial. Inténtalo nuevamente.', (dialog, content) => {
+  dialog.querySelector('[data-history-reference]').textContent = content?.querySelector('[data-case-title]')?.textContent || '';
+});
 
 // Botones de copiar (documento, número) en el detalle de la solicitud, también en contenido cargado después.
 document.addEventListener('click', event => {
@@ -225,7 +588,8 @@ document.addEventListener('click', event => {
     button.classList.add('copied');
     button.title = 'Copiado';
     setTimeout(() => { button.classList.remove('copied'); button.title = 'Copiar'; }, 1500);
-  }).catch(() => {});
+    window.CitaYa.toast({tone: 'success', title: 'Copiado al portapapeles', timeout: 2500});
+  }).catch(() => window.CitaYa.toast({tone: 'error', title: 'No se pudo copiar', text: 'Selecciona el texto y cópialo manualmente.'}));
 });
 
 // Cuadro de gestión de la solicitud (detalle del envío): estado, plantillas, adjuntos y envío.
@@ -283,17 +647,17 @@ document.addEventListener('click', event => {
       const form = template.closest('[data-case-respond]');
       const comment = form.querySelector('[data-case-comment]');
       const current = comment.value.trim();
-      if (current && !templateTexts(form).includes(current) && !confirm('¿Reemplazar el comentario que escribiste por la plantilla?')) return;
-      comment.value = template.dataset.templateText;
-      selectDecision(form, template.dataset.decision);
       template.closest('details').open = false;
-      comment.focus();
+      const apply = () => { comment.value = template.dataset.templateText; selectDecision(form, template.dataset.decision); comment.focus(); };
+      if (current && !templateTexts(form).includes(current)) {
+        window.CitaYa.confirm({title: '¿Reemplazar tu comentario?', text: 'El texto que escribiste se cambiará por la plantilla seleccionada.', label: 'Usar la plantilla'}).then(ok => { if (ok) apply(); });
+      } else apply();
       return;
     }
     const close = event.target.closest('[data-close-case]');
     if (close) {
       const dialog = close.closest('dialog');
-      if (dialog) dialog.close(); else location.href = '?page=deliveries';
+      if (dialog) window.CitaYa.close(dialog); else location.href = '?page=deliveries';
       return;
     }
     // Cierra los menús desplegables al hacer clic fuera de ellos.
@@ -328,63 +692,11 @@ document.addEventListener('click', event => {
     else if (max && total > max) problem = 'Los adjuntos superan el límite del correo. Quita alguno.';
     if (problem) {
       event.preventDefault();
-      alert(problem);
+      window.CitaYa.toast({tone: 'error', title: 'Falta información para responder', text: problem});
       if (!decision) form.querySelector('[data-decision-menu]').open = true;
       return;
     }
     form.querySelector('button[type="submit"]').disabled = true;
-  });
-})();
-
-// Ventana «Historial del caso»: se abre desde la lista de solicitudes o desde el detalle (encima de él).
-(() => {
-  const modal = document.querySelector('#history-modal');
-  if (!modal || typeof modal.showModal !== 'function') return;
-  const content = modal.querySelector('[data-history-content]');
-  const reference = modal.querySelector('[data-history-reference]');
-  let pending = null;
-  let opener = null;
-  document.addEventListener('click', async event => {
-    const link = event.target.closest('[data-history-modal]');
-    if (!link || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-    event.preventDefault();
-    pending?.abort();
-    const controller = new AbortController();
-    pending = controller;
-    opener = link;
-    content.textContent = 'Cargando el historial…';
-    content.setAttribute('aria-busy', 'true');
-    reference.textContent = '';
-    if (!modal.open) modal.showModal();
-    document.body.classList.add('delivery-modal-open');
-    const url = new URL(link.href);
-    url.searchParams.set('fragment', '1');
-    try {
-      const response = await fetch(url, {signal: controller.signal, credentials: 'same-origin', cache: 'no-store'});
-      if (pending !== controller) return;
-      if (response.status === 401 || response.redirected) { content.textContent = 'Tu sesión administrativa venció. Vuelve a iniciar sesión.'; return; }
-      if (!response.ok && response.status !== 404) throw new Error('history_unavailable');
-      content.innerHTML = await response.text();
-      const title = content.querySelector('[data-case-title]');
-      if (title) reference.textContent = title.textContent;
-    } catch (error) {
-      if (error.name !== 'AbortError' && pending === controller) content.textContent = 'No se pudo cargar el historial. Cierra esta ventana e inténtalo nuevamente.';
-    } finally {
-      if (pending === controller) content.removeAttribute('aria-busy');
-    }
-  });
-  modal.addEventListener('click', event => {
-    if (event.target.closest('[data-close-history]')) { modal.close(); return; }
-    if (event.target !== modal) return;
-    const bounds = modal.getBoundingClientRect();
-    if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) modal.close();
-  });
-  modal.addEventListener('close', () => {
-    pending?.abort();
-    pending = null;
-    content.replaceChildren();
-    if (!document.querySelector('#delivery-modal[open]')) document.body.classList.remove('delivery-modal-open');
-    opener?.focus();
   });
 })();
 
@@ -414,35 +726,17 @@ document.addEventListener('click', event => {
 // Avisos de reportes de error en el panel (sin WhatsApp al empleado): cada 15 s se actualiza el contador de la pestaña
 // y, si llega un reporte nuevo o un mensaje del paciente, aparece un aviso con el enlace al chat.
 (() => {
-  const tab = document.querySelector('nav.tabs a[href="?page=reports"]');
+  const tab = document.querySelector('.rail-nav a[href="?page=reports"]');
   if (!tab) return;
   const openReport = new URLSearchParams(location.search).get('page') === 'report' ? new URLSearchParams(location.search).get('id') : null;
   let known = null;
-  const stack = document.createElement('div');
-  stack.className = 'toast-stack';
-  stack.setAttribute('aria-live', 'polite');
-  document.body.append(stack);
-  const toast = item => {
-    const card = document.createElement('div');
-    card.className = 'toast';
-    const text = document.createElement('p');
-    text.innerHTML = item.isNew ? '🔔 <strong>Nuevo reporte de error</strong>' : '💬 <strong>Nuevo mensaje del paciente</strong>';
-    const detail = document.createElement('small');
-    detail.textContent = item.reference + ' · ' + item.label;
-    const link = document.createElement('a');
-    link.className = 'button primary';
-    link.href = '?page=report&id=' + item.id;
-    link.textContent = 'Abrir chat';
-    const close = document.createElement('button');
-    close.type = 'button';
-    close.className = 'toast-close';
-    close.setAttribute('aria-label', 'Cerrar aviso');
-    close.textContent = '×';
-    close.addEventListener('click', () => card.remove());
-    card.append(close, text, detail, link);
-    stack.append(card);
-    setTimeout(() => card.remove(), 15000);
-  };
+  const toast = item => window.CitaYa.toast({
+    tone: 'novelty',
+    title: item.isNew ? 'Nuevo reporte de error' : 'Nuevo mensaje del paciente',
+    text: item.reference + ' · ' + item.label,
+    action: {href: '?page=report&id=' + item.id, label: 'Abrir chat'},
+    timeout: 15000
+  });
   const setCount = count => {
     let badge = tab.querySelector('.tab-count');
     if (!count) { badge?.remove(); return; }
@@ -471,4 +765,12 @@ document.addEventListener('click', event => {
   };
   check();
   setInterval(check, 15000);
+})();
+
+// En pantallas angostas el rail es una barra deslizable: deja visible la sección actual.
+(() => {
+  const nav = document.querySelector('.rail-nav');
+  const current = nav?.querySelector('a.selected');
+  if (!current || nav.scrollWidth <= nav.clientWidth) return;
+  nav.scrollLeft = current.offsetLeft - (nav.clientWidth - current.offsetWidth) / 2;
 })();

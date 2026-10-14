@@ -1,4 +1,4 @@
-<?php if (empty($deliveryModal)): ?><a class="back-link" href="?page=<?= ($_GET['from'] ?? '') === 'history' ? 'history' : 'deliveries' ?>&amp;q=<?= rawurlencode(mb_substr((string)($_GET['q'] ?? ''),0,160)) ?>&amp;p=<?= max(1,(int)($_GET['p'] ?? 1)) ?>">← Volver a los resultados</a><?php endif ?>
+<?php require_once __DIR__ . '/icons.php'; if (empty($deliveryModal)): ?><a class="back-link" href="?page=<?= ($_GET['from'] ?? '') === 'history' ? 'history' : 'deliveries' ?>&amp;q=<?= rawurlencode(mb_substr((string)($_GET['q'] ?? ''),0,160)) ?>&amp;p=<?= max(1,(int)($_GET['p'] ?? 1)) ?>"><?= ui_icon('arrow-left', 16) ?>Volver a los resultados</a><?php endif ?>
 <?php if (!$deliveryDetail): ?><section class="card spaced"><h2>Solicitud no encontrada</h2><p class="muted">El radicado indicado no está disponible.</p></section>
 <?php else: $record=$deliveryDetail['request']; ?>
 <?php
@@ -7,11 +7,11 @@ $copyIcon = $icon('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 
 $created = strtotime((string)$record['created_at']);
 $createdText = date('d/m/Y, h:i ', $created) . (date('A', $created) === 'AM' ? 'a. m.' : 'p. m.');
 ?>
-<span hidden data-case-title>Caso #<?= h($record['reference']) ?></span>
+<span hidden data-case-title>Detalle de la solicitud</span>
 <div class="case-layout">
 <aside class="case-info" aria-label="Información de la solicitud">
-<h3 class="case-info-title"><?= $icon('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>') ?>Información de la solicitud</h3>
-<?php if (empty($deliveryModal)): ?><p class="case-reference">Caso #<?= h($record['reference']) ?></p><?php endif ?>
+<?php $caseTone = !empty($record['case_pending']) || !empty($record['awaiting']) ? 'live' : ui_tone($record['status']); ?>
+<section class="call-plate compact <?= $caseTone ?>" aria-label="Radicado y estado"><div class="call-number"><span class="call-label">Radicado</span><strong class="call-ref"><?= h($record['reference']) ?></strong></div><div class="call-state"><?= ui_icon(['live' => 'clock', 'ok' => 'check-circle', 'stop' => 'alert', 'wait' => 'search'][$caseTone], 20) ?><h2><?= $caseTone === 'live' && (!empty($record['case_pending']) || !empty($record['awaiting'])) ? 'Pendiente de gestión' : h($labels[$record['status']] ?? $record['status']) ?></h2></div></section>
 <div class="case-band patient"><?= $icon('<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>') ?>Paciente</div>
 <div class="case-card">
 <div class="case-field"><span class="case-label">Nombre completo</span><span class="case-value strong"><span class="case-dot patient"><?= $icon('<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>') ?></span><?= h(mb_strtoupper((string)$record['claimed_name'])) ?></span></div>
@@ -31,7 +31,7 @@ $createdText = date('d/m/Y, h:i ', $created) . (date('A', $created) === 'AM' ? '
 </div>
 <div class="case-band request"><?= $icon('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>') ?>Requerimiento</div>
 <div class="case-card">
-<div class="case-tags"><span class="case-tag">Historia clínica</span><span class="pill"><?= h($labels[$record['status']] ?? $record['status']) ?></span></div>
+<div class="case-tags"><span class="case-tag">Historia clínica</span></div>
 <p class="case-note">Esta solicitud fue radicada a través de la Web el día <?= h($createdText) ?></p>
 <?php if ($record['attended_at']): ?><p class="case-note">Atención seleccionada: <strong><?= h(date('d/m/Y H:i', strtotime($record['attended_at']))) ?></strong></p><?php endif ?>
 <?php if ($record['resolution']): ?><p class="case-note">Respuesta: <strong><?= h(['assigned' => 'Historia asignada', 'approved' => 'Aprobado', 'not_registered' => 'No Registra'][$record['resolution']] ?? $record['resolution']) ?></strong> · <?= h($record['resolved_by_name'] ?? 'Administrador') ?> · <?= h($record['resolved_at']) ?></p><?php endif ?>
@@ -71,7 +71,7 @@ $chevron = $icon('<path d="m6 9 6 6 6-6"/>'); ?>
 <div class="case-actions"><button type="button" class="button secondary" data-close-case>Cerrar</button><button class="button primary" type="submit"><?= $icon('<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>') ?>Guardar y notificar</button></div>
 </form>
 <?php endif ?>
-<?php if (empty($record['awaiting'])): ?><div class="notice spaced"><p><strong>Esta solicitud ya fue gestionada.</strong> Consulta en el historial la respuesta y los envíos.</p></div><?php endif ?>
+<?php if (empty($record['awaiting'])): ?><div class="notice spaced"><?= ui_icon('check-circle') ?><p><strong>Esta solicitud ya fue gestionada.</strong> Consulta en el historial la respuesta y los envíos.</p></div><?php endif ?>
 <div class="case-history-link"><a class="history-button" data-history-modal aria-haspopup="dialog" href="?page=case-history&amp;id=<?= (int)$record['id'] ?>" aria-label="Ver historial del caso <?= h($record['reference']) ?>" title="Historial del caso"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg></a><div><strong>Historial del caso</strong><small>Radicación, respuestas y envíos por correo y WhatsApp.</small></div></div>
 </div></div>
 <?php endif ?>

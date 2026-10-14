@@ -1,0 +1,661 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-14T04:17:01+00:00",
+  "title": "Design System: CitaYa",
+  "extensions": {
+    "colorMeta": {
+      "night": {
+        "role": "primary",
+        "displayName": "Azul noche de tablero",
+        "canonical": "#0f1b2d",
+        "tonalRamp": [
+          "#030b1b",
+          "#192538",
+          "#354357",
+          "#546278",
+          "#74839a",
+          "#96a6be",
+          "#bacae3",
+          "#dff0ff"
+        ]
+      },
+      "night-2": {
+        "role": "primary",
+        "displayName": "Noche hover",
+        "canonical": "#18293f",
+        "tonalRamp": [
+          "#010b1e",
+          "#15263b",
+          "#31435b",
+          "#4f637c",
+          "#70849f",
+          "#92a7c3",
+          "#b5cbe8",
+          "#daf1ff"
+        ]
+      },
+      "night-3": {
+        "role": "primary",
+        "displayName": "Noche seleccionado",
+        "canonical": "#243954",
+        "tonalRamp": [
+          "#000a21",
+          "#11263f",
+          "#2e435f",
+          "#4c6380",
+          "#6c84a3",
+          "#8ea7c8",
+          "#b2cced",
+          "#d7f1ff"
+        ]
+      },
+      "night-line": {
+        "role": "primary",
+        "displayName": "Filete del tablero",
+        "canonical": "#2e4563",
+        "tonalRamp": [
+          "#000a23",
+          "#102541",
+          "#2c4361",
+          "#4b6383",
+          "#6b84a6",
+          "#8da7ca",
+          "#b0ccf0",
+          "#d5f1ff"
+        ]
+      },
+      "night-ink": {
+        "role": "primary",
+        "displayName": "Tinta del tablero",
+        "canonical": "#eef2f7",
+        "tonalRamp": [
+          "#090b0e",
+          "#222529",
+          "#3f4246",
+          "#5e6266",
+          "#7f8387",
+          "#a2a5aa",
+          "#c6c9ce",
+          "#ebeff4"
+        ]
+      },
+      "night-muted": {
+        "role": "primary",
+        "displayName": "Gris de tablero",
+        "canonical": "#a9b8cc",
+        "tonalRamp": [
+          "#030b19",
+          "#1a2635",
+          "#364354",
+          "#556274",
+          "#768496",
+          "#98a6ba",
+          "#bbcbdf",
+          "#e0f0ff"
+        ]
+      },
+      "ground": {
+        "role": "neutral",
+        "displayName": "Suelo frío",
+        "canonical": "#eceff3",
+        "tonalRamp": [
+          "#090b0e",
+          "#232528",
+          "#404245",
+          "#5f6165",
+          "#808286",
+          "#a2a5a9",
+          "#c6c9cd",
+          "#eceff3"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Superficie",
+        "canonical": "#fff",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#a5a5a5",
+          "#c9c9c9",
+          "#eeeeee"
+        ]
+      },
+      "surface-2": {
+        "role": "neutral",
+        "displayName": "Superficie hundida",
+        "canonical": "#f5f7f9",
+        "tonalRamp": [
+          "#0a0b0d",
+          "#242527",
+          "#414244",
+          "#606163",
+          "#818284",
+          "#a3a5a7",
+          "#c7c9cb",
+          "#edeff1"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Filete",
+        "canonical": "#d5dce5",
+        "tonalRamp": [
+          "#070b11",
+          "#20262c",
+          "#3d434a",
+          "#5c626a",
+          "#7d838b",
+          "#9fa6ae",
+          "#c3cad3",
+          "#e8eff8"
+        ]
+      },
+      "line-strong": {
+        "role": "neutral",
+        "displayName": "Filete fuerte",
+        "canonical": "#b4c0ce",
+        "tonalRamp": [
+          "#050c15",
+          "#1d2630",
+          "#39434f",
+          "#58626f",
+          "#788491",
+          "#9ba6b4",
+          "#becbd9",
+          "#e3f0ff"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Tinta",
+        "canonical": "#0f1b2d",
+        "tonalRamp": [
+          "#030b1b",
+          "#192538",
+          "#354357",
+          "#546278",
+          "#74839a",
+          "#96a6be",
+          "#bacae3",
+          "#dff0ff"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Tinta secundaria",
+        "canonical": "#2f3f54",
+        "tonalRamp": [
+          "#010b1c",
+          "#172639",
+          "#334358",
+          "#516379",
+          "#72849c",
+          "#94a7c0",
+          "#b7cbe5",
+          "#dcf0ff"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Gris de apoyo",
+        "canonical": "#536274",
+        "tonalRamp": [
+          "#020b19",
+          "#192635",
+          "#354354",
+          "#546375",
+          "#748497",
+          "#96a7bb",
+          "#bacbe0",
+          "#dff0ff"
+        ]
+      },
+      "amber": {
+        "role": "secondary",
+        "displayName": "Ámbar de turno en curso",
+        "canonical": "#f2a516",
+        "tonalRamp": [
+          "#280000",
+          "#490e00",
+          "#6b3000",
+          "#8e5100",
+          "#b37300",
+          "#d89629",
+          "#ffbb55",
+          "#ffe07c"
+        ],
+        "note": "El relleno del logotipo también usa este valor; si el logotipo queda exento de la regla de ámbar solo para lo vivo es una decisión abierta del titular."
+      },
+      "amber-strong": {
+        "role": "secondary",
+        "displayName": "Ámbar fuerte (sin uso actual)",
+        "canonical": "#b06f00",
+        "tonalRamp": [
+          "#280000",
+          "#490d00",
+          "#6b2f00",
+          "#8f5000",
+          "#b37208",
+          "#d9953e",
+          "#ffb965",
+          "#ffdf8a"
+        ]
+      },
+      "amber-ink": {
+        "role": "secondary",
+        "displayName": "Tinta ámbar",
+        "canonical": "#6b4100",
+        "tonalRamp": [
+          "#210000",
+          "#401900",
+          "#603700",
+          "#82571f",
+          "#a67843",
+          "#ca9b65",
+          "#f0bf88",
+          "#ffe4ac"
+        ]
+      },
+      "amber-soft": {
+        "role": "secondary",
+        "displayName": "Fondo ámbar",
+        "canonical": "#fdf1d6",
+        "tonalRamp": [
+          "#120a00",
+          "#2d240e",
+          "#4b412b",
+          "#6a6049",
+          "#8c8169",
+          "#afa48b",
+          "#d4c8ae",
+          "#f9edd3"
+        ]
+      },
+      "amber-line": {
+        "role": "secondary",
+        "displayName": "Borde ámbar",
+        "canonical": "#efd08c",
+        "tonalRamp": [
+          "#1b0400",
+          "#391f00",
+          "#583d00",
+          "#795d14",
+          "#9b7e3b",
+          "#bfa15e",
+          "#e4c582",
+          "#ffeba6"
+        ],
+        "note": "Valor reutilizado como hex literal en app.css (pastillas en curso, nota pendiente, punto de reapertura); aún no es una propiedad personalizada."
+      },
+      "ok": {
+        "role": "tertiary",
+        "displayName": "Verde de confirmación",
+        "canonical": "#1b7348",
+        "tonalRamp": [
+          "#001500",
+          "#00330c",
+          "#005229",
+          "#1b7348",
+          "#439568",
+          "#68b98a",
+          "#8cdead",
+          "#b2ffd2"
+        ]
+      },
+      "ok-soft": {
+        "role": "tertiary",
+        "displayName": "Fondo verde",
+        "canonical": "#e3f2e9",
+        "tonalRamp": [
+          "#040e08",
+          "#1d2822",
+          "#39453e",
+          "#58655d",
+          "#79867e",
+          "#9ba9a1",
+          "#bfcdc5",
+          "#e4f3ea"
+        ]
+      },
+      "ok-line": {
+        "role": "tertiary",
+        "displayName": "Borde verde",
+        "canonical": "#b5dcc4",
+        "tonalRamp": [
+          "#001104",
+          "#092d1b",
+          "#284b37",
+          "#476b56",
+          "#688c76",
+          "#8ab099",
+          "#add4bc",
+          "#d2fae1"
+        ]
+      },
+      "stop": {
+        "role": "tertiary",
+        "displayName": "Rojo de detención",
+        "canonical": "#b3302a",
+        "tonalRamp": [
+          "#320000",
+          "#570000",
+          "#7c1211",
+          "#a23932",
+          "#c85c52",
+          "#f08073",
+          "#ffa496",
+          "#ffc9ba"
+        ]
+      },
+      "stop-soft": {
+        "role": "tertiary",
+        "displayName": "Fondo rojo",
+        "canonical": "#fbe8e6",
+        "tonalRamp": [
+          "#130807",
+          "#2f2120",
+          "#4d3e3c",
+          "#6d5d5b",
+          "#8f7e7c",
+          "#b2a09e",
+          "#d7c4c2",
+          "#fce9e7"
+        ]
+      },
+      "stop-line": {
+        "role": "tertiary",
+        "displayName": "Borde rojo",
+        "canonical": "#efc2bd",
+        "tonalRamp": [
+          "#1c0202",
+          "#3b1a18",
+          "#5b3733",
+          "#7c5652",
+          "#a07772",
+          "#c49994",
+          "#eabdb8",
+          "#ffe2dd"
+        ]
+      },
+      "info": {
+        "role": "tertiary",
+        "displayName": "Azul informativo",
+        "canonical": "#24569e",
+        "tonalRamp": [
+          "#00003f",
+          "#001d61",
+          "#0a3f85",
+          "#2e60a9",
+          "#4f82ce",
+          "#71a6f5",
+          "#94cbff",
+          "#b8f1ff"
+        ]
+      },
+      "info-soft": {
+        "role": "tertiary",
+        "displayName": "Fondo informativo",
+        "canonical": "#e7eef9",
+        "tonalRamp": [
+          "#070b12",
+          "#20252d",
+          "#3d424b",
+          "#5c626b",
+          "#7c838d",
+          "#9fa5b0",
+          "#c3cad4",
+          "#e8effa"
+        ]
+      },
+      "info-line": {
+        "role": "tertiary",
+        "displayName": "Borde informativo",
+        "canonical": "#c4d4ee",
+        "tonalRamp": [
+          "#030b1c",
+          "#192539",
+          "#364258",
+          "#546278",
+          "#75839b",
+          "#97a6bf",
+          "#bacae4",
+          "#dff0ff"
+        ]
+      },
+      "focus": {
+        "role": "tertiary",
+        "displayName": "Anillo de foco",
+        "canonical": "#24569e",
+        "tonalRamp": [
+          "#00003f",
+          "#001d61",
+          "#0a3f85",
+          "#2e60a9",
+          "#4f82ce",
+          "#71a6f5",
+          "#94cbff",
+          "#b8f1ff"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Título de tarea",
+        "purpose": "Título del portal del paciente."
+      },
+      "headline": {
+        "displayName": "Título de página",
+        "purpose": "Encabezado de página de la consola y de la tarjeta de acceso."
+      },
+      "title": {
+        "displayName": "Título de tarjeta",
+        "purpose": "Encabezados de tarjeta y subsección."
+      },
+      "body": {
+        "displayName": "Texto",
+        "purpose": "Texto corrido; 16px en campos."
+      },
+      "label": {
+        "displayName": "Etiqueta",
+        "purpose": "Etiquetas de campo, segmentados y navegación."
+      },
+      "call-ref": {
+        "displayName": "Radicado llamado",
+        "purpose": "Número de radicado en la placa invertida; nunca se parte."
+      },
+      "figure": {
+        "displayName": "Cifra de tablero",
+        "purpose": "Estadísticas, totales y contadores en mono tabular."
+      }
+    },
+    "shadows": [
+      {
+        "name": "shadow-pop",
+        "value": "0 18px 48px rgba(15,27,45,.24),0 2px 6px rgba(15,27,45,.12)",
+        "purpose": "Solo superficies que flotan: diálogos, menú de decisión, avisos emergentes."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(.16,1,.3,1)",
+        "purpose": "Entrada de diálogos (0.28s) y avisos, barrido de progreso, giro de desplegables."
+      },
+      {
+        "name": "call-scan",
+        "value": "2.4s var(--ease-out) infinite",
+        "purpose": "Segmento ámbar que recorre el borde inferior de la placa viva; estático con movimiento reducido."
+      },
+      {
+        "name": "queue-sweep",
+        "value": "1.6s var(--ease-out) infinite",
+        "purpose": "Relleno ámbar indeterminado de la barra de progreso de cola."
+      },
+      {
+        "name": "state-transition",
+        "value": ".15s",
+        "purpose": "Color de fondo y borde de botones y campos; el botón baja 1px al presionar."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "wide",
+        "value": "1180px"
+      },
+      {
+        "name": "tablet",
+        "value": "960px"
+      },
+      {
+        "name": "table-cards",
+        "value": "700px"
+      },
+      {
+        "name": "mobile",
+        "value": "650px"
+      },
+      {
+        "name": "narrow",
+        "value": "380px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Botón primario",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Acción principal: placa noche con texto blanco.",
+      "html": "<button class=\"ds-btn-primary\">Buscar y solicitar historia <svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14M13 6l6 6-6 6\"/></svg></button>",
+      "css": ".ds-btn-primary{display:inline-flex;align-items:center;gap:10px;min-height:46px;padding:10px 18px;border:1.5px solid transparent;border-radius:var(--radius,6px);background:var(--night,#0f1b2d);color:#fff;font-family:var(--sans);font-size:1rem;font-weight:650;line-height:1.2;cursor:pointer;transition:background-color .15s,transform .12s cubic-bezier(.16,1,.3,1)}.ds-btn-primary:hover{background:var(--night-3,#243954)}.ds-btn-primary:active{transform:translateY(1px)}.ds-btn-primary:focus-visible{outline:3px solid var(--focus,#24569e);outline-offset:2px}"
+    },
+    {
+      "name": "Botón secundario",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Acción alternativa: blanco con borde fuerte.",
+      "html": "<button class=\"ds-btn-secondary\">Hacer otra solicitud</button>",
+      "css": ".ds-btn-secondary{display:inline-flex;align-items:center;gap:10px;min-height:46px;padding:10px 18px;border:1.5px solid var(--line-strong,#b4c0ce);border-radius:var(--radius,6px);background:var(--surface,#fff);color:var(--ink,#0f1b2d);font-family:var(--sans);font-size:1rem;font-weight:650;line-height:1.2;cursor:pointer;transition:border-color .15s}.ds-btn-secondary:hover{border-color:var(--night,#0f1b2d)}.ds-btn-secondary:active{transform:translateY(1px)}.ds-btn-secondary:focus-visible{outline:3px solid var(--focus,#24569e);outline-offset:2px}"
+    },
+    {
+      "name": "Campo de texto",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Campo de 48px con etiqueta en negrita; documento en mono.",
+      "html": "<label class=\"ds-label\">Número de documento<input class=\"ds-input\" placeholder=\"Sin puntos ni espacios\"></label>",
+      "css": ".ds-label{display:block;color:var(--ink-2,#2f3f54);font-family:var(--sans);font-size:.875rem;font-weight:700}.ds-input{display:block;width:100%;height:48px;margin-top:6px;padding:0 12px;background:var(--surface,#fff);border:1.5px solid var(--line-strong,#b4c0ce);border-radius:var(--radius,6px);color:var(--ink,#0f1b2d);font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:1rem;transition:border-color .15s,box-shadow .15s}.ds-input::placeholder{font-family:var(--sans);color:#76838f}.ds-input:hover{border-color:var(--muted,#536274)}.ds-input:focus{outline:none;border-color:var(--night,#0f1b2d);box-shadow:0 0 0 3px var(--info-soft,#e7eef9),0 0 0 4px var(--info,#24569e)}"
+    },
+    {
+      "name": "Pastillas de estado",
+      "kind": "chip",
+      "refersTo": "pill-live",
+      "description": "Color + ícono + texto: en curso, listo, detenido.",
+      "html": "<span class=\"ds-pill ds-live\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 7v5l3.2 2\"/></svg>En cola</span> <span class=\"ds-pill ds-ok\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m5 12.5 4.5 4.5L19 7.5\"/></svg>Enviado</span> <span class=\"ds-pill ds-stop\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 3.5 2.8 19.5h18.4Z\"/><path d=\"M12 10v4.5M12 17.2h.01\"/></svg>Fallido</span>",
+      "css": ".ds-pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;border:1px solid var(--line,#d5dce5);font-family:var(--sans);font-size:.8125rem;font-weight:700;line-height:1.4;white-space:nowrap}.ds-live{background:var(--amber-soft,#fdf1d6);border-color:#efd08c;color:var(--amber-ink,#6b4100)}.ds-ok{background:var(--ok-soft,#e3f2e9);border-color:var(--ok-line,#b5dcc4);color:var(--ok,#1b7348)}.ds-stop{background:var(--stop-soft,#fbe8e6);border-color:var(--stop-line,#efc2bd);color:var(--stop,#b3302a)}"
+    },
+    {
+      "name": "Tarjeta",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Superficie blanca con filete de 1px, sin sombra.",
+      "html": "<section class=\"ds-card\"><div class=\"ds-card-head\"><h2>Solicita tu historia clínica</h2><p>Escribe los datos tal como aparecen en tu documento.</p></div><p>Contenido</p></section>",
+      "css": ".ds-card{background:var(--surface,#fff);border:1px solid var(--line,#d5dce5);border-radius:var(--radius-lg,10px);padding:24px;font-family:var(--sans);color:var(--ink,#0f1b2d)}.ds-card-head{padding-bottom:16px;margin-bottom:24px;border-bottom:1px solid var(--line,#d5dce5)}.ds-card-head h2{font-size:1.375rem;font-weight:650;letter-spacing:-.015em;margin:0 0 4px}.ds-card-head p{margin:0;color:var(--muted,#536274);font-size:.875rem}"
+    },
+    {
+      "name": "Rail de la consola",
+      "kind": "nav",
+      "refersTo": "rail-item",
+      "description": "Navegación interna noche con contador ámbar y barra blanca de selección.",
+      "html": "<nav class=\"ds-rail\"><a class=\"ds-rail-item ds-selected\" href=\"#\"><span>Solicitudes</span><span class=\"ds-count\">3</span></a><a class=\"ds-rail-item\" href=\"#\"><span>Reportes de error</span></a><a class=\"ds-rail-item\" href=\"#\"><span>Mi avance</span></a></nav>",
+      "css": ".ds-rail{display:flex;flex-direction:column;gap:2px;width:248px;padding:16px 12px;background:var(--night,#0f1b2d);font-family:var(--sans)}.ds-rail-item{position:relative;display:flex;align-items:center;gap:12px;min-height:42px;padding:0 12px;border-radius:var(--radius,6px);color:var(--night-muted,#a9b8cc);font-size:.875rem;font-weight:600;text-decoration:none}.ds-rail-item span:first-child{flex:1}.ds-rail-item:hover{background:var(--night-2,#18293f);color:#fff}.ds-rail-item:focus-visible{outline:3px solid #fff;outline-offset:2px}.ds-selected{background:var(--night-3,#243954);color:#fff}.ds-selected::before{content:\"\";position:absolute;left:-12px;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:#fff}.ds-count{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:var(--amber,#f2a516);color:var(--night,#0f1b2d);font-family:var(--mono);font-size:.8125rem;font-weight:700;line-height:1}"
+    },
+    {
+      "name": "Placa del radicado llamado",
+      "kind": "custom",
+      "refersTo": "call-plate",
+      "description": "Firma: radicado en mono grande sobre noche, estado en pastilla de color; ámbar y barrido solo si está en curso.",
+      "html": "<section class=\"ds-plate\"><div class=\"ds-num\"><span class=\"ds-label\">Radicado</span><strong class=\"ds-ref\">HC-261013-4F9A</strong></div><div class=\"ds-state\"><svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 7v5l3.2 2\"/></svg><h2>En cola de envío</h2></div><span class=\"ds-scan\" aria-hidden=\"true\"></span></section>",
+      "css": ".ds-plate{position:relative;overflow:hidden;display:grid;gap:16px;padding:24px;background:var(--night,#0f1b2d);color:var(--night-ink,#eef2f7);border-radius:var(--radius-lg,10px);font-family:var(--sans)}.ds-num{display:flex;flex-direction:column;gap:2px}.ds-label{font-size:.8125rem;font-weight:700;color:var(--night-muted,#a9b8cc);letter-spacing:.06em;text-transform:uppercase}.ds-ref{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:clamp(1.5rem,1rem + 2.4vw,2.5rem);line-height:1.05;color:#fff}.ds-state{display:flex;align-items:center;gap:12px;justify-self:start;padding:8px 16px;border-radius:var(--radius,6px);background:var(--amber,#f2a516);color:var(--night,#0f1b2d)}.ds-state h2{margin:0;font-size:1.125rem;font-weight:650;color:var(--night,#0f1b2d)}.ds-scan{position:absolute;left:0;right:0;bottom:0;height:4px;background:linear-gradient(90deg,transparent 0 35%,var(--amber,#f2a516) 35% 65%,transparent 65% 100%);background-size:250% 100%;animation:ds-scan 2.4s cubic-bezier(.16,1,.3,1) infinite}@keyframes ds-scan{from{background-position:100% 0}to{background-position:0 0}}@media(prefers-reduced-motion:reduce){.ds-scan{animation:none;background:var(--amber,#f2a516)}}"
+    },
+    {
+      "name": "Barra de participación",
+      "kind": "custom",
+      "refersTo": "share-bar",
+      "description": "Fila del análisis por especialidad: barra SVG en tinta noche por atributos, ordenada de mayor a menor.",
+      "html": "<table class=\"ds-share\"><tr><th>Ortopedia y traumatología</th><td class=\"ds-n\">66,7%</td><td class=\"ds-bar\"><svg width=\"100%\" height=\"10\" aria-hidden=\"true\"><rect class=\"ds-track\" width=\"100%\" height=\"10\"/><rect class=\"ds-fill\" width=\"100%\" height=\"10\"/></svg></td></tr><tr><th>Medicina general</th><td class=\"ds-n\">33,3%</td><td class=\"ds-bar\"><svg width=\"100%\" height=\"10\" aria-hidden=\"true\"><rect class=\"ds-track\" width=\"100%\" height=\"10\"/><rect class=\"ds-fill\" width=\"50%\" height=\"10\"/></svg></td></tr></table>",
+      "css": ".ds-share{width:100%;border-collapse:collapse;font-family:var(--sans);font-size:.875rem}.ds-share th{text-align:left;font-weight:600;color:var(--ink,#0f1b2d);padding:12px;border-bottom:1px solid var(--line,#d5dce5)}.ds-share td{padding:12px;border-bottom:1px solid var(--line,#d5dce5)}.ds-n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700}.ds-bar{width:38%}.ds-bar svg{display:block}.ds-track{fill:var(--surface-2,#f5f7f9)}.ds-fill{fill:var(--night,#0f1b2d)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "El tablero de turnos",
+    "overview": "CitaYa se diseña como el digiturno de una sala de espera colombiana: cada solicitud es un turno que se llama. El radicado es la cifra que manda y su estado se lee a un metro de distancia. Un tablero azul noche (barra superior en el portal, barra más rail lateral en la consola interna) enmarca un suelo claro y frío donde viven superficies blancas separadas por filetes de 1px. La interfaz habla en español de Colombia, con fechas `dd/mm/aaaa`.\n\nEl sistema rechaza el portal clínico blanco-y-azul de tarjetas iguales y el panel gris con un acento decorativo. El color es semántico, no ornamental: el ámbar es dueño exclusivo de lo que está en curso, el verde confirma, el rojo detiene, y ninguno aparece sin ícono y texto. La densidad cambia según quién mira: el paciente, casi siempre en móvil, ve una sola columna ancha con campos de 48px y una acción por paso; el personal, en escritorio, ve tablas densas con cifras tabulares en mono.\n\nTodo funciona sin JavaScript y bajo una CSP `style-src 'self'`: no hay un solo estilo en línea. Barras y gráficos se dibujan con atributos SVG, no con `style=\"width:…\"`. Tipografía y fuentes son autoalojadas (Atkinson Hyperlegible Next y Mono, OFL).",
+    "keyCharacteristics": [
+      "Tablero azul noche como marco; suelo claro frío; superficies blancas con filetes de 1px.",
+      "La firma: el radicado «llamado» en una placa invertida con su estado en pastilla de color.",
+      "Ámbar solo para lo vivo; verde y rojo siempre con ícono y texto.",
+      "Una sola familia tipográfica (Atkinson Hyperlegible) con su variante mono para radicados, cédulas y cifras.",
+      "Esquinas de 6px y 10px, sin degradados suaves ni biseles; plano en reposo.",
+      "Cero estilos en línea; SVG con atributos para todo lo que se mide."
+    ],
+    "rules": [
+      {
+        "name": "The Amber Owns Live Rule",
+        "body": "El ámbar solo marca lo que está ocurriendo ahora: en cola, enviando, reintento, pendiente de verificación, pendientes por responder, contadores. Un estado terminado nunca es ámbar; un elemento decorativo nunca es ámbar. Si la cifra del tablero de turnos es 0, va en blanco, no en ámbar.",
+        "section": "colors"
+      },
+      {
+        "name": "The Never Color Alone Rule",
+        "body": "Verde confirma, rojo detiene, ámbar está en curso, y los tres van siempre con ícono y texto. Una pastilla de estado sin ícono propio recibe su glifo por máscara CSS (visto para ok, reloj para en curso, triángulo para detenido, lupa para en espera).",
+        "section": "colors"
+      },
+      {
+        "name": "The Status Mapping Rule",
+        "body": "El tono sale del estado, no de la plantilla: `queued`, `sending`, `retry`, `pending_verification` → en curso; `sent`, `simulated`, `matched`, `verified` → listo; `failed`, `uncertain`, `unavailable`, `not_eligible`, `expired`, `cancelled`, `not_registered` → detenido; todo lo demás → en espera.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Truth Rule",
+        "body": "Todo lo que se dicta, se copia o se compara (radicado, cédula, fecha, ingreso, conteos, porcentajes) va en Atkinson Hyperlegible Mono con `tabular-nums`. El texto que se lee va en Next.",
+        "section": "typography"
+      },
+      {
+        "name": "The Called Number Label Rule",
+        "body": "La única etiqueta en mayúsculas con tracking (0.8125rem, 700, 0.06em) es la que nombra la cifra llamada: «RADICADO» sobre la placa y en el encabezado del progreso. Es el rótulo de un dato, no un sobretítulo de sección; no se extiende a encabezados.",
+        "section": "typography"
+      },
+      {
+        "name": "The One Plate Per Screen Rule",
+        "body": "Cada pantalla tiene como máximo una placa invertida dominante (el radicado llamado, el tablero de turnos o el resumen del análisis). Es la cifra que manda; si dos compiten, ninguna manda.",
+        "section": "layout"
+      },
+      {
+        "name": "The Float-Only Shadow Rule",
+        "body": "Una superficie lleva sombra solo si flota sobre el contenido (diálogo, menú, aviso). Tarjetas, tablas y placas nunca la llevan.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** reservar `amber` para estados en curso, contadores y la cifra del tablero cuando es mayor que 0.",
+      "**Do** acompañar todo verde, rojo o ámbar de estado con un ícono y una palabra; si la pastilla no trae ícono, dejar que la máscara CSS ponga el glifo.",
+      "**Do** derivar el tono de un estado con el mapeo único de estados (en curso / listo / detenido / en espera).",
+      "**Do** escribir radicados, documentos, fechas y cifras en Atkinson Hyperlegible Mono con `tabular-nums`.",
+      "**Do** dibujar barras, progresos y gráficos con atributos SVG (`width`, `x`, `fill` por clase), nunca con estilos en línea.",
+      "**Do** mantener campos de 16px y objetivos táctiles de 44px (botones de 48px) en móvil.",
+      "**Do** usar filetes de 1px y el contraste noche / suelo para separar; la sombra `--shadow-pop` solo en lo que flota.",
+      "**Do** redactar la interfaz en español de Colombia y con fechas `dd/mm/aaaa`."
+    ],
+    "donts": [
+      "**Don't** usar atributos `style` ni bloques `<style>`: la CSP `style-src 'self'` los bloquea.",
+      "**Don't** pintar en ámbar un estado terminado, un botón, un encabezado o un adorno.",
+      "**Don't** comunicar un estado solo con color.",
+      "**Don't** usar una paleta categórica (torta, barras multicolor) para comparar especialidades; se ordenan y se miden en tinta noche.",
+      "**Don't** poner dos placas invertidas dominantes en la misma pantalla.",
+      "**Don't** añadir sombras a tarjetas, tablas o placas, ni degradados suaves o biseles.",
+      "**Don't** convertir el rótulo «RADICADO» en un patrón de sobretítulos en mayúsculas para secciones."
+    ]
+  }
+}
