@@ -35,6 +35,7 @@ function say(string $phone, string $text): void { global $bot; static $n = 0; $b
 function pendingRequest(string $phone, string $document): int {
     global $app, $bot, $db, $config;
     say($phone, 'historia');
+    say($phone, (string)random_int(7000000000, 7999999999)); // documento nuevo: enlace del formulario
     $row = $db->one("SELECT encrypted_body FROM whatsapp_outbox WHERE phone=? AND kind='text' ORDER BY id DESC LIMIT 1", [$phone]);
     preg_match('/wa=([a-f0-9]{48})/', App\Crypto::open($row['encrypted_body'], $config['app_key']), $m);
     return $app->createRequest(['document_type' => 'CC', 'document_number' => $document, 'full_name' => 'Paciente Ficticio', 'approximate_date' => date('Y-m-d'), 'specialty_id' => 0, 'email' => 'p' . $document . '@example.test'], 'ip-' . $document, true, $bot->findLink($m[1]));

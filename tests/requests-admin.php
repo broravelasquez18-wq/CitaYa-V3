@@ -33,6 +33,7 @@ function inbound(string $id, string $phone, string $text): array {
 function viaWhatsApp(array $form, string $phone, string $id): int {
     global $app, $bot, $db, $config;
     $bot->receive(inbound($id, $phone, 'historia'));
+    $bot->receive(inbound($id . '-doc', $phone, (string)random_int(7000000000, 7999999999))); // documento nuevo: enlace del formulario
     $row = $db->one("SELECT encrypted_body FROM whatsapp_outbox WHERE kind='text' ORDER BY id DESC LIMIT 1");
     preg_match('/wa=([a-f0-9]{48})/', App\Crypto::open($row['encrypted_body'], $config['app_key']), $m);
     return $app->createRequest($form, 'ip-' . $id, true, $bot->findLink($m[1]));

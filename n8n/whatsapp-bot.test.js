@@ -21,6 +21,7 @@ function citaya(overrides = {}) {
     switch (request.action) {
       case 'inbound.register': { const isNew = !seen.has(request.message_id); seen.add(request.message_id); return { ok: true, new: isNew, allowed: true, released: 0 }; }
       case 'template.render': return { ok: true, text: request.code === 'menu' ? 'MENÚ: escribe HISTORIA' : 'Tu enlace: ' + request.values.enlace };
+      case 'intake.start': return { ok: true, started: true };
       case 'link.create': return { ok: true, url: 'https://citaya.example.test/?page=home&wa=abc', hours: 6 };
       case 'code.confirm': return request.code.toUpperCase() === 'K7MP2Q' ? { ok: true, valid: true, reference: 'HC-1', next: 'history' } : { ok: true, valid: false };
       case 'message.send': return { ok: true, status: 'sent' };
@@ -54,17 +55,24 @@ test('saludo: un solo menú, con el texto editable de CitaYa', async () => {
   assert.deepEqual(fake.sent().map(s => [s.phone, s.text, s.key]), [['573001112233', 'MENÚ: escribe HISTORIA', 'm1:menu']]);
 });
 
-test('HISTORIA (con tildes o mayúsculas) envía el enlace personal', async () => {
+test('HISTORIA (con tildes o mayúsculas) inicia la conversación en CitaYa (pide el documento)', async () => {
   const fake = citaya();
-  assert.equal((await run(fake, inbound('m2', '573001112233', 'Necesito mi HISTORIA clínica'))).result, 'history:sent');
-  assert.deepEqual(fake.calls.map(c => c.action), ['inbound.register', 'conversation.handle', 'link.create', 'template.render', 'message.send']);
+  assert.equal((await run(fake, inbound('m2', '573001112233', 'Necesito mi HISTORIA clínica'))).result, 'history:intake');
+  assert.deepEqual(fake.calls.map(c => c.action), ['inbound.register', 'conversation.handle', 'intake.start']);
+  assert.equal(fake.calls[2].message_id, 'm2');
+});
+
+test('si CitaYa no inicia la conversación, envía el enlace personal como respaldo', async () => {
+  const fake = citaya({ 'intake.start': () => ({ ok: false, error: 'internal_error' }) });
+  assert.equal((await run(fake, inbound('m2', '573001112233', 'historia'))).result, 'history:sent');
+  assert.deepEqual(fake.calls.map(c => c.action), ['inbound.register', 'conversation.handle', 'intake.start', 'link.create', 'template.render', 'message.send']);
   assert.match(fake.sent()[0].text, /wa=abc/);
 });
 
 test('un reintento del mismo mensaje no se responde dos veces', async () => {
   const fake = citaya();
-  await run(fake, inbound('m3', '573001112233', 'historia'));
-  assert.equal((await run(fake, inbound('m3', '573001112233', 'historia'))).result, 'duplicate');
+  await run(fake, inbound('m3', '573001112233', 'hola'));
+  assert.equal((await run(fake, inbound('m3', '573001112233', 'hola'))).result, 'duplicate');
   assert.equal(fake.sent().length, 1);
 });
 

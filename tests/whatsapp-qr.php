@@ -57,7 +57,8 @@ try {
     check($db->one("SELECT status FROM whatsapp_outbox ORDER BY id LIMIT 1")['status'] === 'sent', 'El mensaje queda como enviado');
 
     $bot->receive(inbound('wamid.q2', '573001112233', 'historia'));
-    $bot->tick();
+    $bot->receive(inbound('wamid.q2b', '573001112233', '7000000001')); // documento nuevo: enlace del formulario
+    while ($bot->tick());
     preg_match('/wa=([a-f0-9]{48})/', array_slice(requests(), -1)[0]['payload']['body'], $m);
     $found = $app->createRequest(['document_type' => 'CC', 'document_number' => '1012345678', 'full_name' => 'ana maria perez', 'approximate_date' => date('Y-m-d', strtotime('-3 days')), 'specialty_id' => 0, 'email' => 'paciente@example.test'], 'ip-1', true, $bot->findLink($m[1]));
     $before = count(requests());

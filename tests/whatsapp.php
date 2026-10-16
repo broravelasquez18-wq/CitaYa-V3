@@ -24,6 +24,10 @@ function inbound(string $id, string $phone, string $text): array {
 }
 function lastText(): string { global $db, $app; $row = $db->one("SELECT encrypted_body FROM whatsapp_outbox WHERE kind='text' ORDER BY id DESC LIMIT 1"); return App\Crypto::open($row['encrypted_body'], $app->config['app_key']); }
 function linkToken(): string { preg_match('/wa=([a-f0-9]{48})/', lastText(), $m); return $m[1]; }
+/** HISTORIA y un documento sin solicitudes previas: el bot responde con el enlace del formulario. */
+function askLink(string $id, string $phone): string { global $bot; $bot->receive(inbound($id, $phone, 'historia')); $bot->receive(inbound($id . '-doc', $phone, (string)random_int(7000000000, 7999999999))); return linkToken(); }
+/** Último texto encolado para un número. */
+function lastTo(string $phone): string { global $db, $app; $row = $db->one("SELECT encrypted_body FROM whatsapp_outbox WHERE phone=? AND kind='text' ORDER BY id DESC LIMIT 1", [$phone]); return $row ? App\Crypto::open($row['encrypted_body'], $app->config['app_key']) : ''; }
 try {
     $db->pdo->exec(file_get_contents($root . '/database/schema.sql'));
     $specialty = $db->insert('specialties', ['name' => 'Ortopedia']);
@@ -40,8 +44,10 @@ try {
     check(!App\WhatsApp::validSignature('{"a":1}', 'sha256=00', 'secreto') && !App\WhatsApp::validSignature('x', 'sha256=' . hash_hmac('sha256', 'x', ''), ''), 'Rechaza firma inválida o secreto vacío');
 
     check($bot->receive(inbound('wamid.1', '573001112233', 'Hola buenas')) === 1 && str_contains(lastText(), 'Solicitar historia clínica'), 'Saludo recibe el menú');
-    check($bot->receive(inbound('wamid.2', '573001112233', 'Necesito mi historia clínica')) === 1 && str_contains(lastText(), 'https://portal.example.test/?page=home&wa='), 'Solicitud de historia recibe el enlace del formulario');
+    check($bot->receive(inbound('wamid.2', '573001112233', 'Necesito mi historia clínica')) === 1 && str_contains(lastText(), 'número de documento'), 'Solicitud de historia: el bot pide el número de documento');
     check($bot->receive(inbound('wamid.2', '573001112233', 'Necesito mi historia clínica')) === 0, 'Un reintento del webhook no duplica la respuesta');
+    $bot->receive(inbound('wamid.2b', '573001112233', '1.012.345.678'));
+    check(str_contains(lastText(), 'https://portal.example.test/?page=home&wa=') && !$db->one("SELECT phone FROM whatsapp_sessions WHERE phone='573001112233'"), 'Primera vez del documento: recibe el enlace del formulario');
     $token = linkToken();
     check($db->one('SELECT COUNT(*) n FROM whatsapp_links')['n'] == 1 && !$db->one('SELECT id FROM whatsapp_links WHERE token_hash=?', [$token]), 'El enlace se guarda solo como hash');
 
@@ -61,8 +67,7 @@ try {
     check($outbox['status'] === 'simulated' && $outbox['encrypted_body'] === null, 'Procesa el envío por WhatsApp en modo local');
     check(count($preview['messages']) === 3 && $preview['messages'][1]['type'] === 'document' && str_contains($preview['messages'][0]['body'], $request['reference']), 'Envía un texto con el radicado y cada PDF como documento');
 
-    $bot->receive(inbound('wamid.3', '573009998877', 'historia'));
-    $missing = $app->createRequest(['document_number' => '99999999'] + $form, 'ip-2', true, $bot->findLink(linkToken()));
+    $missing = $app->createRequest(['document_number' => '99999999'] + $form, 'ip-2', true, $bot->findLink(askLink('wamid.3', '573009998877')));
     $missingRequest = $app->request($missing);
     $notice = $db->one("SELECT * FROM whatsapp_outbox WHERE request_id=? AND kind='notice'", [$missing]);
     check($missingRequest['status'] === 'no_matches' && $notice && $notice['phone'] === '573009998877', 'Sin historia: se encola el radicado por WhatsApp');
@@ -74,7 +79,7 @@ try {
     check(!$db->one('SELECT id FROM whatsapp_outbox WHERE request_id=?', [$webOnly]), 'Las solicitudes desde la web no generan mensajes de WhatsApp');
 
     $db->run("UPDATE whatsapp_links SET expires_at=? WHERE used_at IS NULL", [date('Y-m-d H:i:s', time() - 1)]);
-    $bot->receive(inbound('wamid.4', '573005554433', 'hc'));
+    askLink('wamid.4', '573005554433');
     $expired = $db->one('SELECT id FROM whatsapp_links WHERE phone=?', ['573005554433'])['id'];
     $db->run('UPDATE whatsapp_links SET expires_at=? WHERE id=?', [date('Y-m-d H:i:s', time() - 1), $expired]);
     $late = $app->createRequest(['email' => 'tarde@example.test'] + $form, 'ip-4', true, (int)$expired);
@@ -110,8 +115,7 @@ try {
     // --- Historia cargada después: la solicitud pendiente se envía sola ---
     require_once $root . '/tests/TestPdf.php';
     $late = ['document_number' => '2000000002', 'full_name' => 'Paciente ficticio de prueba de carga', 'email' => 'espera@example.test', 'approximate_date' => date('Y-m-d')] + $form;
-    $bot->receive(inbound('wamid.5', '573007776655', 'historia'));
-    $pendingId = $app->createRequest($late, 'ip-5', true, $bot->findLink(linkToken()));
+    $pendingId = $app->createRequest($late, 'ip-5', true, $bot->findLink(askLink('wamid.5', '573007776655')));
     check($app->request($pendingId)['status'] === 'no_matches' && $db->one("SELECT id FROM whatsapp_outbox WHERE request_id=? AND kind='notice'", [$pendingId]), 'Sin historia: queda pendiente con su radicado informado');
     $pdf = sys_get_temp_dir() . '/cy-orders-' . bin2hex(random_bytes(4)) . '.pdf';
     file_put_contents($pdf, testPdf('2000000002', 'INGORD1', '', ['FORMULA MEDICA', 'Acetaminofen 500 mg', 'Orden de laboratorio:', 'Hemograma']));
@@ -181,8 +185,7 @@ try {
     check($db->one('SELECT last_error FROM whatsapp_outbox WHERE id=?', [$sent['id']])['last_error'] === 'window_expired', 'Un mensaje en espera más de 7 días se marca vencido');
 
     // --- Respuesta «Aprobado» con PDF: también se leen sus órdenes ---
-    $bot->receive(inbound('wamid.r1', '573005554433', 'historia'));
-    $answered = $app->createRequest(['document_number' => '3000000003', 'full_name' => 'Paciente ficticio de respuesta', 'email' => 'respuesta@example.test'] + $form, 'ip-r1', true, $bot->findLink(linkToken()));
+    $answered = $app->createRequest(['document_number' => '3000000003', 'full_name' => 'Paciente ficticio de respuesta', 'email' => 'respuesta@example.test'] + $form, 'ip-r1', true, $bot->findLink(askLink('wamid.r1', '573005554433')));
     $responsePdf = $config['storage_path'] . '/histories/respuesta-orden.pdf';
     file_put_contents($responsePdf, testPdf('3000000003', 'INGRESP1', '', ['SOLICITUD AYUDAS DIAGNOSTICAS EXTRAMURAL', 'PLAN DE MANEJO', '881401 ECOGRAFIA PELVICA GINECOLOGICA. 1']));
     $app->respondCase($answered, 1, 'approved', 'Te enviamos tu historia clínica.', [['path' => $responsePdf, 'name' => 'historia.pdf']]);
@@ -191,6 +194,68 @@ try {
     $responsePreview = json_decode((string)file_get_contents($config['storage_path'] . '/wa-outbox/' . $responseJob['id'] . '.json'), true);
     $responseTypes = array_column($responsePreview['messages'], 'type');
     check($responseTypes === ['text', 'document', 'text', 'image'] && str_contains($responsePreview['messages'][3]['caption'], 'Pide una cita en tu EPS'), 'La respuesta «Aprobado» con PDF también explica las órdenes del documento');
+
+    // --- Solicitud conversando con el bot: datos guardados del formulario ---
+    $db->run('DELETE FROM rate_limits'); // límite de 5 solicitudes por documento y hora
+    $app->createRequest(['full_name' => 'Ana María Pérez', 'email' => 'paciente@example.test'] + $form, 'ip-p0', true, $bot->findLink(askLink('wamid.p0', '573001112233')));
+    $profile = $db->one("SELECT * FROM patient_profiles WHERE document_type='CC' AND document_number='1012345678'");
+    check($profile && $profile['email'] === 'paciente@example.test' && $profile['whatsapp_phone'] === '573001112233', 'El formulario guarda los datos del paciente y el WhatsApp del enlace');
+    $app->createRequest(['full_name' => 'Persona Distinta', 'email' => 'intruso@example.test'] + $form, 'ip-p1', true);
+    check($db->one('SELECT email FROM patient_profiles WHERE id=?', [$profile['id']])['email'] === 'paciente@example.test', 'Una solicitud con otro nombre no reemplaza los datos guardados');
+    $app->createRequest(['email' => 'nuevo@example.test'] + $form, 'ip-p2', true);
+    check($db->one('SELECT email,whatsapp_phone FROM patient_profiles WHERE id=?', [$profile['id']]) === ['email' => 'nuevo@example.test', 'whatsapp_phone' => '573001112233'], 'Una nueva solicitud del paciente actualiza el correo y conserva el WhatsApp');
+    $db->run("UPDATE patient_profiles SET full_name='Ana María Pérez',email='paciente@example.test' WHERE id=?", [$profile['id']]);
+
+    $db->run('DELETE FROM rate_limits');
+    $owner = '573001112233';
+    $say = function (string $phone, string $text) use ($bot) { static $n = 0; $bot->receive(inbound('wamid.i' . (++$n), $phone, $text)); return lastTo($phone); };
+    $say($owner, 'historia');
+    check(str_contains($say($owner, 'abc'), 'solo el número'), 'Un documento inválido se vuelve a pedir');
+    $shown = $say($owner, '1012345678');
+    check(str_contains($shown, 'Ana María Pérez') && str_contains($shown, 'CC 1012345678') && str_contains($shown, 'paciente@example.test'), 'Desde el mismo WhatsApp muestra los datos guardados para confirmarlos');
+    check(str_contains($say($owner, 'tal vez'), 'Responde *1*'), 'Una respuesta no reconocida se vuelve a preguntar');
+    check(str_contains($say($owner, 'Sí'), 'fecha'), 'Datos confirmados: pregunta la fecha de la atención');
+    check(str_contains($say($owner, '31/02/2026'), 'fecha válida') && str_contains($say($owner, date('d/m/Y', strtotime('+2 days'))), 'fecha válida'), 'Rechaza fechas inexistentes o futuras');
+    $list = $say($owner, date('d/m/Y', strtotime('-3 days')));
+    check(str_contains($list, '*1.* Ortopedia') && str_contains($list, '*0.* No recuerdo'), 'Pregunta la especialidad con opciones numeradas');
+    check(str_contains($say($owner, '9'), 'número de la especialidad'), 'Una especialidad fuera de la lista se vuelve a pedir');
+    $before = (int)$db->one('SELECT MAX(id) n FROM requests')['n'];
+    $say($owner, '1');
+    $chat = $db->one('SELECT * FROM requests WHERE id>? ORDER BY id DESC LIMIT 1', [$before]);
+    check($chat && $chat['status'] === 'queued' && $chat['whatsapp_phone'] === $owner && $chat['contact_email'] === 'paciente@example.test' && $chat['claimed_name'] === 'Ana María Pérez' && (int)$chat['specialty_id'] === $specialty, 'Se radica la solicitud con los datos guardados y queda vinculada al chat');
+    check((bool)$db->one("SELECT id FROM whatsapp_outbox WHERE request_id=? AND kind='history' AND phone=?", [$chat['id'], $owner]) && (bool)$db->one("SELECT id FROM jobs WHERE request_id=? AND kind='history' AND recipient='paciente@example.test'", [$chat['id']]), 'Historia encontrada: sale por el chat y al correo guardado');
+    check(!$db->one('SELECT phone FROM whatsapp_sessions WHERE phone=?', [$owner]), 'Al radicar termina la conversación');
+
+    // Fecha desconocida: el bot ofrece la atención más reciente.
+    $say($owner, 'historia'); $say($owner, '1012345678'); $say($owner, '1'); $say($owner, '0');
+    $offer = $say($owner, '0');
+    check(str_contains($offer, 'más reciente') && str_contains($offer, date('d/m/Y', strtotime('-3 days'))), 'Sin fecha: ofrece la atención más reciente disponible');
+    $say($owner, '1');
+    $suggested = $db->one('SELECT * FROM requests ORDER BY id DESC LIMIT 1');
+    check($suggested['status'] === 'queued' && (bool)$db->one("SELECT id FROM whatsapp_outbox WHERE request_id=? AND kind='history'", [$suggested['id']]), 'Al aceptar la sugerencia se envía esa historia');
+    $say($owner, 'historia'); $say($owner, '1012345678'); $say($owner, '1'); $say($owner, '0'); $say($owner, '0');
+    $say($owner, '2');
+    $rejected = $db->one('SELECT * FROM requests ORDER BY id DESC LIMIT 1');
+    check($rejected['status'] === 'no_matches' && (bool)$db->one("SELECT id FROM whatsapp_outbox WHERE request_id=? AND kind='notice'", [$rejected['id']]), 'Si no es esa atención, queda pendiente y recibe el radicado');
+
+    // Datos incorrectos o cancelar.
+    $say($owner, 'historia'); $say($owner, '1012345678');
+    check(str_contains($say($owner, '2'), 'wa=') && !$db->one('SELECT phone FROM whatsapp_sessions WHERE phone=?', [$owner]), 'Si los datos no son correctos recibe el formulario para corregirlos');
+    $say($owner, 'historia');
+    check(str_contains($say($owner, 'menu'), 'Solicitar historia clínica') && !$db->one('SELECT phone FROM whatsapp_sessions WHERE phone=?', [$owner]), 'MENU cancela la conversación y muestra el menú');
+
+    // Otro WhatsApp: debe escribir el nombre completo; el correo se muestra oculto.
+    $other = '573004445566';
+    $say($other, 'historia');
+    $ask = $say($other, '1012345678');
+    check(str_contains($ask, 'nombre completo') && !str_contains($ask, 'paciente@example.test'), 'Desde otro WhatsApp pide el nombre antes de mostrar datos');
+    check(str_contains($say($other, 'Ana Pérez'), 'no coincide'), 'Un nombre incompleto no muestra los datos');
+    $masked = $say($other, 'ANA MARIA PEREZ');
+    check(str_contains($masked, 'pa******@example.test') && !str_contains($masked, 'paciente@'), 'Con el nombre correcto muestra los datos con el correo oculto');
+    $say($other, 'menu');
+    $say($other, 'historia'); $say($other, '1012345678'); $say($other, 'Otra Persona');
+    check(str_contains($say($other, 'Otra Persona'), 'wa='), 'Tras dos nombres incorrectos recibe el formulario');
+    check(App\WhatsAppIntake::parseDate('5-3-26') === '2026-03-05' && App\WhatsAppIntake::parseDate('2026/03/05') === '2026-03-05' && App\WhatsAppIntake::parseDate('ayer') === false, 'Entiende fechas día/mes/año y año/mes/día');
     echo "\nPASS: $checks comprobaciones. Sin envíos externos.\n";
 } finally {
     if (!preg_match('/^citaya_test_[a-f0-9]{10}$/', $databaseName)) throw new RuntimeException('Invalid test database name');

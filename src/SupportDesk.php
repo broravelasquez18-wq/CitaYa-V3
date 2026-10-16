@@ -42,6 +42,10 @@ final class SupportDesk
             return true;
         }
         $session = $this->app->db->one('SELECT * FROM whatsapp_sessions WHERE phone=? AND updated_at>?', [$phone, date('Y-m-d H:i:s', time() - 60 * self::SESSION_MINUTES)]);
+        // Solicitud de historia conversando con el bot (WhatsAppIntake): tiene sus propias opciones y su cancelación.
+        if ($session && str_starts_with($session['state'], 'intake_')) {
+            return (new WhatsAppIntake($this->app))->step($phone, $messageId, $text, $session['state'], json_decode((string)$session['data'], true) ?: []);
+        }
         $words = self::words($text);
         if ($session && (in_array('cancelar', $words, true) || in_array('menu', $words, true) || $text === '0')) {
             $this->endSession($phone);

@@ -958,3 +958,54 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
 - `run` 158, `requests-admin` 46, `resend-ui` 19 y `support` 49 en verde.
 
 **Pendiente (despliegue).** Tras el push a `main`, confirmar en los registros del contenedor que los límites ya se cuentan por cliente.
+
+## Bot de WhatsApp: solicitud por documento con datos guardados (RF-31, SCRUM-53)
+
+**Alcance.**
+- El paciente que ya pidió su historia por el formulario web no vuelve a llenarlo.
+- El bot pide el número de documento y reutiliza los datos guardados.
+- La primera vez sigue siendo por el formulario web.
+
+**Requisito RF-31.**
+- Cada solicitud guarda los datos del paciente: documento, nombre, correo y WhatsApp.
+- Con HISTORIA, el bot pide el documento:
+  - sin datos guardados, envía el enlace del formulario;
+  - con datos guardados, los muestra para confirmarlos y pregunta la fecha y la especialidad de la atención.
+
+**Diseño.**
+- Nueva tabla `patient_profiles`, única por (tipo, número) e indexada por número. Se crea con `schema.sql`, que ya aplica `bin/setup.php` al arrancar.
+- `Application::createRequest` llama a `saveProfile`.
+  - Si el documento ya tiene perfil con otro nombre, solo se reemplaza cuando el nombre nuevo coincide con el registro del paciente. Así un tercero no puede cambiar el correo guardado.
+  - El WhatsApp se conserva si la nueva solicitud no trae uno.
+- Nueva clase `App\WhatsAppIntake`. Guarda el paso de la conversación en `whatsapp_sessions` con estados `intake_*`. `SupportDesk::handle` le pasa esas sesiones antes de su propia lógica de cancelación.
+  - `intake_document`: el número debe tener entre 3 y 24 letras o dígitos, con al menos un dígito. Hay un límite de 10 consultas por chat y hora para evitar recorrer documentos ajenos.
+  - Mismo WhatsApp que el perfil: muestra los datos completos.
+  - Otro WhatsApp: primero pide el nombre completo, igual que el formulario. Después muestra el correo oculto. Con 2 nombres incorrectos envía el formulario.
+  - `intake_confirm`: 1 continúa; 2 envía el formulario para corregir los datos.
+  - `intake_date`: acepta día/mes/año o año-mes-día, no futura; 0 si no la recuerda.
+  - `intake_specialty`: lista numerada de especialidades; 0 si no la recuerda.
+  - Se radica con `createRequest(..., directSearch: true, whatsappPhone: chat)`, la misma búsqueda directa del formulario.
+  - Si la historia o el radicado quedan en cola, ese mensaje es la respuesta.
+  - Con varias atenciones (`intake_select`), el paciente elige por número.
+  - Sin coincidencia y con una atención reciente disponible (`intake_suggest`), el bot la ofrece. Si el paciente responde 2, se envía el radicado.
+  - MENU, cancelar o salir terminan la conversación.
+- Bot PHP: en `WhatsApp::handleInbound`, la intención «history» llama a `WhatsAppIntake::start` en vez de enviar el enlace.
+- n8n: nueva acción `intake.start` en `N8nApi`. `whatsapp-bot.js` la usa y, si falla, vuelve al enlace (`link.create`). Los siguientes pasos llegan por `conversation.handle`. Se regeneró `citaya-bot-whatsapp.json`.
+
+**Validación.**
+- `tests/whatsapp.php`: 79 en verde (24 nuevas):
+  - perfil guardado y protegido contra otro nombre;
+  - documento inválido;
+  - confirmación de datos;
+  - fechas inválidas y futuras;
+  - especialidad fuera de la lista;
+  - radicación con historia por chat y correo;
+  - sugerencia aceptada y rechazada;
+  - corrección con el formulario y MENU;
+  - otro WhatsApp con nombre y correo oculto;
+  - formatos de fecha.
+- Se ajustaron las pruebas que esperaban el enlace directo, ahora con un documento nuevo: `requests-admin` 46, `support` 49, `whatsapp-qr` 8, `whatsapp-zernio` 22 y `n8n-api` 28 en verde.
+- `run` 158, `resend-ui` 19 y `pdf-reader` 17 en verde. Pruebas de n8n con `node --test`: bot 13 en verde.
+- `admin-http`, `bulk-http`, `http` y `upload` fallan igual en `main` sin estos cambios: necesitan datos demo y credenciales locales.
+
+**Pendiente (despliegue).** Tras el push a `main`, verificar en el VPS que se creó la tabla y probar la conversación con el número del bot. Si el bot corre por n8n, reimportar `citaya-bot-whatsapp.json`.

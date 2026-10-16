@@ -24,6 +24,7 @@ final class N8nApi
         return match ((string)($payload['action'] ?? '')) {
             'inbound.register' => $this->registerInbound($payload),
             'conversation.handle' => $this->handleConversation($payload),
+            'intake.start' => $this->startIntake($payload),
             'link.create' => $this->createLink($payload),
             'code.confirm' => $this->confirmCode($payload),
             'requests.list' => $this->listRequests($payload),
@@ -78,7 +79,20 @@ final class N8nApi
         return ['handled' => (new SupportDesk($this->app))->handle($phone, $id, mb_substr((string)($payload['text'] ?? ''), 0, 4000))];
     }
 
-    /** Enlace personal al formulario para el chat que escribió HISTORIA. */
+    /**
+     * HISTORIA: el bot pide el número de documento y sigue la conversación (WhatsAppIntake); los pasos siguientes
+     * llegan por conversation.handle. Si es la primera vez del documento, CitaYa envía el enlace del formulario.
+     */
+    private function startIntake(array $payload): array
+    {
+        $phone = $this->phone($payload);
+        $id = (string)($payload['message_id'] ?? '');
+        if ($id === '' || strlen($id) > 190) throw new \DomainException('invalid_message_id');
+        (new WhatsAppIntake($this->app))->start($phone, $id);
+        return ['started' => true];
+    }
+
+    /** Enlace personal al formulario (respaldo del bot si no se pudo iniciar la conversación). */
     private function createLink(array $payload): array
     {
         $phone = $this->phone($payload);

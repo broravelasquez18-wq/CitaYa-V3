@@ -100,11 +100,28 @@ final class Application
             ]);
             if (!$directSearch) $this->issueCode($id, $this->verificationRecipient($patient, $email));
             if ($whatsappLinkId !== null) $this->whatsapp()->attachLink($whatsappLinkId, $id);
+            $this->saveProfile($type, $number, $name, $email, $this->request($id)['whatsapp_phone'], $patient !== null);
             $this->event($id, 'request_created', 'ok');
             return $id;
         });
         if ($directSearch) $this->processSearch($id);
         return $id;
+    }
+
+    /**
+     * Guarda los datos declarados en la solicitud para que el bot no los vuelva a pedir. Un perfil con otro nombre
+     * solo se reemplaza si el nombre nuevo coincide con el registro del paciente (evita que un tercero lo cambie).
+     */
+    private function saveProfile(string $type, string $number, string $name, string $email, ?string $phone, bool $patientMatched): void
+    {
+        $profile = $this->db->one('SELECT * FROM patient_profiles WHERE document_type=? AND document_number=? FOR UPDATE', [$type, $number]);
+        if (!$profile) {
+            $this->db->insert('patient_profiles', ['document_type' => $type, 'document_number' => $number, 'full_name' => $name, 'email' => $email,
+                'whatsapp_phone' => $phone, 'created_at' => $this->now(), 'updated_at' => $this->now()]);
+            return;
+        }
+        if (!$patientMatched && self::nameKey($profile['full_name']) !== self::nameKey($name)) return;
+        $this->db->run('UPDATE patient_profiles SET full_name=?,email=?,whatsapp_phone=COALESCE(?,whatsapp_phone),updated_at=? WHERE id=?', [$name, $email, $phone, $this->now(), $profile['id']]);
     }
 
     public function whatsapp(): WhatsApp { return new WhatsApp($this); }
@@ -283,7 +300,7 @@ final class Application
         return $resolved;
     }
 
-    private static function nameKey(string $name): string
+    public static function nameKey(string $name): string
     {
         return mb_strtoupper(ClinicalPdfReader::normalize(trim(preg_replace('/\s+/u',' ',$name))),'UTF-8');
     }

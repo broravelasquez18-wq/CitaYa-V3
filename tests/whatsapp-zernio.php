@@ -92,7 +92,8 @@ try {
 
     // --- Historia completa ---
     $bot->receiveZernio(event('2', '573001112233', 'necesito mi historia'));
-    $bot->tick();
+    $bot->receiveZernio(event('2b', '573001112233', '7000000001')); // documento nuevo: enlace del formulario
+    while ($bot->tick());
     preg_match('/wa=([a-f0-9]{48})/', last()['fields']['message'], $m);
     check(isset($m[1]), 'La solicitud de historia recibe el enlace del formulario');
     $found = $app->createRequest(['document_type' => 'CC', 'document_number' => '1012345678', 'full_name' => 'ana maria perez', 'approximate_date' => date('Y-m-d', strtotime('-3 days')), 'specialty_id' => 0, 'email' => 'paciente@example.test'], 'ip-1', true, $bot->findLink($m[1]));

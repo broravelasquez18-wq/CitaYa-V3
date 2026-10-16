@@ -293,3 +293,18 @@ CREATE TABLE IF NOT EXISTS whatsapp_sessions (
  data TEXT NULL,
  updated_at DATETIME NOT NULL
 ) ENGINE=InnoDB;
+
+-- Datos que el paciente declaró en su última solicitud (formulario web o bot). El bot de WhatsApp los busca por
+-- número de documento para no volver a pedirlos: solo le pide confirmarlos y los datos de la atención.
+CREATE TABLE IF NOT EXISTS patient_profiles (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ document_type VARCHAR(8) NOT NULL,
+ document_number VARCHAR(24) NOT NULL,
+ full_name VARCHAR(160) NOT NULL,
+ email VARCHAR(190) NOT NULL,
+ whatsapp_phone VARCHAR(20) NULL,
+ created_at DATETIME NOT NULL,
+ updated_at DATETIME NOT NULL,
+ UNIQUE KEY profile_identity (document_type, document_number),
+ INDEX profile_document (document_number)
+) ENGINE=InnoDB;

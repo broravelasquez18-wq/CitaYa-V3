@@ -157,7 +157,7 @@ final class WhatsApp
         // Si había mensajes esperando porque la ventana de 24 h estaba cerrada, ya pueden salir.
         $released = $this->app->db->run("UPDATE whatsapp_outbox SET status='queued',last_error=NULL,available_at=? WHERE phone=? AND status='waiting_window'", [$this->app->now(), $phone])->rowCount();
         if ($released) $this->queueText($phone, 'Gracias por escribirnos. Te estamos enviando ahora tu historia clínica.', 'release:' . $id);
-        if ($intent === 'history') $this->sendFormLink($phone);
+        if ($intent === 'history') (new WhatsAppIntake($this->app))->start($phone, $id);
         elseif (!$released) $this->queueText($phone, $this->menu(), 'menu:' . $id);
         return true;
     }

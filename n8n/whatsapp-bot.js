@@ -67,7 +67,10 @@ async function citayaWhatsAppBot({ raw, signature, env, http, crypto }) {
       ? 'Estas son tus solicitudes:\n\n' + requests.map(r => '*' + r.reference + '*: ' + r.label).join('\n') + '\n\nSi necesitas otra historia, escribe *HISTORIA*.'
       : 'No encontramos solicitudes vinculadas a este WhatsApp. Escribe *HISTORIA* para solicitar tu historia clínica.', 'status');
   } else if (words.some(word => KEYWORDS.includes(word))) {
+    // CitaYa pide el número de documento y sigue la conversación (los siguientes pasos llegan por conversation.handle).
     action = 'history';
+    const intake = await api('intake.start', { phone, message_id: id });
+    if (intake.ok) return { status: 200, result: 'history:intake' };
     const link = await api('link.create', { phone });
     if (!link.ok) sent = await send('No pudimos generar tu enlace en este momento. Intenta de nuevo en unos minutos.', 'link-fail');
     else {
