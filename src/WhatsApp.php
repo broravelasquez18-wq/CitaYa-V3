@@ -127,11 +127,11 @@ final class WhatsApp
     {
         $result = $this->confirmCode($phone, $code);
         if (!$result) {
-            $this->queueText($phone, 'El código no es válido o ya venció. Revisa el código de la página de tu solicitud, o escribe *HISTORIA* para iniciar una nueva.', 'confirm-fail:' . $messageId);
+            $this->queueText($phone, 'Código no válido o vencido. Escribe *HISTORIA* para una nueva solicitud.', 'confirm-fail:' . $messageId);
             return;
         }
-        $this->queueText($phone, 'Listo, confirmamos este WhatsApp para tu solicitud con radicado *' . $result['reference'] . '*.', 'confirm-ok:' . $messageId);
-        if ($result['next'] === 'select') $this->queueText($phone, 'Encontramos varias atenciones con tus datos. Elige la que necesitas en la página de tu solicitud y te la enviaremos por aquí.', 'confirm-select:' . $messageId);
+        $this->queueText($phone, 'Listo, WhatsApp confirmado para el radicado *' . $result['reference'] . '*.', 'confirm-ok:' . $messageId);
+        if ($result['next'] === 'select') $this->queueText($phone, 'Hay varias atenciones. Elige la tuya en la página de la solicitud.', 'confirm-select:' . $messageId);
     }
 
     private function handleInbound(string $id, string $from, string $text): bool
@@ -156,7 +156,7 @@ final class WhatsApp
         catch (\DomainException) { return false; }
         // Si había mensajes esperando porque la ventana de 24 h estaba cerrada, ya pueden salir.
         $released = $this->app->db->run("UPDATE whatsapp_outbox SET status='queued',last_error=NULL,available_at=? WHERE phone=? AND status='waiting_window'", [$this->app->now(), $phone])->rowCount();
-        if ($released) $this->queueText($phone, 'Gracias por escribirnos. Te estamos enviando ahora tu historia clínica.', 'release:' . $id);
+        if ($released) $this->queueText($phone, 'Te estamos enviando tu historia clínica.', 'release:' . $id);
         if ($intent === 'history') (new WhatsAppIntake($this->app))->start($phone, $id);
         elseif (!$released) $this->queueText($phone, $this->menu(), 'menu:' . $id);
         return true;
@@ -255,7 +255,7 @@ final class WhatsApp
         if (!$request['whatsapp_phone']) return null;
         $kind = $decision === 'approved' ? 'response' : 'not_registered';
         // Las plantillas ya nombran el radicado; si el comentario no lo hace, se antepone.
-        $body = str_contains($comment, $request['reference']) ? $comment : "Respuesta a tu solicitud *{$request['reference']}*.\n\n" . $comment;
+        $body = str_contains($comment, $request['reference']) ? $comment : "Solicitud *{$request['reference']}*.\n\n" . $comment;
         return $this->queue($request['whatsapp_phone'], $kind, $body, $requestId, null, 'wa:response:' . $requestId . ':' . $unique,
             $decision === 'approved' ? 'historia.disponible' : 'solicitud.no_registra');
     }
@@ -273,7 +273,7 @@ final class WhatsApp
         if ($job['kind'] === 'response') {
             if (!$request['response_note']) return false;
             $comment = Crypto::open($request['response_note'], $this->app->config['app_key']);
-            $body = Crypto::seal(str_contains($comment, $request['reference']) ? $comment : "Respuesta a tu solicitud *{$request['reference']}*.\n\n" . $comment, $this->app->config['app_key']);
+            $body = Crypto::seal(str_contains($comment, $request['reference']) ? $comment : "Solicitud *{$request['reference']}*.\n\n" . $comment, $this->app->config['app_key']);
         }
         $this->app->db->run("UPDATE whatsapp_outbox SET status='queued',attempts=0,progress=0,last_error=NULL,locked_at=NULL,sent_at=NULL,available_at=?,encrypted_body=? WHERE id=?",
             [$this->app->now(), $body, $job['id']]);

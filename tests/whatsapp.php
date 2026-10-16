@@ -156,11 +156,11 @@ try {
     $code = $bot->claimNumber($webId, '573001239999');
     check($app->request($webId)['status'] === 'queued' && !$db->one('SELECT id FROM whatsapp_outbox WHERE request_id=?', [$webId]) && !$db->one('SELECT id FROM requests WHERE whatsapp_code_hash=?', [$code]), 'El número escrito no recibe nada antes de confirmarlo y el código se guarda como hash');
     $bot->receive(inbound('wamid.c1', '573001239999', 'CONFIRMAR ZZZZZZ'));
-    check($app->request($webId)['whatsapp_phone'] === null && str_contains(lastText(), 'no es válido'), 'Un código incorrecto no vincula el número');
+    check($app->request($webId)['whatsapp_phone'] === null && str_contains(lastText(), 'no válido'), 'Un código incorrecto no vincula el número');
     $bot->receive(inbound('wamid.c2', '573001239999', 'confirmar ' . strtolower($code)));
     check($app->request($webId)['whatsapp_phone'] === '573001239999' && (bool)$db->one("SELECT id FROM whatsapp_outbox WHERE request_id=? AND kind='history'", [$webId]), 'Al confirmar, la historia ya enviada por correo sale también por WhatsApp');
     $bot->receive(inbound('wamid.c3', '573001239999', 'CONFIRMAR ' . $code));
-    check(str_contains(lastText(), 'no es válido'), 'El código no se puede usar dos veces');
+    check(str_contains(lastText(), 'no válido'), 'El código no se puede usar dos veces');
     $webMissing = $app->createRequest(['document_number' => '99999999', 'email' => 'web2@example.test'] + $form, 'ip-7', true);
     $code2 = $bot->claimNumber($webMissing, '573001238888');
     $bot->receive(inbound('wamid.c4', '573001238888', 'CONFIRMAR ' . $code2));
@@ -217,7 +217,7 @@ try {
     check(str_contains($shown, 'Ana María Pérez') && str_contains($shown, 'CC 1012345678') && str_contains($shown, 'paciente@example.test'), 'Desde el mismo WhatsApp muestra los datos guardados para confirmarlos');
     check(str_contains($say($owner, 'tal vez'), 'Responde *1*'), 'Una respuesta no reconocida se vuelve a preguntar');
     check(str_contains($say($owner, 'Sí'), 'fecha'), 'Datos confirmados: pregunta la fecha de la atención');
-    check(str_contains($say($owner, '31/02/2026'), 'fecha válida') && str_contains($say($owner, date('d/m/Y', strtotime('+2 days'))), 'fecha válida'), 'Rechaza fechas inexistentes o futuras');
+    check(str_contains($say($owner, '31/02/2026'), 'no válida') && str_contains($say($owner, date('d/m/Y', strtotime('+2 days'))), 'no válida'), 'Rechaza fechas inexistentes o futuras');
     $list = $say($owner, date('d/m/Y', strtotime('-3 days')));
     check(str_contains($list, '*1.* Ortopedia') && str_contains($list, '*0.* No recuerdo'), 'Pregunta la especialidad con opciones numeradas');
     check(str_contains($say($owner, '9'), 'número de la especialidad'), 'Una especialidad fuera de la lista se vuelve a pedir');

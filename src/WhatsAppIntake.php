@@ -21,7 +21,7 @@ final class WhatsAppIntake
     public function start(string $phone, string $messageId): void
     {
         $this->saveSession($phone, 'intake_document', []);
-        $this->reply($phone, "Con gusto te ayudamos con tu historia clínica.\n\nEscribe el *número de documento* del paciente, sin puntos ni espacios.\n\nPara cancelar escribe *MENU*.", $messageId, 'document');
+        $this->reply($phone, "Escribe el *número de documento* del paciente, sin puntos.\n\n(*MENU* para cancelar)", $messageId, 'document');
     }
 
     /** Siguiente paso de la conversación. false: se canceló y el bot normal responde (menú). */
@@ -49,14 +49,14 @@ final class WhatsAppIntake
     {
         $number = strtoupper(preg_replace('/[\s.\-]/', '', $text));
         if (!preg_match('/^[A-Z0-9]{3,24}$/', $number) || !preg_match('/\d/', $number)) {
-            $this->reply($phone, 'Escribe solo el número de documento, sin puntos ni espacios (o *MENU* para cancelar).', $messageId, 'document-retry');
+            $this->reply($phone, 'Escribe solo el número, sin puntos ni espacios.', $messageId, 'document-retry');
             return;
         }
         // Límite de consultas por chat: evita recorrer documentos ajenos.
         try { $this->app->limit('whatsapp-document:' . $phone, 10, 3600); }
         catch (\DomainException) {
             $this->endSession($phone);
-            $this->reply($phone, 'Has hecho muchas consultas seguidas. Inténtalo de nuevo más tarde.', $messageId, 'document-limit');
+            $this->reply($phone, 'Demasiados intentos. Inténtalo más tarde.', $messageId, 'document-limit');
             return;
         }
         $profile = $this->app->db->one('SELECT * FROM patient_profiles WHERE document_number=? ORDER BY updated_at DESC LIMIT 1', [$number]);
@@ -69,7 +69,7 @@ final class WhatsAppIntake
         if ($profile['whatsapp_phone'] === $phone) { $this->showData($phone, $messageId, $profile, false); return; }
         // Desde otro número: se exige el nombre completo, igual que en el formulario, antes de mostrar los datos.
         $this->saveSession($phone, 'intake_name', ['profile_id' => (int)$profile['id'], 'tries' => 0]);
-        $this->reply($phone, 'Para proteger los datos del paciente, escribe su *nombre completo* (nombres y apellidos) tal como aparece en el documento.', $messageId, 'name');
+        $this->reply($phone, 'Escribe el *nombre completo* del paciente, como aparece en el documento.', $messageId, 'name');
     }
 
     private function name(string $phone, string $messageId, string $text, array $profile, array $data): void
@@ -78,57 +78,57 @@ final class WhatsAppIntake
         $tries = (int)($data['tries'] ?? 0) + 1;
         if ($tries >= self::NAME_TRIES) {
             $this->endSession($phone);
-            $this->reply($phone, 'El nombre no coincide con el de la última solicitud de ese documento. Completa tus datos en el formulario:', $messageId, 'name-fail');
+            $this->reply($phone, 'El nombre no coincide. Completa el formulario:', $messageId, 'name-fail');
             $this->sendFormLink($phone, $messageId);
             return;
         }
         $this->saveSession($phone, 'intake_name', ['profile_id' => (int)$profile['id'], 'tries' => $tries]);
-        $this->reply($phone, 'El nombre no coincide. Escríbelo completo, con los dos apellidos, tal como aparece en el documento.', $messageId, 'name-retry');
+        $this->reply($phone, 'El nombre no coincide. Escríbelo completo, con los dos apellidos.', $messageId, 'name-retry');
     }
 
     private function showData(string $phone, string $messageId, array $profile, bool $mask): void
     {
         $this->saveSession($phone, 'intake_confirm', ['profile_id' => (int)$profile['id']]);
         $email = $mask ? self::maskEmail($profile['email']) : $profile['email'];
-        $this->reply($phone, "Encontramos los datos de tu última solicitud:\n\n*Paciente:* {$profile['full_name']}\n*Documento:* {$profile['document_type']} {$profile['document_number']}\n*Correo:* $email\n\n¿Están correctos? Responde con el número:\n\n*1.* Sí, son correctos\n*2.* No, quiero corregirlos", $messageId, 'confirm');
+        $this->reply($phone, "¿Tus datos son correctos?\n\n*Paciente:* {$profile['full_name']}\n*Documento:* {$profile['document_type']} {$profile['document_number']}\n*Correo:* $email\n\n*1.* Sí\n*2.* No, corregir", $messageId, 'confirm');
     }
 
     private function confirmData(string $phone, string $messageId, array $words, array $profile): void
     {
         $answer = self::yesNo($words);
-        if ($answer === null) { $this->reply($phone, 'Responde *1* si los datos están correctos o *2* para corregirlos.', $messageId, 'confirm-retry'); return; }
+        if ($answer === null) { $this->reply($phone, 'Responde *1* (sí) o *2* (no).', $messageId, 'confirm-retry'); return; }
         if (!$answer) {
             $this->endSession($phone);
-            $this->reply($phone, 'Corrige tus datos en el formulario. Quedarán guardados para tus próximas solicitudes por este chat:', $messageId, 'correct');
+            $this->reply($phone, 'Corrige tus datos aquí:', $messageId, 'correct');
             $this->sendFormLink($phone, $messageId);
             return;
         }
         $this->saveSession($phone, 'intake_date', ['profile_id' => (int)$profile['id']]);
-        $this->reply($phone, "¿En qué fecha fue la atención? Por ejemplo: *15/03/2026* o *10 de julio de 2026*.\n\nSi no la recuerdas, responde *0* y buscaremos la más reciente.", $messageId, 'date');
+        $this->reply($phone, "¿Qué fecha fue la atención? Ej.: *10 de julio de 2026*.\n\nSi no la recuerdas, responde *0*.", $messageId, 'date');
     }
 
     private function date(string $phone, string $messageId, string $text, array $words, array $profile): void
     {
         $date = $text === '0' || ($words && $words[0] === 'no') ? null : self::parseDate($text);
-        if ($date === false) { $this->reply($phone, 'Escribe una fecha válida que no sea futura, por ejemplo *15/03/2026* o *10 de julio de 2026*, o *0* si no la recuerdas.', $messageId, 'date-retry'); return; }
+        if ($date === false) { $this->reply($phone, 'Fecha no válida. Ej.: *10 de julio de 2026*, o *0* si no la recuerdas.', $messageId, 'date-retry'); return; }
         $specialties = $this->app->db->all('SELECT id,name FROM specialties WHERE active=1 ORDER BY name');
         $this->saveSession($phone, 'intake_specialty', ['profile_id' => (int)$profile['id'], 'date' => $date, 'ids' => array_map(fn($s) => (int)$s['id'], $specialties)]);
-        $lines = ['*0.* No recuerdo la especialidad'];
+        $lines = ['*0.* No recuerdo'];
         foreach ($specialties as $index => $specialty) $lines[] = '*' . ($index + 1) . '.* ' . $specialty['name'];
-        $this->reply($phone, "¿De qué especialidad fue la atención? Responde con el número:\n\n" . implode("\n", $lines), $messageId, 'specialty');
+        $this->reply($phone, "¿Qué especialidad?\n\n" . implode("\n", $lines), $messageId, 'specialty');
     }
 
     private function specialty(string $phone, string $messageId, string $text, array $profile, array $data): void
     {
         $choice = ctype_digit($text) ? (int)$text : -1;
-        if ($choice !== 0 && !isset($data['ids'][$choice - 1])) { $this->reply($phone, 'Responde solo con el número de la especialidad (o *0* si no la recuerdas).', $messageId, 'specialty-retry'); return; }
+        if ($choice !== 0 && !isset($data['ids'][$choice - 1])) { $this->reply($phone, 'Responde con el número de la especialidad.', $messageId, 'specialty-retry'); return; }
         $this->endSession($phone);
         try {
             $id = $this->app->createRequest(['document_type' => $profile['document_type'], 'document_number' => $profile['document_number'],
                 'full_name' => $profile['full_name'], 'email' => $profile['email'], 'approximate_date' => $data['date'] ?? '',
                 'date_unknown' => $data['date'] === null ? '1' : '', 'specialty_id' => $choice === 0 ? 0 : $data['ids'][$choice - 1]], 'whatsapp:' . $phone, true, null, $phone);
         } catch (\DomainException $error) {
-            $this->reply($phone, 'No pudimos radicar tu solicitud: ' . $error->getMessage(), $messageId, 'create-fail');
+            $this->reply($phone, 'No pudimos radicar: ' . $error->getMessage(), $messageId, 'create-fail');
             return;
         }
         $this->app->event($id, 'whatsapp_intake', 'created');
@@ -147,30 +147,30 @@ final class WhatsAppIntake
             $this->saveSession($phone, 'intake_select', ['request_id' => $id, 'ids' => array_map(fn($m) => (int)$m['id'], $matches)]);
             $lines = [];
             foreach ($matches as $index => $match) $lines[] = '*' . ($index + 1) . '.* ' . date('d/m/Y', strtotime($match['attended_at'])) . ' · ' . $match['specialty'];
-            $this->reply($phone, "Encontramos varias atenciones (radicado *{$request['reference']}*). ¿Cuál necesitas? Responde con el número:\n\n" . implode("\n", $lines), $messageId, 'select');
+            $this->reply($phone, "Radicado *{$request['reference']}*. ¿Cuál atención necesitas?\n\n" . implode("\n", $lines), $messageId, 'select');
             return;
         }
         $suggestion = $request['status'] === 'no_matches' && !$this->noticeQueued($id) ? $this->app->recentSuggestion($id) : null;
         if ($suggestion) {
             $this->saveSession($phone, 'intake_suggest', ['request_id' => $id, 'encounter_id' => (int)$suggestion['id']]);
-            $intro = $request['approximate_date'] === null ? 'La atención más reciente que tenemos' : 'No encontramos una atención en esa fecha. La más reciente que tenemos';
-            $this->reply($phone, "$intro es del *" . date('d/m/Y', strtotime($suggestion['attended_at'])) . '* (' . $suggestion['specialty'] . ").\n\n¿Quieres que te enviemos esa historia?\n\n*1.* Sí, enviármela\n*2.* No, es otra atención", $messageId, 'suggest');
+            $intro = $request['approximate_date'] === null ? 'La atención más reciente' : 'No hay atención en esa fecha. La más reciente';
+            $this->reply($phone, "$intro es del *" . date('d/m/Y', strtotime($suggestion['attended_at'])) . '* (' . $suggestion['specialty'] . "). ¿Te la enviamos?\n\n*1.* Sí\n*2.* No", $messageId, 'suggest');
         }
     }
 
     private function select(string $phone, string $messageId, string $text, array $data): void
     {
         $choice = ctype_digit($text) ? (int)$text : 0;
-        if (!isset($data['ids'][$choice - 1])) { $this->reply($phone, 'Responde solo con el número de la atención.', $messageId, 'select-retry'); return; }
+        if (!isset($data['ids'][$choice - 1])) { $this->reply($phone, 'Responde con el número de la atención.', $messageId, 'select-retry'); return; }
         $this->endSession($phone);
         try { $this->app->confirm((int)$data['request_id'], $data['ids'][$choice - 1]); }
-        catch (\DomainException) { $this->reply($phone, 'Esa atención ya no está disponible. Escribe *HISTORIA* para hacer una nueva solicitud.', $messageId, 'select-fail'); }
+        catch (\DomainException) { $this->reply($phone, 'Esa atención ya no está disponible. Escribe *HISTORIA* para empezar de nuevo.', $messageId, 'select-fail'); }
     }
 
     private function suggestion(string $phone, string $messageId, array $words, array $data): void
     {
         $answer = self::yesNo($words);
-        if ($answer === null) { $this->reply($phone, 'Responde *1* para recibir esa historia o *2* si es otra atención.', $messageId, 'suggest-retry'); return; }
+        if ($answer === null) { $this->reply($phone, 'Responde *1* (sí) o *2* (no).', $messageId, 'suggest-retry'); return; }
         $this->endSession($phone);
         $id = (int)$data['request_id'];
         if ($answer) {
@@ -185,7 +185,7 @@ final class WhatsAppIntake
     private function restart(string $phone, string $messageId): void
     {
         $this->endSession($phone);
-        $this->reply($phone, 'La conversación venció. Escribe *HISTORIA* para empezar de nuevo.', $messageId, 'expired');
+        $this->reply($phone, 'La conversación venció. Escribe *HISTORIA* para empezar.', $messageId, 'expired');
     }
 
     private function noticeQueued(int $requestId): bool

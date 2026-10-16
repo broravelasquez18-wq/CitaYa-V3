@@ -1025,3 +1025,10 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
 - `whatsapp` 83 en verde (4 nuevas, una de ellas en la conversación). `run` 158, `support` 49, `n8n-api` 28 y `requests-admin` 46 en verde.
 
 **Ajuste (2026-10-15, pedido del titular).** Si es la primera vez del documento, el bot ya no envía el aviso «No tenemos solicitudes anteriores…». Ahora llega solo el mensaje del formulario con su enlace (plantilla `form_link`). Solo cambia `WhatsAppIntake` en CitaYa; n8n no se toca. Nueva comprobación: en ese caso sale un único mensaje. `whatsapp` 84, `support` 49, `requests-admin` 46, `n8n-api` 28 y `whatsapp-qr` 8 en verde.
+
+**Ajuste (2026-10-15, pedido del titular): mensajes más cortos y directos.**
+- Se acortaron los textos del bot en `WhatsAppIntake` (documento, nombre, confirmación, fecha, especialidad, sugerencia), `SupportDesk` (reporte de errores y cierre) y `WhatsApp` (código, liberación de mensajes y prefijo de respuesta, que pasa de «Respuesta a tu solicitud» a «Solicitud»).
+- También se acortaron los textos predeterminados de las plantillas: menú, enlace al formulario, historia encontrada, radicado pendiente, aprobada y los cinco «No registra». Las variables y las reglas no cambian; `{enlace}` sigue siendo obligatorio.
+- Las plantillas ya editadas en el panel conservan su texto guardado: para usar el nuevo hay que pulsar «Restaurar».
+- Los textos fijos del flujo de n8n (respuestas a CONFIRMAR y al menú de respaldo) no se tocaron.
+- Las pruebas se ajustaron a los textos nuevos: `whatsapp` 84, `support` 49, `requests-admin` 46, `n8n-api` 28, `whatsapp-qr` 8, `whatsapp-zernio` 22, `run` 158 y `resend-ui` 19 en verde.

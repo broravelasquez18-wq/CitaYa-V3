@@ -89,7 +89,7 @@ try {
     $app->markNotRegistered($mismatch, 1);
     $closed = $app->request($mismatch);
     check($closed['status'] === 'not_registered' && $closed['resolution'] === 'not_registered', '«No registra» cierra la solicitud');
-    check(str_contains(waText($mismatch, 'not_registered'), $closed['reference']) && str_contains(waText($mismatch, 'not_registered'), 'número de documento') && str_contains(waText($mismatch, 'not_registered'), 'https://portal.example.test/?page=home'), 'El WhatsApp «No registra» incluye radicado, instrucción y enlace');
+    check(str_contains(waText($mismatch, 'not_registered'), $closed['reference']) && str_contains(waText($mismatch, 'not_registered'), 'Revisa tus datos') && str_contains(waText($mismatch, 'not_registered'), 'https://portal.example.test/?page=home'), 'El WhatsApp «No registra» incluye radicado, instrucción y enlace');
     $notice = $db->one("SELECT * FROM jobs WHERE request_id=? AND kind='notice'", [$mismatch]);
     check($notice && $notice['recipient'] === 'paciente@example.test' && !$notice['package_id'], 'Se encola el aviso por correo sin documentos');
     rejects(fn() => $app->markNotRegistered($mismatch, 1), 'No se responde dos veces', 'ya fue gestionada');
@@ -109,8 +109,8 @@ try {
     $custom = viaWhatsApp(['document_number' => '66666666'] + $form, '573009990000', 'w5');
     check(waText($custom, 'notice') === 'Tu radicado es *' . $app->request($custom)['reference'] . '*. Respuesta en 24 h.' && $templates->isCustom('pending'), 'Los mensajes usan la plantilla personalizada');
     $templates->reset('pending', 1);
-    check(!$templates->isCustom('pending') && str_contains($templates->render('pending', ['horas' => 24]), 'tiempo estimado'), 'Restaurar vuelve al texto predeterminado');
-    check($templates->renderPlain('history_found', ['radicado' => 'HC-1', 'documentos' => 2, 'correo' => 'a@b.c']) === "Encontramos tu historia clínica. Radicado HC-1.\n\nTe enviamos 2 documento(s) por este chat y también al correo a@b.c. Consérvalos en un lugar privado.", 'La versión de correo quita la negrita de WhatsApp');
+    check(!$templates->isCustom('pending') && str_contains($templates->render('pending', ['horas' => 24]), 'en máximo'), 'Restaurar vuelve al texto predeterminado');
+    check($templates->renderPlain('history_found', ['radicado' => 'HC-1', 'documentos' => 2, 'correo' => 'a@b.c']) === "Tu historia clínica está lista (radicado HC-1). Te enviamos 2 documento(s) por aquí y al correo a@b.c.", 'La versión de correo quita la negrita de WhatsApp');
 
     // --- Respuesta desde el cuadro de gestión (Aprobado / No Registra, comentario y adjuntos) ---
     $pdfSource = $config['storage_path'] . '/histories/respuesta.pdf';
@@ -165,14 +165,14 @@ try {
     // --- Plantillas «No registra» por motivo ---
     $reasonValues = ['radicado' => 'HC-1', 'nombre' => 'Ana Pérez', 'documento' => 'CC 123', 'fecha' => '15/09/2026', 'especialidad' => 'Ortopedia', 'enlace' => 'https://portal.example.test'];
     check(str_contains($templates->renderPlain('nr_document', $reasonValues), 'documento CC 123') && str_contains($templates->renderPlain('nr_date', $reasonValues), 'atención el 15/09/2026')
-        && str_contains($templates->renderPlain('nr_name', $reasonValues), '(Ana Pérez) no coincide') && str_contains($templates->renderPlain('nr_specialty', $reasonValues), 'en Ortopedia'), 'Cada motivo de «No registra» dice exactamente qué revisar');
+        && str_contains($templates->renderPlain('nr_name', $reasonValues), 'nombre Ana Pérez no coincide') && str_contains($templates->renderPlain('nr_specialty', $reasonValues), 'en Ortopedia'), 'Cada motivo de «No registra» dice exactamente qué revisar');
     rejects(fn() => $templates->save('nr_date', 'No encontramos atención el {fecha}.', 1), 'Las plantillas de motivo exigen el enlace para una nueva solicitud', '{enlace}');
     $db->run('DELETE FROM rate_limits');
     $reasonCase = viaWhatsApp(['document_number' => '55555555'] + $form, '573005550000', 'nr1');
     $reasonText = $templates->renderPlain('nr_date', ['radicado' => $app->request($reasonCase)['reference']] + $reasonValues);
     $app->respondCase($reasonCase, 1, 'not_registered', $reasonText, []);
     $sentReason = waText($reasonCase, 'not_registered');
-    check($sentReason === $reasonText && substr_count($sentReason, 'Respuesta a tu solicitud') === 1, 'WhatsApp envía el motivo sin repetir «Respuesta a tu solicitud»');
+    check($sentReason === $reasonText && substr_count($sentReason, $app->request($reasonCase)['reference']) === 1, 'WhatsApp envía el motivo sin repetir el radicado');
     echo "\nPASS: $checks comprobaciones. Sin envíos externos.\n";
 } finally {
     if (!preg_match('/^citaya_test_[a-f0-9]{10}$/', $databaseName)) throw new RuntimeException('Invalid test database name');

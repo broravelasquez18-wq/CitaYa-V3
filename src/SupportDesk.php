@@ -49,7 +49,7 @@ final class SupportDesk
         $words = self::words($text);
         if ($session && (in_array('cancelar', $words, true) || in_array('menu', $words, true) || $text === '0')) {
             $this->endSession($phone);
-            $this->reply($phone, 'Listo, cancelamos el reporte.', $messageId, 'cancel');
+            $this->reply($phone, 'Reporte cancelado.', $messageId, 'cancel');
             return false; // El bot normal muestra el menú.
         }
         if ($session) return $this->step($phone, $messageId, $text, $session['state'], json_decode((string)$session['data'], true) ?: []);
@@ -64,26 +64,26 @@ final class SupportDesk
     {
         $requests = $this->deliveredRequests($phone);
         if (!$requests) {
-            $this->reply($phone, "No encontramos historias clínicas enviadas a este WhatsApp.\n\nSi necesitas tu historia, responde *1*.", $messageId, 'none');
+            $this->reply($phone, "No hay historias enviadas a este WhatsApp. Para pedir una, responde *1*.", $messageId, 'none');
             return;
         }
         if (count($requests) === 1) { $this->askCategory($phone, $messageId, (int)$requests[0]['id']); return; }
         $lines = [];
         foreach ($requests as $index => $request) $lines[] = '*' . ($index + 1) . '.* ' . $request['reference'] . ' (' . date('d/m/Y', strtotime($request['created_at'])) . ')';
         $this->saveSession($phone, 'choose_request', ['ids' => array_map(fn($r) => (int)$r['id'], $requests)]);
-        $this->reply($phone, "¿Sobre cuál historia es el reporte? Responde con el número:\n\n" . implode("\n", $lines), $messageId, 'choose');
+        $this->reply($phone, "¿Sobre cuál historia es el reporte?\n\n" . implode("\n", $lines), $messageId, 'choose');
     }
 
     private function step(string $phone, string $messageId, string $text, string $state, array $data): bool
     {
         if ($state === 'choose_request') {
             $choice = (int)$text;
-            if ($choice < 1 || !isset($data['ids'][$choice - 1])) { $this->reply($phone, 'Responde solo con el número de la historia (o *0* para cancelar).', $messageId, 'retry'); return true; }
+            if ($choice < 1 || !isset($data['ids'][$choice - 1])) { $this->reply($phone, 'Responde con el número de la historia (*0* para cancelar).', $messageId, 'retry'); return true; }
             $this->askCategory($phone, $messageId, (int)$data['ids'][$choice - 1]);
             return true;
         }
         if ($state === 'choose_category') {
-            if (!isset(self::CATEGORIES[$text])) { $this->reply($phone, 'Responde con un número del *1* al *5* (o *0* para cancelar).', $messageId, 'retry'); return true; }
+            if (!isset(self::CATEGORIES[$text])) { $this->reply($phone, 'Responde un número del *1* al *5* (*0* para cancelar).', $messageId, 'retry'); return true; }
             [$category, , $needsStaff] = self::CATEGORIES[$text];
             $requestId = (int)$data['request_id'];
             if (!$needsStaff) {
@@ -92,22 +92,22 @@ final class SupportDesk
                 $ticket = $this->createTicket($phone, $requestId, $category, null, $resent ? 'auto_resolved' : 'open');
                 $this->endSession($phone);
                 if ($resent) {
-                    $this->reply($phone, "Listo ✅ Te estamos reenviando tu historia clínica por este chat.\n\nSi aún tienes problemas, responde *2* para reportarlo de nuevo.", $messageId, 'resent');
+                    $this->reply($phone, "Listo ✅ Te reenviamos tu historia por este chat.", $messageId, 'resent');
                 } else {
-                    $this->reply($phone, "No pudimos reenviarla automáticamente. Creamos tu reporte *{$ticket['reference']}* y una persona de nuestro equipo te escribirá por este chat.", $messageId, 'resend-failed');
+                    $this->reply($phone, "No pudimos reenviarla. Tu reporte es *{$ticket['reference']}*; te escribiremos por aquí.", $messageId, 'resend-failed');
                 }
                 return true;
             }
             $this->saveSession($phone, 'describe', ['request_id' => $requestId, 'category' => $category]);
-            $this->reply($phone, 'Cuéntanos en un mensaje cuál es el error (por ejemplo, qué dato está mal o qué documento falta).', $messageId, 'describe');
+            $this->reply($phone, 'Cuéntanos en un mensaje cuál es el error.', $messageId, 'describe');
             return true;
         }
         if ($state === 'describe') {
-            if (mb_strlen($text) < 3) { $this->reply($phone, 'Escribe en un mensaje cuál es el error.', $messageId, 'retry'); return true; }
+            if (mb_strlen($text) < 3) { $this->reply($phone, 'Escribe cuál es el error.', $messageId, 'retry'); return true; }
             $ticket = $this->createTicket($phone, (int)$data['request_id'], (string)$data['category'], mb_substr($text, 0, 2000), 'open');
             $this->addMessage((int)$ticket['id'], 'in', $text, null, $messageId);
             $this->endSession($phone);
-            $this->reply($phone, "Recibimos tu reporte *{$ticket['reference']}* 📝\n\nUna persona de nuestro equipo lo revisará y te responderá por este mismo chat.", $messageId, 'created');
+            $this->reply($phone, "Reporte *{$ticket['reference']}* recibido 📝 Te responderemos por este chat.", $messageId, 'created');
             return true;
         }
         $this->endSession($phone);
@@ -119,7 +119,7 @@ final class SupportDesk
         $options = [];
         foreach (self::CATEGORIES as $key => [, $label]) $options[] = '*' . $key . '.* ' . $label;
         $this->saveSession($phone, 'choose_category', ['request_id' => $requestId]);
-        $this->reply($phone, "¿Qué problema tiene tu historia clínica? Responde con el número:\n\n" . implode("\n", $options) . "\n\n*0.* Cancelar", $messageId, 'category');
+        $this->reply($phone, "¿Qué problema tiene tu historia?\n\n" . implode("\n", $options) . "\n\n*0.* Cancelar", $messageId, 'category');
     }
 
     /** Historias enviadas (o respondidas como Aprobado) a este WhatsApp, de la más reciente a la más antigua. */
@@ -222,7 +222,7 @@ final class SupportDesk
     {
         $ticket = $this->openTicket($id, $staff);
         $this->app->db->run("UPDATE support_tickets SET status='closed',closed_at=?,closed_by=?,unread=0,updated_at=? WHERE id=?", [$this->app->now(), $staff['id'], $this->app->now(), $id]);
-        $text = "Tu reporte *{$ticket['reference']}* quedó resuelto ✅\n\nGracias por escribirnos. Si necesitas algo más, responde *MENU*.";
+        $text = "Tu reporte *{$ticket['reference']}* quedó resuelto ✅ Si necesitas algo más, escribe *MENU*.";
         $this->addMessage($id, 'system', $text, (int)$staff['id']);
         $this->app->whatsapp()->queueText($ticket['phone'], $text, 'support-close:' . $id);
         $this->app->event($ticket['request_id'] ? (int)$ticket['request_id'] : null, 'support_ticket', 'closed:admin_' . $staff['id']);
