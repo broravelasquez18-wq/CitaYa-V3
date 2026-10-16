@@ -61,8 +61,8 @@ final class WhatsAppIntake
         }
         $profile = $this->app->db->one('SELECT * FROM patient_profiles WHERE document_number=? ORDER BY updated_at DESC LIMIT 1', [$number]);
         if (!$profile) {
+            // Primera vez del documento: solo el mensaje del formulario con su enlace.
             $this->endSession($phone);
-            $this->reply($phone, "No tenemos solicitudes anteriores con el documento *$number*.\n\nComo es la primera vez, completa tus datos en el formulario. Los guardaremos para que las próximas solicitudes las hagas directamente por este chat.", $messageId, 'first-time');
             $this->sendFormLink($phone, $messageId);
             return;
         }
