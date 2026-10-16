@@ -152,7 +152,7 @@ final class WhatsApp
         if (!$new) return false;
         // Reporte de error en curso o chat con el personal (SCRUM-47/48): lo atiende SupportDesk, sin límite de mensajes.
         if ((new SupportDesk($this->app))->handle($phone, $id, $text)) return true;
-        try { $this->app->limit('whatsapp-phone:' . $phone, 20, 3600); }
+        try { $this->app->limit('whatsapp-phone:' . $phone, 60, 3600); }
         catch (\DomainException) { return false; }
         // Si había mensajes esperando porque la ventana de 24 h estaba cerrada, ya pueden salir.
         $released = $this->app->db->run("UPDATE whatsapp_outbox SET status='queued',last_error=NULL,available_at=? WHERE phone=? AND status='waiting_window'", [$this->app->now(), $phone])->rowCount();

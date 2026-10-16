@@ -144,6 +144,18 @@ try {
     $disabled = $config; $disabled['n8n_events_url'] = '';
     (new App\Automation(new App\Application($db, $disabled)))->emit('prueba', [], 'x');
     check(!$db->one("SELECT id FROM automation_events WHERE event='prueba'"), 'Sin n8n configurado no se registran eventos');
+
+    // --- Límite de mensajes por chat: una conversación guiada en curso no cuenta ---
+    $db->run('DELETE FROM rate_limits');
+    $guided = '573001114444';
+    $db->run('INSERT INTO whatsapp_sessions (phone,state,data,updated_at) VALUES (?,?,?,?)', [$guided, 'intake_date', '{}', $app->now()]);
+    $allowed = true;
+    for ($i = 1; $i <= 70; $i++) $allowed = $allowed && $api->handle(['action' => 'inbound.register', 'phone' => $guided, 'message_id' => 'g' . $i])['allowed'];
+    check($allowed, 'Durante una conversación guiada (solicitud o reporte) no se limitan los mensajes');
+    $free = '573001115555';
+    $results = [];
+    for ($i = 1; $i <= 61; $i++) $results[] = $api->handle(['action' => 'inbound.register', 'phone' => $free, 'message_id' => 'f' . $i])['allowed'];
+    check(!in_array(false, array_slice($results, 0, 60), true) && $results[60] === false, 'Fuera de una conversación, el límite es de 60 mensajes por hora');
     echo "\nPASS: $checks comprobaciones. Sin WhatsApp ni n8n reales.\n";
 } finally {
     proc_terminate($process); proc_close($process);

@@ -1032,3 +1032,8 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
 - Las plantillas ya editadas en el panel conservan su texto guardado: para usar el nuevo hay que pulsar «Restaurar».
 - Los textos fijos del flujo de n8n (respuestas a CONFIRMAR y al menú de respaldo) no se tocaron.
 - Las pruebas se ajustaron a los textos nuevos: `whatsapp` 84, `support` 49, `requests-admin` 46, `n8n-api` 28, `whatsapp-qr` 8, `whatsapp-zernio` 22, `run` 158 y `resend-ui` 19 en verde.
+
+**Incidente (2026-10-15): el bot dejó de responder.**
+- **Causa.** Los registros de Dokploy mostraron que los mensajes llegaban (QR → n8n, HTTP 200), pero desde las 21:06 `inbound.register` respondía `allowed:false`. Cada chat tenía un límite de 20 mensajes por hora, y la conversación guiada usa unos 6 mensajes por solicitud. Tras varias pruebas, el número quedó en silencio sin ningún aviso.
+- **Corrección.** Los mensajes de una conversación guiada en curso (sesión en `whatsapp_sessions` de menos de 30 minutos, de solicitud o de reporte) ya no cuentan para el límite, igual que el chat abierto con el personal. Las consultas de documento y las solicitudes conservan sus propios límites. El límite general sube de 20 a 60 mensajes por hora, en `N8nApi` y en el bot PHP.
+- **Validación.** `n8n-api` 30 en verde (2 nuevas: 70 mensajes en una conversación sin bloqueo; fuera de una conversación, el mensaje 61 se limita). `whatsapp` 84, `support` 49, `requests-admin` 46, `whatsapp-qr` 8, `whatsapp-zernio` 22 y `run` 158 en verde.

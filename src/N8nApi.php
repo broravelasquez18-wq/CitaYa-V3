@@ -59,9 +59,11 @@ final class N8nApi
         if ($id === '' || strlen($id) > 190) throw new \DomainException('invalid_message_id');
         $new = $this->app->db->run('INSERT IGNORE INTO whatsapp_inbound (wa_message_id,phone,intent,created_at) VALUES (?,?,?,?)', [$id, $phone, 'n8n', $this->app->now()])->rowCount() > 0;
         if (!$new) return ['new' => false];
-        // En un chat abierto con el personal no se limita la cantidad de mensajes.
-        $chatting = (bool)$this->app->db->one("SELECT id FROM support_tickets WHERE phone=? AND status='open'", [$phone]);
-        if (!$chatting) try { $this->app->limit('whatsapp-phone:' . $phone, 20, 3600); }
+        // Sin límite en un chat abierto con el personal ni en una conversación guiada en curso (solicitud o reporte):
+        // cada paso es un mensaje y sus consultas ya tienen sus propios límites.
+        $chatting = (bool)$this->app->db->one("SELECT id FROM support_tickets WHERE phone=? AND status='open'", [$phone])
+            || (bool)$this->app->db->one('SELECT phone FROM whatsapp_sessions WHERE phone=? AND updated_at>?', [$phone, date('Y-m-d H:i:s', time() - 1800)]);
+        if (!$chatting) try { $this->app->limit('whatsapp-phone:' . $phone, 60, 3600); }
         catch (\DomainException) { return ['new' => true, 'allowed' => false]; }
         $released = $this->app->db->run("UPDATE whatsapp_outbox SET status='queued',last_error=NULL,available_at=? WHERE phone=? AND status='waiting_window'", [$this->app->now(), $phone])->rowCount();
         return ['new' => true, 'allowed' => true, 'released' => $released];
