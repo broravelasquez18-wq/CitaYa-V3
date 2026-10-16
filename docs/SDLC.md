@@ -1008,4 +1008,10 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
 - `run` 158, `resend-ui` 19 y `pdf-reader` 17 en verde. Pruebas de n8n con `node --test`: bot 13 en verde.
 - `admin-http`, `bulk-http`, `http` y `upload` fallan igual en `main` sin estos cambios: necesitan datos demo y credenciales locales.
 
-**Pendiente (despliegue).** Tras el push a `main`, verificar en el VPS que se creó la tabla y probar la conversación con el número del bot. Si el bot corre por n8n, reimportar `citaya-bot-whatsapp.json`.
+**Despliegue (2026-10-15).**
+- El push a `main` se desplegó bien.
+- La primera prueba seguía enviando el enlace: en producción el QR reenvía los mensajes a n8n, y el flujo «CitaYa · Bot WhatsApp» tenía el código anterior.
+- Con la autorización del titular, se cambió en el nodo «Procesar» solo el bloque de HISTORIA. Antes se comprobó que el código coincidía con la versión anterior del repo; el resultado tiene el mismo hash que `n8n/citaya-bot-whatsapp.json`.
+- Se publicó la versión `29be3158`.
+
+**Pendiente.** Probar desde WhatsApp: HISTORIA → documento → confirmación de datos.
