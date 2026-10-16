@@ -1037,3 +1037,14 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
 - **Causa.** Los registros de Dokploy mostraron que los mensajes llegaban (QR → n8n, HTTP 200), pero desde las 21:06 `inbound.register` respondía `allowed:false`. Cada chat tenía un límite de 20 mensajes por hora, y la conversación guiada usa unos 6 mensajes por solicitud. Tras varias pruebas, el número quedó en silencio sin ningún aviso.
 - **Corrección.** Los mensajes de una conversación guiada en curso (sesión en `whatsapp_sessions` de menos de 30 minutos, de solicitud o de reporte) ya no cuentan para el límite, igual que el chat abierto con el personal. Las consultas de documento y las solicitudes conservan sus propios límites. El límite general sube de 20 a 60 mensajes por hora, en `N8nApi` y en el bot PHP.
 - **Validación.** `n8n-api` 30 en verde (2 nuevas: 70 mensajes en una conversación sin bloqueo; fuera de una conversación, el mensaje 61 se limita). `whatsapp` 84, `support` 49, `requests-admin` 46, `whatsapp-qr` 8, `whatsapp-zernio` 22 y `run` 158 en verde.
+
+**Ajuste (2026-10-15, pedido del titular): la especialidad también se entiende escrita.**
+- En la prueba real, el paciente respondió «No recuerdo» y el bot solo repetía que respondiera con el número.
+- Ahora `WhatsAppIntake::specialtyChoice` acepta:
+  - el número;
+  - «no recuerdo», «no sé», «ninguna» (= 0);
+  - el nombre escrito, sin tildes ni mayúsculas, aunque esté dentro de una frase («fue en pediatría»). El nombre exacto gana cuando otro lo contiene (Ginecología frente a Ginecología y Obstetricia).
+- Si lo escrito coincide con varias especialidades («medicina»), el bot pregunta solo entre ellas.
+- Si no se entiende, responde «No reconocimos esa especialidad…» y recuerda el *0*.
+- La fecha también acepta «no sé» o «ninguna».
+- `whatsapp` 91 en verde (7 nuevas). `support` 49, `n8n-api` 30 y `requests-admin` 46 en verde.

@@ -220,7 +220,7 @@ try {
     check(str_contains($say($owner, '31/02/2026'), 'no válida') && str_contains($say($owner, date('d/m/Y', strtotime('+2 days'))), 'no válida'), 'Rechaza fechas inexistentes o futuras');
     $list = $say($owner, date('d/m/Y', strtotime('-3 days')));
     check(str_contains($list, '*1.* Ortopedia') && str_contains($list, '*0.* No recuerdo'), 'Pregunta la especialidad con opciones numeradas');
-    check(str_contains($say($owner, '9'), 'número de la especialidad'), 'Una especialidad fuera de la lista se vuelve a pedir');
+    check(str_contains($say($owner, '9'), 'No reconocimos esa especialidad'), 'Una especialidad fuera de la lista se vuelve a pedir');
     $before = (int)$db->one('SELECT MAX(id) n FROM requests')['n'];
     $say($owner, '1');
     $chat = $db->one('SELECT * FROM requests WHERE id>? ORDER BY id DESC LIMIT 1', [$before]);
@@ -268,6 +268,26 @@ try {
     $months = [1 => 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
     check(str_contains($say($owner, date('j', $attended) . ' de ' . $months[(int)date('n', $attended)] . ' del ' . date('Y', $attended)), '*1.* Ortopedia'), 'En el chat, una fecha escrita con el mes pasa a la pregunta de especialidad');
     $say($owner, 'menu');
+
+    // --- Especialidad escrita con palabras en lugar del número ---
+    foreach (['Ginecología', 'Ginecologia Y Obstetricia', 'Medicina general', 'Medicina interna', 'Pediatría'] as $name) $db->insert('specialties', ['name' => $name]);
+    $intake = new App\WhatsAppIntake($app);
+    $choose = new ReflectionMethod($intake, 'specialtyChoice');
+    $ids = array_map(fn($r) => (int)$r['id'], $db->all('SELECT id FROM specialties WHERE active=1 ORDER BY name'));
+    $position = fn(string $name) => array_search((int)$db->one('SELECT id FROM specialties WHERE name=?', [$name])['id'], $ids, true) + 1;
+    check($choose->invoke($intake, 'No recuerdo', $ids) === 0 && $choose->invoke($intake, 'no sé', $ids) === 0 && $choose->invoke($intake, 'ninguna', $ids) === 0, '«No recuerdo», «no sé» o «ninguna» cuentan como especialidad desconocida');
+    check($choose->invoke($intake, 'PEDIATRIA', $ids) === $position('Pediatría') && $choose->invoke($intake, 'fue en pediatría', $ids) === $position('Pediatría'), 'Reconoce la especialidad escrita, sin tildes ni mayúsculas y dentro de una frase');
+    check($choose->invoke($intake, 'Ginecología', $ids) === $position('Ginecología') && $choose->invoke($intake, 'ginecologia y obstetricia', $ids) === $position('Ginecologia Y Obstetricia'), 'El nombre exacto gana cuando otro lo contiene');
+    check($choose->invoke($intake, 'ortopedia', $ids) === $position('Ortopedia') && $choose->invoke($intake, '3', $ids) === 3 && $choose->invoke($intake, '99', $ids) === null && $choose->invoke($intake, 'cardio xyz', $ids) === null, 'Acepta el número y rechaza lo que no coincide');
+    $db->run('DELETE FROM rate_limits');
+    $say($owner, 'historia'); $say($owner, '1012345678'); $say($owner, '1'); $say($owner, date('d/m/Y', strtotime('-3 days')));
+    $which = $say($owner, 'medicina');
+    check(str_contains($which, '¿Cuál de estas?') && str_contains($which, 'Medicina general') && str_contains($which, 'Medicina interna') && !str_contains($which, 'Pediatría'), 'Si lo escrito coincide con varias, pregunta solo entre ellas');
+    check(str_contains($say($owner, 'cardio xyz'), 'No reconocimos esa especialidad'), 'Un texto que no es una especialidad se vuelve a pedir con un mensaje claro');
+    $before = (int)$db->one('SELECT MAX(id) n FROM requests')['n'];
+    $say($owner, 'No recuerdo');
+    $unknownSpecialty = $db->one('SELECT * FROM requests WHERE id>? ORDER BY id DESC LIMIT 1', [$before]);
+    check($unknownSpecialty && $unknownSpecialty['specialty_id'] === null && $unknownSpecialty['status'] === 'queued', '«No recuerdo» en la especialidad radica la solicitud sin especialidad');
     echo "\nPASS: $checks comprobaciones. Sin envíos externos.\n";
 } finally {
     if (!preg_match('/^citaya_test_[a-f0-9]{10}$/', $databaseName)) throw new RuntimeException('Invalid test database name');

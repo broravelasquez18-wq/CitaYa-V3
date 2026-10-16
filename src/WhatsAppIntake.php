@@ -109,7 +109,7 @@ final class WhatsAppIntake
 
     private function date(string $phone, string $messageId, string $text, array $words, array $profile): void
     {
-        $date = $text === '0' || ($words && $words[0] === 'no') ? null : self::parseDate($text);
+        $date = $text === '0' || self::unknown($words) ? null : self::parseDate($text);
         if ($date === false) { $this->reply($phone, 'Fecha no válida. Ej.: *10 de julio de 2026*, o *0* si no la recuerdas.', $messageId, 'date-retry'); return; }
         $specialties = $this->app->db->all('SELECT id,name FROM specialties WHERE active=1 ORDER BY name');
         $this->saveSession($phone, 'intake_specialty', ['profile_id' => (int)$profile['id'], 'date' => $date, 'ids' => array_map(fn($s) => (int)$s['id'], $specialties)]);
@@ -120,8 +120,13 @@ final class WhatsAppIntake
 
     private function specialty(string $phone, string $messageId, string $text, array $profile, array $data): void
     {
-        $choice = ctype_digit($text) ? (int)$text : -1;
-        if ($choice !== 0 && !isset($data['ids'][$choice - 1])) { $this->reply($phone, 'Responde con el número de la especialidad.', $messageId, 'specialty-retry'); return; }
+        $choice = $this->specialtyChoice($text, $data['ids']);
+        if (is_array($choice)) {
+            // Varias especialidades coinciden con lo escrito (p. ej. «medicina»): se pregunta solo entre ellas.
+            $this->reply($phone, "¿Cuál de estas?\n\n" . implode("\n", $choice), $messageId, 'specialty-which');
+            return;
+        }
+        if ($choice === null) { $this->reply($phone, 'No reconocimos esa especialidad. Responde con el número de la lista, o *0* si no la recuerdas.', $messageId, 'specialty-retry'); return; }
         $this->endSession($phone);
         try {
             $id = $this->app->createRequest(['document_type' => $profile['document_type'], 'document_number' => $profile['document_number'],
@@ -133,6 +138,44 @@ final class WhatsAppIntake
         }
         $this->app->event($id, 'whatsapp_intake', 'created');
         $this->afterSearch($phone, $messageId, $id);
+    }
+
+    /**
+     * Opción elegida en la lista de especialidades: el número, «no recuerdo» (0) o el nombre escrito («pediatría»,
+     * «fue en ortopedia»). Devuelve la posición (0 = no recuerda), las líneas de las opciones si el texto coincide con
+     * varias, o null si no se entiende.
+     */
+    private function specialtyChoice(string $text, array $ids): int|array|null
+    {
+        if (ctype_digit($text)) return (int)$text === 0 || isset($ids[(int)$text - 1]) ? (int)$text : null;
+        $clean = self::plain($text);
+        if ($clean === '') return null;
+        if (self::unknown(explode(' ', $clean))) return 0;
+        $names = [];
+        foreach ($ids as $index => $id) {
+            $row = $this->app->db->one('SELECT name FROM specialties WHERE id=?', [$id]);
+            if ($row) $names[$index + 1] = $row['name'];
+        }
+        // Primero el nombre exacto; si no, los nombres mencionados en el texto; si no, los que contienen lo escrito.
+        $found = array_keys(array_filter($names, fn($name) => self::plain($name) === $clean));
+        if (!$found) $found = array_keys(array_filter($names, fn($name) => str_contains(' ' . $clean . ' ', ' ' . self::plain($name) . ' ')));
+        if (!$found && mb_strlen($clean) >= 4) $found = array_keys(array_filter($names, fn($name) => str_contains(' ' . self::plain($name) . ' ', ' ' . $clean)));
+        if (count($found) === 1) return $found[0];
+        if (!$found) return null;
+        return array_map(fn($position) => '*' . $position . '.* ' . $names[$position], $found);
+    }
+
+    /** Minúsculas, sin tildes ni signos y con espacios simples. */
+    private static function plain(string $text): string
+    {
+        return trim(preg_replace('/[^a-z0-9]+/', ' ', strtolower(ClinicalPdfReader::normalize($text))));
+    }
+
+    /** El paciente dice que no recuerda («no recuerdo», «no sé», «ninguna»…). */
+    private static function unknown(array $words): bool
+    {
+        $first = $words[0] ?? '';
+        return $first === 'no' || in_array($first, ['nose', 'ninguna', 'ninguno', 'desconozco', 'olvide'], true);
     }
 
     /**
