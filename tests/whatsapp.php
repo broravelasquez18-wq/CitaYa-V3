@@ -256,6 +256,16 @@ try {
     $say($other, 'historia'); $say($other, '1012345678'); $say($other, 'Otra Persona');
     check(str_contains($say($other, 'Otra Persona'), 'wa='), 'Tras dos nombres incorrectos recibe el formulario');
     check(App\WhatsAppIntake::parseDate('5-3-26') === '2026-03-05' && App\WhatsAppIntake::parseDate('2026/03/05') === '2026-03-05' && App\WhatsAppIntake::parseDate('ayer') === false, 'Entiende fechas día/mes/año y año/mes/día');
+    $written = array_map([App\WhatsAppIntake::class, 'parseDate'], ['10 de julio del 2026', '10 julio 2026', '10 jul. 2026', 'Julio 10, 2026', '3 setiembre 2025']);
+    check($written === ['2026-07-10', '2026-07-10', '2026-07-10', '2026-07-10', '2025-09-03'], 'Entiende fechas con el mes escrito («10 de julio del 2026»)');
+    check(App\WhatsAppIntake::parseDate('31 de febrero de 2026') === false && App\WhatsAppIntake::parseDate('10 de jupiter 2026') === false && App\WhatsAppIntake::parseDate('1 de enero de ' . (date('Y') + 1)) === false, 'Rechaza fechas escritas inexistentes, meses inventados o futuras');
+    $lastYear = (int)date('Y') - 1;
+    check(App\WhatsAppIntake::parseDate('10 de julio') === (date('m-d') >= '07-10' ? date('Y') : (string)$lastYear) . '-07-10', 'Sin año toma la fecha ya pasada más reciente');
+    $say($owner, 'historia'); $say($owner, '1012345678'); $say($owner, '1');
+    $attended = strtotime('-3 days');
+    $months = [1 => 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    check(str_contains($say($owner, date('j', $attended) . ' de ' . $months[(int)date('n', $attended)] . ' del ' . date('Y', $attended)), '*1.* Ortopedia'), 'En el chat, una fecha escrita con el mes pasa a la pregunta de especialidad');
+    $say($owner, 'menu');
     echo "\nPASS: $checks comprobaciones. Sin envíos externos.\n";
 } finally {
     if (!preg_match('/^citaya_test_[a-f0-9]{10}$/', $databaseName)) throw new RuntimeException('Invalid test database name');

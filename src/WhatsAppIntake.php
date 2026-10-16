@@ -104,13 +104,13 @@ final class WhatsAppIntake
             return;
         }
         $this->saveSession($phone, 'intake_date', ['profile_id' => (int)$profile['id']]);
-        $this->reply($phone, "¿En qué fecha fue la atención? Escríbela así: *día/mes/año* (por ejemplo, 15/03/2026).\n\nSi no la recuerdas, responde *0* y buscaremos la más reciente.", $messageId, 'date');
+        $this->reply($phone, "¿En qué fecha fue la atención? Por ejemplo: *15/03/2026* o *10 de julio de 2026*.\n\nSi no la recuerdas, responde *0* y buscaremos la más reciente.", $messageId, 'date');
     }
 
     private function date(string $phone, string $messageId, string $text, array $words, array $profile): void
     {
         $date = $text === '0' || ($words && $words[0] === 'no') ? null : self::parseDate($text);
-        if ($date === false) { $this->reply($phone, 'Escribe una fecha válida que no sea futura, por ejemplo *15/03/2026*, o *0* si no la recuerdas.', $messageId, 'date-retry'); return; }
+        if ($date === false) { $this->reply($phone, 'Escribe una fecha válida que no sea futura, por ejemplo *15/03/2026* o *10 de julio de 2026*, o *0* si no la recuerdas.', $messageId, 'date-retry'); return; }
         $specialties = $this->app->db->all('SELECT id,name FROM specialties WHERE active=1 ORDER BY name');
         $this->saveSession($phone, 'intake_specialty', ['profile_id' => (int)$profile['id'], 'date' => $date, 'ids' => array_map(fn($s) => (int)$s['id'], $specialties)]);
         $lines = ['*0.* No recuerdo la especialidad'];
@@ -208,16 +208,43 @@ final class WhatsAppIntake
         return null;
     }
 
-    /** Fecha día/mes/año (o año-mes-día) en formato Y-m-d; false si no es válida o es futura. */
+    private const MONTHS = ['ene' => 1, 'feb' => 2, 'mar' => 3, 'abr' => 4, 'may' => 5, 'jun' => 6, 'jul' => 7, 'ago' => 8, 'sep' => 9, 'set' => 9, 'oct' => 10, 'nov' => 11, 'dic' => 12];
+
+    /**
+     * Fecha en formato Y-m-d; false si no es válida o es futura. Acepta día/mes/año, año-mes-día y el mes escrito
+     * («10 de julio del 2026», «10 jul 2026», «julio 10 de 2026»). Sin año se toma el último 10 de julio ya pasado.
+     */
     public static function parseDate(string $text): string|false
     {
         $text = trim($text);
+        $words = trim(preg_replace(['/[,.]/', '/\s+/'], [' ', ' '], strtolower(ClinicalPdfReader::normalize($text))));
+        $words = preg_replace('/^(el|dia)\s+/', '', $words);
+        $month = '([a-z]{3,10})';
+        $year = null;
         if (preg_match('/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/', $text, $m)) [$year, $month, $day] = [(int)$m[1], (int)$m[2], (int)$m[3]];
         elseif (preg_match('/^(\d{1,2})[\/\-. ](\d{1,2})[\/\-. ](\d{2}|\d{4})$/', $text, $m)) [$day, $month, $year] = [(int)$m[1], (int)$m[2], strlen($m[3]) === 2 ? 2000 + (int)$m[3] : (int)$m[3]];
+        elseif (preg_match('/^(\d{1,2})\s*(?:de\s+)?' . $month . '(?:\s+(?:de\s+|del\s+)?(\d{4}))?$/', $words, $m)
+            || preg_match('/^' . $month . '\s+(\d{1,2})(?:\s+(?:de\s+|del\s+)?(\d{4}))?$/', $words, $n)) {
+            if (!$m) $m = [$n[0], $n[2], $n[1], $n[3] ?? ''];
+            $key = substr($m[2], 0, 3);
+            if (!isset(self::MONTHS[$key]) || (strlen($m[2]) > 3 && !str_starts_with(self::monthName($key), $m[2]) && $m[2] !== 'setiembre')) return false;
+            [$day, $month] = [(int)$m[1], self::MONTHS[$key]];
+            $year = ($m[3] ?? '') !== '' ? (int)$m[3] : null;
+            if ($year === null) {
+                $year = (int)date('Y');
+                if (sprintf('%04d-%02d-%02d', $year, $month, $day) > date('Y-m-d')) $year--;
+            }
+        }
         else return false;
         if (!checkdate($month, $day, $year)) return false;
         $date = sprintf('%04d-%02d-%02d', $year, $month, $day);
         return $date > date('Y-m-d') ? false : $date;
+    }
+
+    private static function monthName(string $key): string
+    {
+        return ['ene' => 'enero', 'feb' => 'febrero', 'mar' => 'marzo', 'abr' => 'abril', 'may' => 'mayo', 'jun' => 'junio', 'jul' => 'julio',
+            'ago' => 'agosto', 'sep' => 'septiembre', 'set' => 'septiembre', 'oct' => 'octubre', 'nov' => 'noviembre', 'dic' => 'diciembre'][$key];
     }
 
     public static function maskEmail(string $email): string

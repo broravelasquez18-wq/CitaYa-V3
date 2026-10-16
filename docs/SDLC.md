@@ -1015,3 +1015,11 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
 - Se publicó la versión `29be3158`.
 
 **Pendiente.** Probar desde WhatsApp: HISTORIA → documento → confirmación de datos.
+
+**Ajuste (2026-10-15, pedido del titular).** El bot acepta la fecha de la atención con el mes escrito.
+- Formatos: «10 de julio del 2026», «10 julio 2026», «10 jul. 2026», «Julio 10, 2026», «el 10 de julio». Se aceptan abreviaturas, mayúsculas y tildes, y también «setiembre».
+- Sin año, se toma la fecha ya pasada más reciente.
+- Se rechazan las fechas inexistentes, los meses que no existen y las fechas futuras.
+- Los mensajes del bot muestran los dos ejemplos (*15/03/2026* o *10 de julio de 2026*).
+- Solo cambia `WhatsAppIntake::parseDate` en CitaYa; el flujo de n8n no se toca.
+- `whatsapp` 83 en verde (4 nuevas, una de ellas en la conversación). `run` 158, `support` 49, `n8n-api` 28 y `requests-admin` 46 en verde.
