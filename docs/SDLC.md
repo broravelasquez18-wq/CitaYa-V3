@@ -1066,3 +1066,9 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
   - Hasta 3 documentos que no coinciden; luego el reporte se cierra. Hay además un límite de 10 consultas de documento por hora por chat (`support-document:`). *0* cancela, como antes.
 - El flujo de n8n no cambia: sigue enviando el mensaje a `conversation.handle`.
 - **Validación.** `support` 53 en verde (5 nuevas: pide el documento sin mostrar historias, documento ajeno, documento mal escrito, cierre tras 3 intentos, solo las historias del documento validado). `whatsapp` 91, `n8n-api` 30, `requests-admin` 46 y `whatsapp-qr` 8 en verde.
+
+**Ajuste (2026-10-17, pedido del titular): la lista del reporte por WhatsApp no muestra el radicado.**
+- **Antes.** Con varias historias, la opción 2 las listaba como «radicado (dd/mm/aaaa)».
+- **Ahora.** Cada historia sale como «Solicitada el viernes 16 de octubre de 2026, 3:42 p. m.» (`SupportDesk::longDate`), sin el radicado. Los mensajes de confirmación conservan la referencia del reporte (`RE-…`).
+- El flujo de n8n no cambia.
+- **Validación.** `support` 54 en verde (1 nueva: la lista no trae el radicado y da la fecha con mes y hora).

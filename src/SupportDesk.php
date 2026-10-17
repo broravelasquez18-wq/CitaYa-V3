@@ -102,7 +102,7 @@ final class SupportDesk
     {
         if (count($requests) === 1) { $this->askCategory($phone, $messageId, (int)$requests[0]['id']); return; }
         $lines = [];
-        foreach ($requests as $index => $request) $lines[] = '*' . ($index + 1) . '.* ' . $request['reference'] . ' (' . date('d/m/Y', strtotime($request['created_at'])) . ')';
+        foreach ($requests as $index => $request) $lines[] = '*' . ($index + 1) . '.* Solicitada el ' . self::longDate($request['created_at']);
         $this->saveSession($phone, 'choose_request', ['ids' => array_map(fn($r) => (int)$r['id'], $requests)]);
         $this->reply($phone, "¿Sobre cuál historia es el reporte?\n\n" . implode("\n", $lines), $messageId, 'choose');
     }
@@ -304,6 +304,16 @@ final class SupportDesk
     private function endSession(string $phone): void
     {
         $this->app->db->run('DELETE FROM whatsapp_sessions WHERE phone=?', [$phone]);
+    }
+
+    /** «viernes 16 de octubre de 2026, 3:42 p. m.»: el paciente distingue sus historias sin ver el radicado. */
+    private static function longDate(string $value): string
+    {
+        $time = strtotime($value);
+        $days = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+        $months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+        return $days[(int)date('w', $time)] . ' ' . date('j', $time) . ' de ' . $months[(int)date('n', $time) - 1] . ' de ' . date('Y', $time)
+            . ', ' . date('g:i', $time) . (date('A', $time) === 'AM' ? ' a. m.' : ' p. m.');
     }
 
     private static function words(string $text): array

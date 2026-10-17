@@ -153,7 +153,8 @@ try {
     say($phone, '2');
     say($phone, '70000001');
     check(!str_contains(lastTo($phone), $app->request($foreign)['reference']), 'Solo se listan las historias del documento validado, no las de otro paciente del mismo WhatsApp');
-    check(str_contains(lastTo($phone), '¿Sobre cuál historia es el reporte?') && str_contains(lastTo($phone), $app->request($second)['reference']), 'Con varias historias, el bot pregunta sobre cuál es el reporte');
+    check(str_contains(lastTo($phone), '¿Sobre cuál historia es el reporte?') && str_contains(lastTo($phone), '*1.* Solicitada el '), 'Con varias historias, el bot pregunta sobre cuál es el reporte');
+    check(!str_contains(lastTo($phone), $app->request($second)['reference']) && preg_match('/\d{1,2} de [a-z]+ de \d{4}, \d{1,2}:\d{2} [ap]\. m\./u', lastTo($phone)), 'La lista no muestra el radicado y da la fecha con mes y hora');
     say($phone, '9');
     check(str_contains(lastTo($phone), 'Responde con el número'), 'Una opción inválida se vuelve a pedir');
     say($phone, '1'); say($phone, '4'); say($phone, 'Esa no es mi cita');
