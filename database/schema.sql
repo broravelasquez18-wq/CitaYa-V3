@@ -281,6 +281,12 @@ CREATE TABLE IF NOT EXISTS support_messages (
  admin_id BIGINT UNSIGNED NULL,
  body TEXT NOT NULL,
  wa_message_id VARCHAR(190) NULL,
+ attachment_storage VARCHAR(80) NULL,
+ attachment_name VARCHAR(190) NULL,
+ attachment_mime VARCHAR(40) NULL,
+ attachment_size BIGINT UNSIGNED NULL,
+ attachment_sha256 CHAR(64) NULL,
+ outbox_id BIGINT UNSIGNED NULL,
  created_at DATETIME NOT NULL,
  FOREIGN KEY (ticket_id) REFERENCES support_tickets(id),
  INDEX message_ticket (ticket_id, id)

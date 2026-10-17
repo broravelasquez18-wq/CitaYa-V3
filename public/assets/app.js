@@ -726,6 +726,8 @@ document.addEventListener('click', event => {
   if (!thread) return;
   const bottom = () => { thread.scrollTop = thread.scrollHeight; };
   bottom();
+  // Las fotos cambian el alto al cargar: se vuelve a bajar (load no burbujea, se escucha en captura).
+  thread.addEventListener('load', bottom, true);
   let last = thread.innerHTML;
   setInterval(async () => {
     if (document.hidden) return;
@@ -740,7 +742,26 @@ document.addEventListener('click', event => {
   input?.addEventListener('keydown', event => {
     if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); input.form.requestSubmit(); }
   });
-  input?.form.addEventListener('submit', () => { input.form.querySelector('button').disabled = true; });
+  // PDF adjunto: se muestra su nombre y permite enviar sin texto. Se valida tipo y tamaño antes de subirlo.
+  const file = document.querySelector('[data-chat-file]');
+  const picked = document.querySelector('[data-chat-file-name]');
+  const showFile = () => {
+    const chosen = file?.files[0];
+    if (chosen && (!/\.pdf$/i.test(chosen.name) || chosen.size > 10 * 1024 * 1024)) {
+      file.value = '';
+      window.CitaYa?.toast?.({tone: 'error', title: 'No se puede adjuntar', text: 'Solo se pueden enviar archivos PDF de hasta 10 MB.'});
+      return showFile();
+    }
+    if (!picked) return;
+    picked.hidden = !chosen;
+    picked.querySelector('span').textContent = chosen ? 'Adjunto: ' + chosen.name : '';
+  };
+  file?.addEventListener('change', showFile);
+  picked?.querySelector('[data-chat-file-clear]').addEventListener('click', () => { file.value = ''; showFile(); });
+  input?.form.addEventListener('submit', event => {
+    if (!input.value.trim() && !file?.files.length) { event.preventDefault(); input.focus(); return; }
+    input.form.querySelector('[data-chat-send]').disabled = true;
+  });
 })();
 
 // Avisos de reportes de error en el panel (sin WhatsApp al empleado): cada 15 s se actualiza el contador de la pestaña

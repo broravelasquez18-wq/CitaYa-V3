@@ -8,7 +8,8 @@ header('Content-Type: application/json; charset=UTF-8');
 try { $app = require dirname(__DIR__) . '/src/bootstrap.php'; }
 catch (Throwable) { http_response_code(503); exit('{"error":"unavailable"}'); }
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit('{"error":"method_not_allowed"}'); }
-$body = (string)file_get_contents('php://input', false, null, 0, 64 * 1024);
+// Hasta 16 MB: conversation.handle puede traer la foto o el PDF que mandó el paciente (máx. 10 MB en base64).
+$body = (string)file_get_contents('php://input', false, null, 0, 16 * 1024 * 1024);
 if (!App\Automation::validSignature($body, (string)($_SERVER['HTTP_X_CITAYA_SIGNATURE'] ?? ''), (string)($app->config['n8n_secret'] ?? ''))) {
     http_response_code(401); exit('{"error":"invalid_signature"}');
 }

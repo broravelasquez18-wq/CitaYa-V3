@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
 import { createInbox } from './inbox.mjs';
 import pino from 'pino';
-import makeWASocket, { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, Browsers, jidNormalizedUser, isJidGroup } from '@whiskeysockets/baileys';
+import makeWASocket, { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, Browsers, jidNormalizedUser, isJidGroup, downloadMediaMessage } from '@whiskeysockets/baileys';
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 3218);
@@ -81,6 +81,28 @@ function textOf(message) {
     || m.listResponseMessage?.singleSelectReply?.selectedRowId || m.templateButtonReplyMessage?.selectedId || '';
 }
 
+// Foto o documento del paciente (chat de reportes de CitaYa): viaja con el mensaje en base64, hasta 10 MB.
+const maxMediaBytes = 10 * 1024 * 1024;
+function mediaOf(message) {
+  const m = message?.ephemeralMessage?.message || message?.viewOnceMessage?.message || message || {};
+  if (m.imageMessage) return { type: 'image', info: m.imageMessage };
+  const document = m.documentMessage || m.documentWithCaptionMessage?.message?.documentMessage;
+  return document ? { type: 'document', info: document } : null;
+}
+
+/** Mensaje con el formato de Meta; para fotos y documentos se agrega «data» (sin ella, CitaYa avisa que no se pudo ver). */
+async function inboundEntry(message, id, phone, text, media) {
+  if (!media) return { id, from: phone, type: 'text', text: { body: text.slice(0, 4096) } };
+  const file = { mime_type: String(media.info.mimetype || ''), filename: String(media.info.fileName || ''), caption: text.slice(0, 4096) };
+  if (Number(media.info.fileLength || 0) <= maxMediaBytes) {
+    try {
+      const data = await downloadMediaMessage(message, 'buffer', {}, { logger, reuploadRequest: sock.updateMediaMessage });
+      if (data.length <= maxMediaBytes) file.data = data.toString('base64');
+    } catch (error) { console.error('No se pudo descargar un adjunto:', String(error?.message || error).slice(0, 160)); }
+  }
+  return { id, from: phone, type: media.type, [media.type]: file };
+}
+
 async function connect() {
   fs.mkdirSync(sessionDir, { recursive: true });
   const { state: auth, saveCreds } = await useMultiFileAuthState(sessionDir);
@@ -132,8 +154,9 @@ async function connect() {
     for (const message of messages) {
       const key = message.key || {};
       if (key.fromMe || !key.remoteJid || isJidGroup(key.remoteJid) || key.remoteJid === 'status@broadcast') continue;
-      const text = textOf(message.message);
-      if (!text) { console.log('Mensaje sin texto ignorado.'); continue; }
+      const media = mediaOf(message.message);
+      const text = media ? String(media.info.caption || '') : textOf(message.message);
+      if (!text && !media) { console.log('Mensaje sin texto ni adjunto ignorado.'); continue; }
       try {
         const phone = await senderPhone(key);
         // En el registro solo se muestran los últimos 4 dígitos del número.
@@ -142,7 +165,7 @@ async function connect() {
         console.log('Mensaje recibido de …' + phone.slice(-4) + '.');
         rememberChat(phone, key.remoteJid);
         const id = key.id || 'qr-' + crypto.createHash('sha256').update(key.remoteJid + ':' + message.messageTimestamp + ':' + text).digest('hex');
-        const body = JSON.stringify({ entry: [{ changes: [{ value: { messages: [{ id, from: phone, type: 'text', text: { body: text.slice(0, 4096) } }] } }] }] });
+        const body = JSON.stringify({ entry: [{ changes: [{ value: { messages: [await inboundEntry(message, id, phone, text, media)] } }] }] });
         // Primero se guarda (bandeja persistente) y luego se entrega: si el webhook no responde, se reintenta.
         enqueueInbound(id, body);
         state.received++;

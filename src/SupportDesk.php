@@ -10,6 +10,7 @@ namespace App;
  * reenviando la historia; lo demás abre un caso para el empleado que respondió esa historia (o el de menor carga)
  * y se le avisa en el panel (contador y aviso en pantalla). Mientras el caso está abierto, lo que escribe el paciente llega al chat del caso en el sistema y
  * el personal le contesta por el mismo número del bot. Los textos de los mensajes se guardan cifrados.
+ * El paciente puede mandar fotos o PDF al chat del caso y el personal puede responder con un PDF (storage/support).
  */
 final class SupportDesk
 {
@@ -24,22 +25,27 @@ final class SupportDesk
     private const SESSION_MINUTES = 30;
     private const DOCUMENT_TRIES = 3;
     private const DELIVERED = ['sent', 'simulated', 'queued', 'sending', 'retry', 'uncertain', 'failed'];
+    /** Adjuntos del chat: lo que puede mandar el paciente y lo que puede enviar el personal. */
+    public const PATIENT_MIMES = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'application/pdf' => 'pdf'];
+    public const STAFF_MIMES = ['application/pdf' => 'pdf'];
+    public const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
     public function __construct(private readonly Application $app) {}
 
     /**
      * Procesa un mensaje entrante si le corresponde (caso abierto, reporte en curso u opción «2»).
      * Devuelve true si lo atendió; false para que siga el bot normal (menú, HISTORIA, CONFIRMAR…).
+     * $media: foto o PDF que mandó el paciente (['data' => binario, 'name' => ...]); $text es su pie de foto.
      */
-    public function handle(string $phone, string $messageId, string $text): bool
+    public function handle(string $phone, string $messageId, string $text, ?array $media = null): bool
     {
         $phone = preg_replace('/\D/', '', $phone);
         $text = trim($text);
         if ($phone === '') return false;
         $ticket = $this->app->db->one("SELECT * FROM support_tickets WHERE phone=? AND status='open' ORDER BY id DESC LIMIT 1", [$phone]);
         if ($ticket) {
-            if ($text === '') return true;
-            $this->addMessage((int)$ticket['id'], 'in', $text, null, $messageId);
+            if ($text === '' && !$media) return true;
+            $this->addMessage((int)$ticket['id'], 'in', $text, null, $messageId, $this->patientAttachment($media));
             $this->app->db->run('UPDATE support_tickets SET unread=unread+1,updated_at=? WHERE id=?', [$this->app->now(), $ticket['id']]);
             return true;
         }
@@ -54,7 +60,7 @@ final class SupportDesk
             $this->reply($phone, 'Reporte cancelado.', $messageId, 'cancel');
             return false; // El bot normal muestra el menú.
         }
-        if ($session) return $this->step($phone, $messageId, $text, $session['state'], json_decode((string)$session['data'], true) ?: []);
+        if ($session) return $this->step($phone, $messageId, $text, $session['state'], json_decode((string)$session['data'], true) ?: [], $media);
         if ($text === '2' || array_intersect($words, ['reportar', 'reporte', 'error', 'errores', 'fallo', 'problema'])) {
             $this->start($phone, $messageId);
             return true;
@@ -107,7 +113,7 @@ final class SupportDesk
         $this->reply($phone, "¿Sobre cuál historia es el reporte?\n\n" . implode("\n", $lines), $messageId, 'choose');
     }
 
-    private function step(string $phone, string $messageId, string $text, string $state, array $data): bool
+    private function step(string $phone, string $messageId, string $text, string $state, array $data, ?array $media = null): bool
     {
         if ($state === 'ask_document') {
             $this->document($phone, $messageId, $text, $data);
@@ -140,9 +146,10 @@ final class SupportDesk
             return true;
         }
         if ($state === 'describe') {
-            if (mb_strlen($text) < 3) { $this->reply($phone, 'Escribe cuál es el error.', $messageId, 'retry'); return true; }
-            $ticket = $this->createTicket($phone, (int)$data['request_id'], (string)$data['category'], mb_substr($text, 0, 2000), 'open');
-            $this->addMessage((int)$ticket['id'], 'in', $text, null, $messageId);
+            // Una foto del error también sirve como descripción.
+            if (mb_strlen($text) < 3 && !$media) { $this->reply($phone, 'Escribe cuál es el error.', $messageId, 'retry'); return true; }
+            $ticket = $this->createTicket($phone, (int)$data['request_id'], (string)$data['category'], mb_substr($text !== '' ? $text : 'El paciente envió un archivo.', 0, 2000), 'open');
+            $this->addMessage((int)$ticket['id'], 'in', $text, null, $messageId, $this->patientAttachment($media));
             $this->endSession($phone);
             $this->reply($phone, "Reporte *{$ticket['reference']}* recibido 📝 Te responderemos por este chat.", $messageId, 'created');
             return true;
@@ -244,14 +251,35 @@ final class SupportDesk
         return $ticket;
     }
 
-    /** El personal responde en el chat: el mensaje sale por el número del bot. */
-    public function send(int $id, array $staff, string $body): void
+    /**
+     * El personal responde en el chat: el mensaje sale por el número del bot.
+     * $file: PDF subido (['path' => ..., 'name' => ...]); sale como documento con el texto como pie.
+     */
+    public function send(int $id, array $staff, string $body, ?array $file = null): void
     {
         $body = trim(str_replace("\r\n", "\n", $body));
-        if ($body === '' || mb_strlen($body) > 2000) throw new \DomainException('Escribe un mensaje (máximo 2000 caracteres).');
+        if (mb_strlen($body) > 2000) throw new \DomainException('El mensaje admite máximo 2000 caracteres.');
+        if ($body === '' && !$file) throw new \DomainException('Escribe un mensaje o adjunta un PDF.');
         $ticket = $this->openTicket($id, $staff);
-        $messageId = $this->addMessage($id, 'out', $body, (int)$staff['id']);
-        $this->app->whatsapp()->queueText($ticket['phone'], $body, 'support-out:' . $messageId);
+        $attachment = null;
+        if ($file) {
+            $size = (int)@filesize($file['path']);
+            if ($size <= 0 || $size > self::MAX_ATTACHMENT_BYTES) throw new \DomainException('El PDF debe pesar máximo ' . intdiv(self::MAX_ATTACHMENT_BYTES, 1048576) . ' MB.');
+            $attachment = $this->storeAttachment((string)file_get_contents($file['path']), (string)$file['name'], self::STAFF_MIMES);
+            if (!$attachment) throw new \DomainException('Solo se pueden enviar archivos PDF.');
+        }
+        try {
+            $this->app->db->transaction(function () use ($id, $staff, $body, $attachment, $ticket) {
+                $messageId = $this->addMessage($id, 'out', $body, (int)$staff['id'], null, $attachment);
+                if (!$attachment) { $this->app->whatsapp()->queueText($ticket['phone'], $body, 'support-out:' . $messageId); return; }
+                // En la misma transacción: el envío no sale sin saber qué archivo lleva.
+                $jobId = $this->app->whatsapp()->queueSupportFile($ticket['phone'], $body, 'support-file:' . $messageId);
+                $this->app->db->run('UPDATE support_messages SET outbox_id=? WHERE id=?', [$jobId, $messageId]);
+            });
+        } catch (\Throwable $error) {
+            if ($attachment) @unlink($this->attachmentDirectory() . '/' . $attachment['attachment_storage']);
+            throw $error;
+        }
         $this->app->db->run('UPDATE support_tickets SET updated_at=?,unread=0,assigned_to=COALESCE(assigned_to,?) WHERE id=?', [$this->app->now(), $staff['id'], $id]);
     }
 
@@ -284,10 +312,63 @@ final class SupportDesk
         return $staff['role'] === 'admin' || (int)$ticket['assigned_to'] === (int)$staff['id'];
     }
 
-    private function addMessage(int $ticketId, string $direction, string $body, ?int $adminId, ?string $messageId = null): int
+    /** Archivo adjunto de un mensaje para verlo en el panel, verificado (existe y no cambió). */
+    public function attachment(int $messageId, array $staff): ?array
     {
+        $message = $this->app->db->one('SELECT m.*,t.assigned_to FROM support_messages m JOIN support_tickets t ON t.id=m.ticket_id WHERE m.id=? AND m.attachment_storage IS NOT NULL', [$messageId]);
+        if (!$message || !$this->canSee($message, $staff)) return null;
+        return $this->verifiedFile($message);
+    }
+
+    /** PDF que envía el personal, para WhatsApp::tick (se busca por el id del mensaje en la cola). */
+    public function outboxAttachment(int $jobId): array
+    {
+        $message = $this->app->db->one('SELECT * FROM support_messages WHERE outbox_id=? AND attachment_storage IS NOT NULL', [$jobId]);
+        return ($message ? $this->verifiedFile($message) : null) ?? throw new \DomainException('support_file_unavailable');
+    }
+
+    private function verifiedFile(array $message): ?array
+    {
+        $path = $this->attachmentDirectory() . '/' . $message['attachment_storage'];
+        if (!is_file($path) || !hash_equals((string)$message['attachment_sha256'], hash_file('sha256', $path))) return null;
+        return ['path' => $path, 'name' => $message['attachment_name'], 'mime' => $message['attachment_mime']];
+    }
+
+    /** Foto o PDF del paciente. Un tipo no admitido (audio, video…) queda marcado como rechazado. */
+    private function patientAttachment(?array $media): ?array
+    {
+        if (!$media) return null;
+        $data = $media['data'] ?? null;
+        if (!is_string($data) || $data === '' || strlen($data) > self::MAX_ATTACHMENT_BYTES) return ['rejected' => true];
+        return $this->storeAttachment($data, (string)($media['name'] ?? ''), self::PATIENT_MIMES) ?? ['rejected' => true];
+    }
+
+    /** Guarda el archivo si su tipo real (no el declarado) está permitido. Devuelve las columnas del mensaje o null. */
+    private function storeAttachment(string $data, string $name, array $allowed): ?array
+    {
+        $mime = (new \finfo(FILEINFO_MIME_TYPE))->buffer($data) ?: '';
+        if (!isset($allowed[$mime])) return null;
+        $directory = $this->attachmentDirectory();
+        if (!is_dir($directory)) mkdir($directory, 0700, true);
+        $storage = bin2hex(random_bytes(16)) . '.' . $allowed[$mime];
+        if (file_put_contents($directory . '/' . $storage, $data, LOCK_EX) !== strlen($data)) throw new \RuntimeException('No se pudo guardar el adjunto.');
+        $name = trim(preg_replace('/[^\p{L}\p{N} ._()-]/u', '_', basename(str_replace('\\', '/', $name))));
+        if (!preg_match('/\.' . $allowed[$mime] . '$/i', $name)) $name = ($name !== '' ? pathinfo($name, PATHINFO_FILENAME) : ($mime === 'application/pdf' ? 'documento' : 'imagen')) . '.' . $allowed[$mime];
+        return ['attachment_storage' => $storage, 'attachment_name' => mb_substr($name, -150), 'attachment_mime' => $mime,
+            'attachment_size' => strlen($data), 'attachment_sha256' => hash('sha256', $data)];
+    }
+
+    private function attachmentDirectory(): string { return $this->app->config['storage_path'] . '/support'; }
+
+    private function addMessage(int $ticketId, string $direction, string $body, ?int $adminId, ?string $messageId = null, ?array $attachment = null): int
+    {
+        // Un archivo que no se pudo guardar queda anotado para que el personal lo pida de otra forma.
+        if (!empty($attachment['rejected'])) {
+            $body = trim($body . "\n\n(Envió un archivo que no se puede mostrar aquí: solo se admiten fotos y PDF de hasta 10 MB.)");
+            $attachment = null;
+        }
         return $this->app->db->insert('support_messages', ['ticket_id' => $ticketId, 'direction' => $direction, 'admin_id' => $adminId,
-            'body' => Crypto::seal($body, $this->app->config['app_key']), 'wa_message_id' => $messageId ? mb_substr($messageId, 0, 190) : null, 'created_at' => $this->app->now()]);
+            'body' => Crypto::seal($body, $this->app->config['app_key']), 'wa_message_id' => $messageId ? mb_substr($messageId, 0, 190) : null, 'created_at' => $this->app->now()] + ($attachment ?? []));
     }
 
     private function reply(string $phone, string $text, string $messageId, string $suffix): void

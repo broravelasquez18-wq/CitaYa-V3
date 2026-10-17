@@ -17,7 +17,10 @@ async function citayaWhatsAppBot({ raw, signature, env, http, crypto }) {
   if (!message) return { status: 200, result: 'ignored' };
   const phone = String(message.from || '').replace(/\D/g, '');
   const id = String(message.id || '');
-  const text = String((message.text && message.text.body) || '');
+  // Foto o documento (el QR lo incluye en base64): el pie de foto hace de texto y el archivo va al chat del reporte.
+  const file = (message.type === 'image' || message.type === 'document') && message[message.type] && typeof message[message.type] === 'object' ? message[message.type] : null;
+  const text = String(file ? file.caption || '' : (message.text && message.text.body) || '');
+  const media = file ? { data: String(file.data || ''), filename: String(file.filename || ''), mime_type: String(file.mime_type || '') } : undefined;
   if (!/^\d{8,20}$/.test(phone) || !id) return { status: 200, result: 'ignored' };
 
   // Llamada firmada a CitaYa. Los rechazos (4xx) vuelven como { ok:false, error } para decidir la respuesta.
@@ -42,7 +45,7 @@ async function citayaWhatsAppBot({ raw, signature, env, http, crypto }) {
   if (registered.allowed === false) return { status: 200, result: 'rate_limited' };
 
   // 2. Reporte de error en curso, opción «2» o chat abierto con el personal: lo atiende CitaYa (SCRUM-47/48).
-  const conversation = await api('conversation.handle', { phone, message_id: id, text });
+  const conversation = await api('conversation.handle', { phone, message_id: id, text, media });
   if (conversation.ok && conversation.handled) return { status: 200, result: 'conversation' };
 
   // 3. Acción: CONFIRMAR código, HISTORIA o menú.

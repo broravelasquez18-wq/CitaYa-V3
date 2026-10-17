@@ -18,7 +18,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 }
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit; }
 
-$body = (string)file_get_contents('php://input', false, null, 0, 1024 * 1024);
+// Hasta 16 MB: el servicio QR incluye las fotos y PDF que manda el paciente.
+$body = (string)file_get_contents('php://input', false, null, 0, 16 * 1024 * 1024);
 // Zernio firma con X-Zernio-Signature y su propio secreto. Exige respuesta en menos de 5 s:
 // receiveZernio solo registra y encola; el envío lo hace bin/worker.php.
 if (isset($_SERVER['HTTP_X_ZERNIO_SIGNATURE']) || $config['whatsapp_transport'] === 'zernio') {

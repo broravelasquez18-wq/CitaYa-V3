@@ -126,3 +126,13 @@ test('reporte de error o chat abierto: si CitaYa lo atiende, el bot no responde 
   const menu = await run(fake, inbound('c2', '573001112233', 'hola'));
   assert.equal(menu.result, 'menu:sent');
 });
+
+test('foto del paciente: el pie va como texto y el archivo viaja a CitaYa para el chat del reporte', async () => {
+  const fake = citaya({ 'conversation.handle': () => ({ ok: true, handled: true }) });
+  const raw = JSON.stringify({ entry: [{ changes: [{ value: { messages: [{ id: 'p1', from: '573001112233', type: 'image', image: { mime_type: 'image/jpeg', caption: 'Así sale', data: 'AAEC' } }] } }] }] });
+  assert.equal((await run(fake, raw)).result, 'conversation');
+  const call = fake.calls.find(c => c.action === 'conversation.handle');
+  assert.equal(call.text, 'Así sale');
+  assert.deepEqual(call.media, { data: 'AAEC', filename: '', mime_type: 'image/jpeg' });
+  assert.equal(fake.sent().length, 0);
+});

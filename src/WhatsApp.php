@@ -38,7 +38,9 @@ final class WhatsApp
                 $type = (string)($message['type'] ?? '');
                 $text = $type === 'text' ? (string)($message['text']['body'] ?? '') : '';
                 if ($type === 'interactive') $text = (string)($message['interactive']['button_reply']['id'] ?? '');
-                $handled += (int)$this->handleInbound((string)($message['id'] ?? ''), (string)($message['from'] ?? ''), $text);
+                $media = self::inboundMedia($message);
+                if ($media) $text = (string)($message[$type]['caption'] ?? '');
+                $handled += (int)$this->handleInbound((string)($message['id'] ?? ''), (string)($message['from'] ?? ''), $text, $media);
             }
         }
         return $handled;
@@ -134,7 +136,20 @@ final class WhatsApp
         if ($result['next'] === 'select') $this->queueText($phone, 'Hay varias atenciones. Elige la tuya en la página de la solicitud.', 'confirm-select:' . $messageId);
     }
 
-    private function handleInbound(string $id, string $from, string $text): bool
+    /**
+     * Foto o documento que reenvía el servicio QR con el archivo incluido (image|document: data en base64, mime_type,
+     * filename, caption). Sin «data» (muy pesado, no se pudo descargar, o Meta que solo manda el id) data queda vacío
+     * y el chat del reporte anota que llegó un archivo que no se puede ver. Devuelve ['data', 'name', 'mime'].
+     */
+    public static function inboundMedia(array $message): ?array
+    {
+        $type = (string)($message['type'] ?? '');
+        if (!in_array($type, ['image', 'document'], true) || !is_array($message[$type] ?? null)) return null;
+        $data = base64_decode((string)($message[$type]['data'] ?? ''), true);
+        return ['data' => $data === false ? '' : $data, 'name' => (string)($message[$type]['filename'] ?? ''), 'mime' => (string)($message[$type]['mime_type'] ?? '')];
+    }
+
+    private function handleInbound(string $id, string $from, string $text, ?array $media = null): bool
     {
         $phone = preg_replace('/\D/', '', $from);
         if ($id === '' || strlen($id) > 190 || strlen($phone) < 8 || strlen($phone) > 20) return false;
@@ -151,7 +166,7 @@ final class WhatsApp
         $new = $this->app->db->run('INSERT IGNORE INTO whatsapp_inbound (wa_message_id,phone,intent,created_at) VALUES (?,?,?,?)', [$id, $phone, $intent, $this->app->now()])->rowCount();
         if (!$new) return false;
         // Reporte de error en curso o chat con el personal (SCRUM-47/48): lo atiende SupportDesk, sin límite de mensajes.
-        if ((new SupportDesk($this->app))->handle($phone, $id, $text)) return true;
+        if ((new SupportDesk($this->app))->handle($phone, $id, $text, $media)) return true;
         try { $this->app->limit('whatsapp-phone:' . $phone, 60, 3600); }
         catch (\DomainException) { return false; }
         // Si había mensajes esperando porque la ventana de 24 h estaba cerrada, ya pueden salir.
@@ -288,7 +303,13 @@ final class WhatsApp
         return $this->queue($phone, 'text', $body, null, null, 'wa:' . hash('sha256', $dedupe));
     }
 
-    private const EVENTS = ['history' => 'historia.disponible', 'notice' => 'solicitud.pendiente', 'not_registered' => 'solicitud.no_registra', 'text' => 'whatsapp.mensaje'];
+    /** Encola un PDF del chat de un reporte; el archivo lo entrega SupportDesk::outboxAttachment con el id que devuelve. */
+    public function queueSupportFile(string $phone, string $caption, string $dedupe): int
+    {
+        return $this->queue($phone, 'support_file', $caption === '' ? null : $caption, null, null, 'wa:' . hash('sha256', $dedupe));
+    }
+
+    private const EVENTS =['history' => 'historia.disponible', 'notice' => 'solicitud.pendiente', 'not_registered' => 'solicitud.no_registra', 'text' => 'whatsapp.mensaje'];
 
     private function queue(string $phone, string $kind, ?string $body, ?int $requestId, ?int $packageId, string $dedupe, ?string $event = null): int
     {
@@ -323,7 +344,11 @@ final class WhatsApp
         });
         if (!$job) return false;
         try {
-            $messages = $job['kind'] === 'history' ? $this->historyMessages($job) : [['type' => 'text', 'body' => Crypto::open($job['encrypted_body'], $this->app->config['app_key'])]];
+            $messages = match ($job['kind']) {
+                'history' => $this->historyMessages($job),
+                'support_file' => $this->supportFileMessages($job),
+                default => [['type' => 'text', 'body' => Crypto::open($job['encrypted_body'], $this->app->config['app_key'])]],
+            };
             if (in_array($job['kind'], ['response', 'not_registered'], true)) $messages = array_merge($messages, $this->responseMessages($job));
             if ($this->app->config['whatsapp_transport'] === 'local') {
                 $preview = array_map(fn($m) => match ($m['type']) {
@@ -366,6 +391,15 @@ final class WhatsApp
             $this->finish($job, $error->retry && $job['attempts'] < $this->app->config['mail_attempts'] ? 'retry' : 'failed', $error->getMessage());
         }
         return true;
+    }
+
+    /** PDF del chat de un reporte: el texto va como pie del documento (o antes, si es largo para un pie). */
+    private function supportFileMessages(array $job): array
+    {
+        $file = (new SupportDesk($this->app))->outboxAttachment((int)$job['id']);
+        $caption = $job['encrypted_body'] ? Crypto::open($job['encrypted_body'], $this->app->config['app_key']) : '';
+        $document = ['type' => 'document', 'path' => $file['path'], 'filename' => $file['name'], 'caption' => mb_strlen($caption) <= 1000 && $caption !== '' ? $caption : null];
+        return $caption !== '' && $document['caption'] === null ? [['type' => 'text', 'body' => $caption], $document] : [$document];
     }
 
     /** Adjuntos de una respuesta de la persona encargada: PDF como documento y JPG/PNG como imagen. */

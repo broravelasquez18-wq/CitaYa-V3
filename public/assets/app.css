@@ -542,6 +542,18 @@ body.overlay-open,body.queue-progress-open{overflow:hidden}
 .chat-message.system .chat-bubble{background:transparent;border:1px dashed var(--line-strong);color:var(--ink-2)}
 .chat-form{display:flex;gap:var(--s3);align-items:flex-end;margin-top:var(--s3)}
 .chat-form textarea{flex:1;min-height:76px;resize:vertical;margin:0}
+.chat-actions{display:flex;flex-direction:column;gap:var(--s2)}
+.chat-attach{cursor:pointer}
+.chat-attach:focus-within{outline:2px solid var(--brand);outline-offset:2px}
+.chat-file-picked{margin:var(--s2) 0 0;font-size:var(--t-sm);color:var(--ink-2)}
+.chat-text+.chat-text,.chat-image+.chat-text,.chat-file+.chat-text{margin-top:var(--s2)}
+.chat-image{display:block;border-radius:var(--radius);overflow:hidden;background:var(--surface-2)}
+.chat-image img{display:block;max-width:min(320px,100%);max-height:320px;object-fit:contain}
+.chat-file{display:flex;align-items:center;gap:var(--s2);padding:var(--s2) var(--s3);border-radius:var(--radius);background:var(--surface-2);color:var(--ink);text-decoration:none;border:1px solid var(--line)}
+.chat-file:hover{border-color:var(--line-strong)}
+.chat-file span{display:flex;flex-direction:column;min-width:0}
+.chat-file strong{overflow-wrap:anywhere}
+.chat-file small{color:var(--ink-2)}
 
 /* Plantillas, WhatsApp, empleados, bandeja */
 .template-card textarea{margin:6px 0 var(--s3);resize:vertical;line-height:1.55}

@@ -1072,3 +1072,15 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
 - **Ahora.** Cada historia sale como «Solicitada el viernes 16 de octubre de 2026, 3:42 p. m.» (`SupportDesk::longDate`), sin el radicado. Los mensajes de confirmación conservan la referencia del reporte (`RE-…`).
 - El flujo de n8n no cambia.
 - **Validación.** `support` 54 en verde (1 nueva: la lista no trae el radicado y da la fecha con mes y hora).
+
+**Ajuste (2026-10-17, pedido del titular): fotos y PDF en el chat de los reportes de error.**
+- **Antes.** El servicio QR descartaba todo mensaje sin texto, así que las fotos del paciente nunca llegaban al chat del reporte. El personal solo podía responder con texto.
+- **Ahora.**
+  - **Paciente → chat.** El servicio QR descarga la foto o el documento (Baileys `downloadMediaMessage`, máx. 10 MB) y lo reenvía en base64 dentro del mensaje (`image|document` con `data`, `mime_type`, `filename`, `caption`). n8n lo pasa a `conversation.handle` como `media`. El pie de foto llega como texto.
+  - `SupportDesk` guarda el archivo en `storage/support` si su tipo real (no el declarado) es JPG, PNG, WEBP o PDF. Si es de otro tipo, pesa demasiado o no se pudo descargar, el chat anota que llegó un archivo que no se puede mostrar.
+  - Una foto también sirve como descripción al crear el reporte.
+  - **Personal → paciente.** El chat permite adjuntar un PDF (máx. 10 MB, se revisa el contenido). Sale por la cola de WhatsApp (`kind = support_file`) como documento, con el texto como pie; si el texto pasa de 1000 caracteres, va antes en un mensaje aparte.
+  - **Panel.** Las fotos se ven en la burbuja y los PDF como tarjeta con nombre y tamaño. Ambos se abren desde `?page=report-file`, que solo sirve el archivo a quien puede ver el reporte y verifica su huella.
+  - `support_messages` tiene columnas nuevas de adjunto y `outbox_id` (las agrega `bin/setup.php`). `n8n.php` y `whatsapp.php` aceptan cuerpos de hasta 16 MB.
+- **Despliegue.** El push a main reconstruye la app, el worker y el contenedor `whatsapp-qr`. El nodo «Procesar» del flujo «CitaYa · Bot WhatsApp» debe actualizarse y publicarse en n8n con `n8n/citaya-bot-whatsapp.json`; sin eso, las fotos llegan a n8n pero no a CitaYa.
+- **Validación.** `support` 64 en verde (10 nuevas: foto con pie, permisos para abrirla, PDF del paciente, archivo no admitido o sin datos, sin menú del bot, PDF del personal por la cola, PDF sin texto, solo PDF reales, envío vacío y foto vía n8n). `whatsapp` 91, `n8n-api` 30, `requests-admin` 46, `whatsapp-qr` 8 y bot de n8n 14 en verde. `admin-http` falla igual que antes del cambio (apunta a CitaYaV2).

@@ -139,7 +139,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 go('deliveries');
             case 'report-send':
                 requireStaff();
-                (new App\SupportDesk($app))->send((int)($_POST['ticket_id'] ?? 0), currentStaff(), (string)($_POST['body'] ?? ''));
+                $upload = $_FILES['file'] ?? null;
+                $file = null;
+                if ($upload && ($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+                    if ($upload['error'] !== UPLOAD_ERR_OK || !is_uploaded_file($upload['tmp_name'])) throw new DomainException('No se pudo recibir el PDF. Revisa que no supere 10 MB.');
+                    $file = ['path' => $upload['tmp_name'], 'name' => (string)$upload['name']];
+                }
+                (new App\SupportDesk($app))->send((int)($_POST['ticket_id'] ?? 0), currentStaff(), (string)($_POST['body'] ?? ''), $file);
                 $_SESSION['csrf'] = bin2hex(random_bytes(32));
                 header('Location: ?page=report&id=' . (int)($_POST['ticket_id'] ?? 0)); exit;
             case 'report-close':
@@ -257,7 +263,18 @@ if (in_array($page, ['delivery', 'case-history', 'report'], true) && ($_GET['fra
     exit('La sesión administrativa venció. Inicia sesión nuevamente.');
 }
 // Empleado: Solicitudes, reportes de error y su avance. Administrador: además el resto del sistema y los empleados.
-if (in_array($page, ['deliveries','delivery','case-history','reports','report','progress','notifications'], true)) requireStaff();
+if (in_array($page, ['deliveries','delivery','case-history','reports','report','report-file','progress','notifications'], true)) requireStaff();
+if ($page === 'report-file') {
+    // Foto o PDF del chat de un reporte; solo para quien puede ver ese reporte.
+    $file = (new App\SupportDesk($app))->attachment((int)($_GET['id'] ?? 0), currentStaff());
+    if (!$file) { http_response_code(404); exit; }
+    header('Content-Type: ' . $file['mime']);
+    header('Content-Length: ' . filesize($file['path']));
+    header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: private, max-age=3600');
+    header('Content-Disposition: ' . (($_GET['download'] ?? '') === '1' ? 'attachment' : 'inline') . '; filename="' . str_replace('"', '', $file['name']) . '"; filename*=UTF-8\'\'' . rawurlencode($file['name']));
+    readfile($file['path']); exit;
+}
 if ($page === 'notifications') {
     // Avisos del panel (reportes de error que esperan respuesta), consultados cada 15 s por app.js.
     header('Content-Type: application/json; charset=UTF-8');

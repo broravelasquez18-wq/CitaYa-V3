@@ -130,6 +130,38 @@ try {
     $desk->send((int)$ticket['id'], $employeeView, 'Hola, ya corregimos el apellido. Te enviamos la historia de nuevo.');
     check(lastTo($phone) === 'Hola, ya corregimos el apellido. Te enviamos la historia de nuevo.', 'La respuesta del empleado sale por el WhatsApp del bot');
     rejects(fn() => $desk->send((int)$ticket['id'], ['id' => $other, 'role' => 'employee'], 'hola'), 'Un empleado no puede responder un reporte ajeno', 'no está asignado');
+
+    // --- Adjuntos del chat: fotos/PDF del paciente y PDF del personal ---
+    $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
+    $media = fn(string $id, string $type, array $file) => ['entry' => [['changes' => [['value' => ['messages' => [['id' => $id, 'from' => $phone, 'type' => $type, $type => $file]]]]]]]];
+    $bot->receive($media('img-1', 'image', ['mime_type' => 'image/png', 'caption' => 'Así me sale el apellido', 'data' => base64_encode($png)]));
+    $photo = $db->one('SELECT * FROM support_messages WHERE wa_message_id=?', ['img-1']);
+    $stored = $desk->attachment((int)$photo['id'], $employeeView);
+    check($stored && $stored['mime'] === 'image/png' && file_get_contents($stored['path']) === $png && $stored['name'] === 'imagen.png'
+        && end($desk->ticket((int)$ticket['id'], $employeeView)['messages'])['body'] === 'Así me sale el apellido', 'La foto del paciente llega al chat del reporte con su pie de foto');
+    check($desk->attachment((int)$photo['id'], ['id' => $other, 'role' => 'employee']) === null && $desk->attachment((int)$photo['id'], $adminView) !== null, 'Otro empleado no puede abrir la foto; el administrador sí');
+    $bot->receive($media('doc-1', 'document', ['mime_type' => 'application/pdf', 'filename' => 'mi cédula.pdf', 'data' => base64_encode((string)file_get_contents($pdf))]));
+    check($desk->attachment((int)$db->one('SELECT id FROM support_messages WHERE wa_message_id=?', ['doc-1'])['id'], $employeeView)['name'] === 'mi cédula.pdf', 'El PDF que manda el paciente también llega al chat');
+    $bot->receive($media('doc-2', 'document', ['mime_type' => 'application/pdf', 'filename' => 'virus.pdf', 'data' => base64_encode('MZ no es un PDF')]));
+    $bot->receive($media('img-2', 'image', ['mime_type' => 'image/jpeg']));
+    $notes = $db->all("SELECT * FROM support_messages WHERE wa_message_id IN ('doc-2','img-2')");
+    check(count($notes) === 2 && !$notes[0]['attachment_storage'] && !$notes[1]['attachment_storage']
+        && str_contains(App\Crypto::open($notes[0]['body'], $config['app_key']), 'no se puede mostrar'), 'Un archivo de otro tipo o que no se pudo descargar queda anotado en el chat, sin guardarse');
+    check(!str_contains(lastTo($phone), 'Soy el asistente'), 'Las fotos con el reporte abierto no disparan el menú del bot');
+
+    $desk->send((int)$ticket['id'], $employeeView, 'Te enviamos la historia corregida.', ['path' => $pdf, 'name' => 'historia corregida.pdf']);
+    $sent = $db->one("SELECT * FROM support_messages WHERE ticket_id=? AND direction='out' ORDER BY id DESC LIMIT 1", [$ticket['id']]);
+    $job = $db->one('SELECT * FROM whatsapp_outbox WHERE id=?', [$sent['outbox_id']]);
+    while ($bot->tick());
+    $preview = json_decode((string)file_get_contents($config['storage_path'] . '/wa-outbox/' . $job['id'] . '.json'), true);
+    check($job['kind'] === 'support_file' && $sent['attachment_mime'] === 'application/pdf' && $db->one('SELECT status FROM whatsapp_outbox WHERE id=?', [$job['id']])['status'] === 'simulated'
+        && $preview['messages'] === [['type' => 'document', 'filename' => 'historia corregida.pdf', 'caption' => 'Te enviamos la historia corregida.']], 'El personal envía un PDF por el chat y sale por WhatsApp como documento con el texto de pie');
+    $desk->send((int)$ticket['id'], $employeeView, '', ['path' => $pdf, 'name' => 'sin-texto']);
+    $alone = $db->one("SELECT * FROM support_messages WHERE ticket_id=? AND direction='out' ORDER BY id DESC LIMIT 1", [$ticket['id']]);
+    check($alone['attachment_name'] === 'sin-texto.pdf' && App\Crypto::open($alone['body'], $config['app_key']) === '', 'Se puede enviar solo el PDF, sin texto');
+    file_put_contents($config['storage_path'] . '/foto.png', $png);
+    rejects(fn() => $desk->send((int)$ticket['id'], $employeeView, 'foto', ['path' => $config['storage_path'] . '/foto.png', 'name' => 'foto.pdf']), 'El personal solo puede enviar PDF (se revisa el contenido, no el nombre)', 'PDF');
+    rejects(fn() => $desk->send((int)$ticket['id'], $employeeView, '  '), 'Sin texto ni PDF no se envía nada', 'adjunta un PDF');
     $desk->close((int)$ticket['id'], $employeeView);
     check($db->one('SELECT status FROM support_tickets WHERE id=?', [$ticket['id']])['status'] === 'closed' && str_contains(lastTo($phone), 'quedó resuelto') && $staff->progress($employee)['day']['reports'] === 1, 'Cerrar el reporte avisa al paciente y cuenta en el avance del empleado');
     say($phone, 'hola');
@@ -176,12 +208,16 @@ try {
     $api = new App\N8nApi($app);
     $result = $api->handle(['action' => 'conversation.handle', 'phone' => $phone, 'message_id' => 'n8n-1', 'text' => 'Sigo esperando']);
     check($result['handled'] === true && count($desk->ticket((int)$byAdmin['id'], $adminView, false)['messages']) === 2, 'conversation.handle: n8n entrega el mensaje al chat abierto');
+    $result = $api->handle(['action' => 'conversation.handle', 'phone' => $phone, 'message_id' => 'n8n-3', 'text' => '', 'media' => ['data' => base64_encode($png), 'filename' => 'captura.png', 'mime_type' => 'image/png']]);
+    $last = end($desk->ticket((int)$byAdmin['id'], $adminView, false)['messages']);
+    check($result['handled'] === true && $last['attachment_mime'] === 'image/png' && $last['attachment_name'] === 'captura.png', 'conversation.handle: la foto que reenvía n8n llega al chat abierto');
     check($api->handle(['action' => 'conversation.handle', 'phone' => '573007770000', 'message_id' => 'n8n-2', 'text' => 'hola'])['handled'] === false, 'conversation.handle: sin reporte ni opción 2, n8n sigue con el bot normal');
 
     echo "\nPASS: $checks comprobaciones. Sin envíos externos.\n";
 } finally {
     if (!preg_match('/^citaya_test_[a-f0-9]{10}$/', $databaseName)) throw new RuntimeException('Invalid test database name');
     $server->exec("DROP DATABASE `$databaseName`");
-    foreach (['histories', 'outbox', 'wa-outbox', 'responses'] as $dir) { if (!is_dir($config['storage_path'] . '/' . $dir)) continue; foreach (glob($config['storage_path'] . '/' . $dir . '/*') as $file) unlink($file); rmdir($config['storage_path'] . '/' . $dir); }
+    foreach (glob($config['storage_path'] . '/*.png') ?: [] as $file) unlink($file);
+    foreach (['histories', 'outbox', 'wa-outbox', 'responses', 'support'] as $dir) { if (!is_dir($config['storage_path'] . '/' . $dir)) continue; foreach (glob($config['storage_path'] . '/' . $dir . '/*') as $file) unlink($file); rmdir($config['storage_path'] . '/' . $dir); }
     rmdir($config['storage_path']);
 }

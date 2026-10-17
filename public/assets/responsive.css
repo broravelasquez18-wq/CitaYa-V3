@@ -110,6 +110,8 @@
   .case-pair{grid-template-columns:minmax(0,1fr)}
   .chat-message{max-width:92%}
   .chat-form{flex-direction:column;align-items:stretch}
+  .chat-actions{flex-direction:row}
+  .chat-actions .button{flex:1}
   .report-item{flex-direction:column;align-items:flex-start}
   .report-meta{flex-direction:row;align-items:center;flex-wrap:wrap}
   .case-info{padding:var(--s4) var(--s3)}

@@ -7,7 +7,7 @@ $root = dirname(__DIR__);
 $localPath = $root . '/config/local.php';
 $config = require $root . '/config/default.php';
 if (is_file($localPath)) $config = array_replace($config, require $localPath);
-foreach (['/histories','/outbox','/sessions','/wa-outbox','/responses'] as $directory) {
+foreach (['/histories','/outbox','/sessions','/wa-outbox','/responses','/support'] as $directory) {
     if (!is_dir($config['storage_path'] . $directory)) mkdir($config['storage_path'] . $directory, 0700, true);
 }
 file_put_contents($config['storage_path'] . '/.htaccess', "Require all denied\n");
@@ -48,6 +48,10 @@ if (!$db->one("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SC
 }
 if (!$db->one("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='requests' AND COLUMN_NAME='contact_email'")) {
     $db->pdo->exec('ALTER TABLE requests ADD COLUMN contact_email VARCHAR(190) NULL AFTER claimed_name');
+}
+// Adjuntos del chat de reportes: imágenes o PDF del paciente y PDF que envía el personal.
+foreach (['attachment_storage' => 'VARCHAR(80) NULL', 'attachment_name' => 'VARCHAR(190) NULL', 'attachment_mime' => 'VARCHAR(40) NULL', 'attachment_size' => 'BIGINT UNSIGNED NULL', 'attachment_sha256' => 'CHAR(64) NULL', 'outbox_id' => 'BIGINT UNSIGNED NULL'] as $column => $definition) {
+    if (!$db->one("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='support_messages' AND COLUMN_NAME=?", [$column])) $db->pdo->exec("ALTER TABLE support_messages ADD $column $definition");
 }
 foreach (['Medicina general','Ortopedia y traumatología','Medicina interna','Ginecología','Pediatría','Dermatología','Cardiología','Neurología','Alergología'] as $name) {
     $db->run('INSERT IGNORE INTO specialties (name) VALUES (?)', [$name]);

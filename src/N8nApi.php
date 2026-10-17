@@ -78,7 +78,9 @@ final class N8nApi
         $phone = $this->phone($payload);
         $id = (string)($payload['message_id'] ?? '');
         if ($id === '' || strlen($id) > 190) throw new \DomainException('invalid_message_id');
-        return ['handled' => (new SupportDesk($this->app))->handle($phone, $id, mb_substr((string)($payload['text'] ?? ''), 0, 4000))];
+        // Foto o PDF del paciente (media: data en base64, filename, mime_type), con el mismo formato que trae el servicio QR.
+        $media = is_array($payload['media'] ?? null) ? WhatsApp::inboundMedia(['type' => 'document', 'document' => $payload['media']]) : null;
+        return ['handled' => (new SupportDesk($this->app))->handle($phone, $id, mb_substr((string)($payload['text'] ?? ''), 0, 4000), $media)];
     }
 
     /**
