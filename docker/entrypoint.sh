@@ -6,7 +6,7 @@ cd /var/www/html
 php docker/configure.php
 
 # 2) Asegura el almacenamiento (montado como volumen, se recrea en cada arranque).
-mkdir -p storage/histories storage/outbox storage/sessions
+mkdir -p storage/histories storage/outbox storage/sessions storage/wa-outbox storage/responses storage/support
 chown -R www-data:www-data storage config/local.php
 chmod -R 775 storage
 
@@ -20,6 +20,8 @@ if [ "${RUN_SETUP:-1}" = "1" ]; then
     sleep 2
   done
   php bin/setup.php || echo "Aviso: setup.php no completó (¿ya estaba preparada?)."
+  # setup.php corre como root: lo que haya creado debe quedar escribible para Apache (www-data).
+  chown -R www-data:www-data storage
   # Muestra las credenciales iniciales del administrador en los logs (solo la primera vez).
   if [ -f .runtime/first-login.txt ]; then
     echo "──────────── CREDENCIALES INICIALES ────────────"

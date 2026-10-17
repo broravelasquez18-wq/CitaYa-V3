@@ -1084,3 +1084,8 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
   - `support_messages` tiene columnas nuevas de adjunto y `outbox_id` (las agrega `bin/setup.php`). `n8n.php` y `whatsapp.php` aceptan cuerpos de hasta 16 MB.
 - **Despliegue.** El push a main reconstruye la app, el worker y el contenedor `whatsapp-qr`. El nodo «Procesar» del flujo «CitaYa · Bot WhatsApp» debe actualizarse y publicarse en n8n con `n8n/citaya-bot-whatsapp.json`; sin eso, las fotos llegan a n8n pero no a CitaYa.
 - **Validación.** `support` 64 en verde (10 nuevas: foto con pie, permisos para abrirla, PDF del paciente, archivo no admitido o sin datos, sin menú del bot, PDF del personal por la cola, PDF sin texto, solo PDF reales, envío vacío y foto vía n8n). `whatsapp` 91, `n8n-api` 30, `requests-admin` 46, `whatsapp-qr` 8 y bot de n8n 14 en verde. `admin-http` falla igual que antes del cambio (apunta a CitaYaV2).
+
+**Corrección (2026-10-17): las fotos no llegaban al chat en producción.**
+- **Causa.** `docker/entrypoint.sh` asignaba los permisos de `storage` antes de `bin/setup.php`. Como `setup.php` corre como root, creó `storage/support` con dueño root y modo 0700, y Apache (www-data) no podía guardar las fotos: `conversation.handle` devolvía 500 y el bot le mostraba el menú al paciente.
+- **Arreglo.** El entrypoint crea también `wa-outbox`, `responses` y `support` antes del `chown`, y vuelve a asignar los permisos después de `setup.php`. Si un adjunto no se puede guardar, el mensaje igual entra al chat con la nota, sin error ni menú.
+- **Validación.** `support` 64 en verde; `sh -n` del entrypoint sin errores. Diagnóstico en los logs de Dokploy: el QR entregaba los mensajes (HTTP 200) y la app registraba `Permission denied` en `storage/support`.

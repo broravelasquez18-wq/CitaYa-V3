@@ -340,7 +340,9 @@ final class SupportDesk
         if (!$media) return null;
         $data = $media['data'] ?? null;
         if (!is_string($data) || $data === '' || strlen($data) > self::MAX_ATTACHMENT_BYTES) return ['rejected' => true];
-        return $this->storeAttachment($data, (string)($media['name'] ?? ''), self::PATIENT_MIMES) ?? ['rejected' => true];
+        // Si no se puede guardar (disco, permisos), el mensaje igual llega al chat con la nota; no se le muestra el menú al paciente.
+        try { return $this->storeAttachment($data, (string)($media['name'] ?? ''), self::PATIENT_MIMES) ?? ['rejected' => true]; }
+        catch (\RuntimeException $error) { error_log('SupportDesk: ' . $error->getMessage()); return ['rejected' => true]; }
     }
 
     /** Guarda el archivo si su tipo real (no el declarado) está permitido. Devuelve las columnas del mensaje o null. */
