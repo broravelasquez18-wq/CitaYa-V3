@@ -1048,3 +1048,12 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
 - Si no se entiende, responde «No reconocimos esa especialidad…» y recuerda el *0*.
 - La fecha también acepta «no sé» o «ninguna».
 - `whatsapp` 91 en verde (7 nuevas). `support` 49, `n8n-api` 30 y `requests-admin` 46 en verde.
+
+**Ajuste (2026-10-17, pedido del titular): login y formulario más livianos.**
+- **Diagnóstico.** El servidor responde en ~25 ms; la lentitud estaba en el navegador. El fondo animado (`ambient.php`) del login tenía 56 animaciones infinitas y 20 elementos con filtros. Los halos usaban `blur(60px)` sobre 520 px mientras se escalaban. Las chispas animaban `filter: brightness`, lo que repinta en cada cuadro. El encabezado usaba `backdrop-filter`, que se recalculaba sobre el fondo en movimiento. El brillo de los botones animaba `left`, que recalcula el diseño en cada cuadro.
+- **Corrección (solo CSS/JS, mismo diseño).**
+  - Se quitó el `blur` de los halos (el degradado radial ya es difuso) y de dos cápsulas.
+  - Se quitaron el parpadeo de las chispas, el `backdrop-filter` del encabezado (ahora con fondo casi opaco) y el flotado infinito de los módulos.
+  - El brillo de los botones ahora usa `transform`.
+  - El fondo se pausa mientras se escribe (`body.is-typing`) y se reanuda 1,2 s después de la última tecla.
+- **Validación.** Login: 36 animaciones infinitas (antes 56) y 0 filtros (antes 20). Formulario: 29 animaciones y 0 filtros. Ninguna animación usa `left` ni `filter`. Se comprobó la pausa al escribir y que el aspecto se mantiene. `prefers-reduced-motion` sigue apagando el fondo.

@@ -803,7 +803,7 @@ body.ambient{--login-bg:#16273a;--login-panel:#1d3247;--login-line:#2f4a62;--log
   background-color:var(--login-bg);
   background-image:radial-gradient(900px 520px at 85% 35%,rgba(0,172,196,.14),transparent 70%),radial-gradient(700px 480px at 10% 80%,rgba(0,143,152,.12),transparent 70%),linear-gradient(rgba(169,190,201,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(169,190,201,.06) 1px,transparent 1px);
   background-size:auto,auto,40px 40px,40px 40px;color:var(--login-ink)}
-body.ambient .header{background:rgba(22,39,58,.85);border-bottom-color:var(--login-line);backdrop-filter:blur(8px)}
+body.ambient .header{background:rgba(22,39,58,.96);border-bottom-color:var(--login-line)}
 body.ambient .brand,body.ambient .brand:hover{color:var(--login-ink)}
 body.ambient .brand-context{color:var(--login-muted);border-left-color:var(--login-line)}
 body.ambient .header-nav a{color:var(--login-muted)}
@@ -872,7 +872,7 @@ body.ambient .shell{display:block}
 .login-glow{position:fixed;inset:0;z-index:0;overflow:hidden;overflow:clip;contain:strict;pointer-events:none}
 html:has(body.ambient),body.ambient{overflow-x:clip}
 body.ambient .login-shell,body.ambient .footer,body.ambient .shell>*{position:relative;z-index:1}
-.glow{position:absolute;border-radius:50%;filter:blur(60px);opacity:.55;will-change:transform}
+.glow{position:absolute;border-radius:50%;opacity:.55;will-change:transform}
 .glow-a{width:520px;height:520px;left:58%;top:8%;background:radial-gradient(circle,rgba(0,172,196,.55),transparent 65%);animation:glow-drift-a 22s ease-in-out infinite alternate}
 .glow-b{width:440px;height:440px;left:-6%;top:52%;background:radial-gradient(circle,rgba(0,143,152,.5),transparent 65%);animation:glow-drift-b 26s ease-in-out infinite alternate}
 .glow-c{width:360px;height:360px;left:30%;top:-12%;background:radial-gradient(circle,rgba(63,210,223,.35),transparent 65%);animation:glow-drift-c 30s ease-in-out infinite alternate}
@@ -881,9 +881,8 @@ body.ambient .login-shell,body.ambient .footer,body.ambient .shell>*{position:re
 @keyframes glow-drift-c{0%{transform:translate(0,0) scale(.9)}50%{transform:translate(140px,120px) scale(1.1)}100%{transform:translate(-80px,200px) scale(1)}}
 .grid-sweep{position:absolute;top:0;bottom:0;left:-30%;width:30%;background:linear-gradient(90deg,transparent,rgba(63,210,223,.07),transparent);transform:skewX(-12deg);animation:grid-sweep 11s linear infinite}
 @keyframes grid-sweep{from{transform:translateX(0) skewX(-12deg)}to{transform:translateX(480%) skewX(-12deg)}}
-.spark{position:absolute;bottom:-12px;border-radius:50%;background:#7ae6ee;box-shadow:0 0 8px 2px rgba(63,210,223,.7);opacity:0;animation-name:spark-rise,spark-twinkle;animation-timing-function:linear,ease-in-out;animation-iteration-count:infinite,infinite}
+.spark{position:absolute;bottom:-12px;border-radius:50%;background:#7ae6ee;box-shadow:0 0 8px 2px rgba(63,210,223,.7);opacity:0;animation-name:spark-rise;animation-timing-function:linear;animation-iteration-count:infinite}
 @keyframes spark-rise{0%{transform:translate(0,0);opacity:0}10%{opacity:.9}70%{opacity:.6}100%{transform:translate(30px,-105vh);opacity:0}}
-@keyframes spark-twinkle{0%,100%{filter:brightness(1)}50%{filter:brightness(1.8)}}
 .spark.s1{left:9.9%;width:3px;height:3px;animation-duration:10.1s,2.5s;animation-delay:-10.4s,-10.4s}
 .spark.s2{left:18.5%;width:5px;height:5px;animation-duration:9.7s,2.4s;animation-delay:-9.3s,-9.3s}
 .spark.s3{left:22.7%;width:3px;height:3px;animation-duration:9.6s,2.4s;animation-delay:-6.7s,-6.7s}
@@ -905,7 +904,7 @@ body.ambient .login-shell,body.ambient .footer,body.ambient .shell>*{position:re
 .login-lead{animation-delay:.15s}
 .login-modules-head{animation-delay:.25s}
 .login-modules{animation:none}
-.login-modules li{position:relative;overflow:hidden;animation:login-rise .6s var(--ease-out) both,module-float 6s ease-in-out infinite;transition:border-color .25s,box-shadow .25s,background-color .25s}
+.login-modules li{position:relative;overflow:hidden;animation:login-rise .6s var(--ease-out) both;transition:border-color .25s,box-shadow .25s,background-color .25s}
 .login-modules li:nth-child(1){animation-delay:.3s,1s}
 .login-modules li:nth-child(2){animation-delay:.38s,1.8s}
 .login-modules li:nth-child(3){animation-delay:.46s,2.6s}
@@ -922,7 +921,6 @@ body.ambient .login-shell,body.ambient .footer,body.ambient .shell>*{position:re
 .login-modules li:hover .login-module-icon{background:rgba(0,172,196,.2);transform:scale(1.08)}
 .login-module-icon{transition:transform .25s var(--ease-out),background-color .25s}
 @keyframes login-rise{from{opacity:0;transform:translateY(18px)}}
-@keyframes module-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 @keyframes module-shine{0%,70%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
 
 /* Tarjeta de acceso, emblema y botón. */
@@ -935,8 +933,10 @@ body.ambient .login-shell,body.ambient .footer,body.ambient .shell>*{position:re
 .login-status::before,.login-modules-head span:first-child::before{animation:status-blink 2.4s ease-in-out infinite}
 @keyframes status-blink{0%,100%{opacity:1}50%{opacity:.35}}
 .login-submit{position:relative;overflow:hidden}
-.login-submit::after{content:"";position:absolute;top:0;bottom:0;left:-40%;width:35%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.28),transparent);transform:skewX(-20deg);animation:button-shine 4.5s ease-in-out 1.2s infinite}
-@keyframes button-shine{0%,60%{left:-40%}100%{left:130%}}
+.login-submit::after{content:"";position:absolute;top:0;bottom:0;left:0;width:35%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.28),transparent);transform:translateX(-115%) skewX(-20deg);animation:button-shine 4.5s ease-in-out 1.2s infinite}
+@keyframes button-shine{0%,60%{transform:translateX(-115%) skewX(-20deg)}100%{transform:translateX(370%) skewX(-20deg)}}
+/* Mientras se escribe en el formulario, el fondo se detiene para que el teclado responda sin competir con la animación. */
+body.ambient.is-typing .login-glow *,body.ambient.is-typing .login-modules li::after{animation-play-state:paused}
 @media(prefers-reduced-motion:reduce){
   .glow,.grid-sweep,.login-modules li,.login-modules li::after,.login-emblem::before,.login-emblem::after,.login-submit::after,.login-status::before,.login-modules-head span:first-child::before{animation:none!important}
   .spark{display:none}
@@ -950,13 +950,13 @@ body.ambient .login-shell,body.ambient .footer,body.ambient .shell>*{position:re
 .tablet::after{content:"";position:absolute;left:18%;right:18%;top:50%;height:1.5px;margin-top:-.75px;background:rgba(63,210,223,.55)}
 .c1{left:6%;top:14%;--w:84px;--r:-24deg;--dur:26s}
 .c2{left:44%;top:72%;--w:64px;--r:38deg;--dur:22s;--delay:-6s}
-.c3{left:82%;top:78%;--w:92px;--r:-12deg;--dur:30s;--delay:-12s;opacity:.35;filter:blur(1.5px)}
+.c3{left:82%;top:78%;--w:92px;--r:-12deg;--dur:30s;--delay:-12s;opacity:.25}
 .c4{left:28%;top:40%;--w:52px;--r:62deg;--dur:20s;--delay:-3s;opacity:.3}
 .c5{left:92%;top:8%;--w:70px;--r:18deg;--dur:28s;--delay:-9s}
 .c6{left:14%;top:86%;--w:60px;--r:-50deg;--dur:24s;--delay:-15s;opacity:.4}
 .t1{left:52%;top:10%;--w:36px;--r:20deg;--dur:21s;--delay:-4s}
 .t2{left:70%;top:46%;--w:28px;--r:-30deg;--dur:19s;--delay:-8s;opacity:.4}
-.t3{left:3%;top:56%;--w:42px;--r:10deg;--dur:27s;--delay:-11s;opacity:.35;filter:blur(1px)}
+.t3{left:3%;top:56%;--w:42px;--r:10deg;--dur:27s;--delay:-11s;opacity:.25}
 .t4{left:60%;top:90%;--w:30px;--r:45deg;--dur:23s;--delay:-2s}
 @keyframes med-float{0%{transform:translate(0,0) rotate(var(--r,0deg))}50%{transform:translate(26px,-34px) rotate(calc(var(--r,0deg) + 40deg))}100%{transform:translate(-18px,-64px) rotate(calc(var(--r,0deg) + 90deg))}}
 @media(max-width:640px){.med{opacity:.32}.c3,.c5,.t2{display:none}}
@@ -976,7 +976,7 @@ body.ambient{transition:background-color .35s ease,color .35s ease}
 
 html[data-theme=light] body.ambient{--login-bg:#eef6f8;--login-panel:#fff;--login-line:#d3e3e8;--login-ink:#203648;--login-muted:#5c7380;--login-accent:#00737c;
   background-image:radial-gradient(900px 520px at 85% 35%,rgba(0,172,196,.12),transparent 70%),radial-gradient(700px 480px at 10% 80%,rgba(0,143,152,.1),transparent 70%),linear-gradient(rgba(32,54,72,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(32,54,72,.05) 1px,transparent 1px)}
-html[data-theme=light] body.ambient .header{background:rgba(255,255,255,.85)}
+html[data-theme=light] body.ambient .header{background:rgba(255,255,255,.96)}
 html[data-theme=light] body.ambient .header-nav a:hover,html[data-theme=light] body.ambient .header-nav a[aria-current=page]{color:var(--brand-hover);background:var(--brand-soft)}
 html[data-theme=light] .login-brand h1,html[data-theme=light] .login-panel h2{color:var(--ink)}
 html[data-theme=light] .login-brand h1>span,html[data-theme=light] .login-panel h2 span{color:var(--brand)}
@@ -1020,7 +1020,7 @@ body.request-page .form-section[data-section="2"]{animation-delay:.35s}
 body.request-page .form-section[data-section="3"]{animation-delay:.45s}
 @keyframes login-panel-up{from{opacity:0;transform:translateY(24px) scale(.985)}}
 body.request-page .button.cta{position:relative;overflow:hidden}
-body.request-page .button.cta::after{content:"";position:absolute;top:0;bottom:0;left:-40%;width:35%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.28),transparent);transform:skewX(-20deg);animation:button-shine 4.5s ease-in-out 1.5s infinite}
+body.request-page .button.cta::after{content:"";position:absolute;top:0;bottom:0;left:0;width:35%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.28),transparent);transform:translateX(-115%) skewX(-20deg);animation:button-shine 4.5s ease-in-out 1.5s infinite}
 @media(prefers-reduced-motion:reduce){body.request-page .button.cta::after{animation:none!important}}
 
 html:not([data-theme=light]) body.request-page{--stop-on-dark:#ff9c94}

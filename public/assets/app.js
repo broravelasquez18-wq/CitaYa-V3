@@ -498,6 +498,16 @@ document.querySelectorAll('[data-theme-toggle]').forEach(button => {
   sync();
 });
 
+// Fondo animado: se pausa mientras se escribe y se reanuda un momento después de la última tecla.
+if (document.body.classList.contains('ambient')) {
+  let typingTimer;
+  document.addEventListener('input', () => {
+    document.body.classList.add('is-typing');
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(() => document.body.classList.remove('is-typing'), 1200);
+  });
+}
+
 // Contraseña manual al editar una cuenta: si se escribe una nueva, la confirmación es obligatoria y debe coincidir.
 document.addEventListener('input', event => {
   const form = event.target.form;
