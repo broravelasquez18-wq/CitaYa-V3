@@ -5,7 +5,8 @@ namespace App;
 /**
  * Reporte de errores de la historia clínica por WhatsApp y chat con el paciente (SCRUM-47/48).
  *
- * El bot guía el reporte (qué historia, qué problema, descripción). «No me llegó / no abre» lo resuelve solo
+ * El bot guía el reporte (documento del paciente, qué historia, qué problema, descripción). El documento valida a la persona:
+ * solo se listan las historias enviadas a este WhatsApp para ese documento. «No me llegó / no abre» lo resuelve solo
  * reenviando la historia; lo demás abre un caso para el empleado que respondió esa historia (o el de menor carga)
  * y se le avisa en el panel (contador y aviso en pantalla). Mientras el caso está abierto, lo que escribe el paciente llega al chat del caso en el sistema y
  * el personal le contesta por el mismo número del bot. Los textos de los mensajes se guardan cifrados.
@@ -21,6 +22,7 @@ final class SupportDesk
         '5' => ['other', 'Otro problema', true],
     ];
     private const SESSION_MINUTES = 30;
+    private const DOCUMENT_TRIES = 3;
     private const DELIVERED = ['sent', 'simulated', 'queued', 'sending', 'retry', 'uncertain', 'failed'];
 
     public function __construct(private readonly Application $app) {}
@@ -62,11 +64,42 @@ final class SupportDesk
 
     private function start(string $phone, string $messageId): void
     {
-        $requests = $this->deliveredRequests($phone);
-        if (!$requests) {
-            $this->reply($phone, "No hay historias enviadas a este WhatsApp. Para pedir una, responde *1*.", $messageId, 'none');
+        $this->saveSession($phone, 'ask_document', ['tries' => 0]);
+        $this->reply($phone, "Para validar tu identidad, escribe el *número de documento* del paciente, sin puntos ni espacios.\n\n*0.* Cancelar", $messageId, 'document');
+    }
+
+    /** Valida el documento contra las historias enviadas a este WhatsApp antes de mostrar cualquiera. */
+    private function document(string $phone, string $messageId, string $text, array $data): void
+    {
+        $number = strtoupper(preg_replace('/[\s.\-]/', '', $text));
+        if (!preg_match('/^[A-Z0-9]{3,24}$/', $number) || !preg_match('/\d/', $number)) {
+            $this->reply($phone, 'Escribe solo el número de documento, sin puntos ni espacios (*0* para cancelar).', $messageId, 'document-retry');
             return;
         }
+        // Límite por chat: evita probar documentos ajenos.
+        try { $this->app->limit('support-document:' . $phone, 10, 3600); }
+        catch (\DomainException) {
+            $this->endSession($phone);
+            $this->reply($phone, 'Demasiados intentos. Inténtalo más tarde.', $messageId, 'document-limit');
+            return;
+        }
+        $requests = $this->deliveredRequests($phone, $number);
+        if (!$requests) {
+            $tries = (int)($data['tries'] ?? 0) + 1;
+            if ($tries >= self::DOCUMENT_TRIES) {
+                $this->endSession($phone);
+                $this->reply($phone, 'No pudimos validar el documento con las historias enviadas a este WhatsApp. Si necesitas una historia, responde *1*.', $messageId, 'document-failed');
+                return;
+            }
+            $this->saveSession($phone, 'ask_document', ['tries' => $tries]);
+            $this->reply($phone, 'Ese documento no tiene historias enviadas a este WhatsApp. Revísalo y escríbelo de nuevo (*0* para cancelar).', $messageId, 'document-mismatch');
+            return;
+        }
+        $this->chooseRequest($phone, $messageId, $requests);
+    }
+
+    private function chooseRequest(string $phone, string $messageId, array $requests): void
+    {
         if (count($requests) === 1) { $this->askCategory($phone, $messageId, (int)$requests[0]['id']); return; }
         $lines = [];
         foreach ($requests as $index => $request) $lines[] = '*' . ($index + 1) . '.* ' . $request['reference'] . ' (' . date('d/m/Y', strtotime($request['created_at'])) . ')';
@@ -76,6 +109,10 @@ final class SupportDesk
 
     private function step(string $phone, string $messageId, string $text, string $state, array $data): bool
     {
+        if ($state === 'ask_document') {
+            $this->document($phone, $messageId, $text, $data);
+            return true;
+        }
         if ($state === 'choose_request') {
             $choice = (int)$text;
             if ($choice < 1 || !isset($data['ids'][$choice - 1])) { $this->reply($phone, 'Responde con el número de la historia (*0* para cancelar).', $messageId, 'retry'); return true; }
@@ -122,11 +159,11 @@ final class SupportDesk
         $this->reply($phone, "¿Qué problema tiene tu historia?\n\n" . implode("\n", $options) . "\n\n*0.* Cancelar", $messageId, 'category');
     }
 
-    /** Historias enviadas (o respondidas como Aprobado) a este WhatsApp, de la más reciente a la más antigua. */
-    public function deliveredRequests(string $phone): array
+    /** Historias de ese documento enviadas (o respondidas como Aprobado) a este WhatsApp, de la más reciente a la más antigua. */
+    public function deliveredRequests(string $phone, string $document): array
     {
-        return $this->app->db->all("SELECT id,reference,created_at FROM requests WHERE whatsapp_phone=?
-            AND (status IN ('" . implode("','", self::DELIVERED) . "') OR resolution='approved') ORDER BY id DESC LIMIT 5", [$phone]);
+        return $this->app->db->all("SELECT id,reference,created_at FROM requests WHERE whatsapp_phone=? AND claimed_document_number=?
+            AND (status IN ('" . implode("','", self::DELIVERED) . "') OR resolution='approved') ORDER BY id DESC LIMIT 5", [$phone, $document]);
     }
 
     /** Crea el caso y lo asigna al empleado que respondió la historia o, si no hubo, al de menor carga. */

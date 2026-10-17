@@ -95,7 +95,9 @@ try {
     say($phone, 'hola');
     check(str_contains(lastTo($phone), '*1.* Solicitar historia clínica') && str_contains(lastTo($phone), '*2.* Reportar un error'), 'El menú del bot ofrece las dos opciones');
     say($phone, '2');
-    check(str_contains(lastTo($phone), '¿Qué problema tiene tu historia?') && str_contains(lastTo($phone), 'No me llegó'), 'Con una sola historia enviada, el bot pregunta directamente el tipo de problema');
+    check(str_contains(lastTo($phone), 'número de documento') && !str_contains(lastTo($phone), 'HC-'), 'Al reportar, el bot pide primero el documento y no muestra ninguna historia');
+    say($phone, '7.000.0001');
+    check(str_contains(lastTo($phone), '¿Qué problema tiene tu historia?') && str_contains(lastTo($phone), 'No me llegó'), 'Con el documento validado y una sola historia, el bot pregunta directamente el tipo de problema');
     $delivery = $db->one("SELECT id FROM whatsapp_outbox WHERE request_id=? AND kind='response'", [$requestId]);
     say($phone, '1');
     $requeued = $db->one('SELECT status,progress FROM whatsapp_outbox WHERE id=?', [$delivery['id']]);
@@ -106,6 +108,7 @@ try {
 
     // --- Reporte que requiere empleado ---
     say($phone, 'quiero reportar un error');
+    say($phone, '70000001');
     say($phone, '2');
     check(str_contains(lastTo($phone), 'Cuéntanos en un mensaje'), 'Para datos incorrectos el bot pide la descripción');
     say($phone, 'Mi segundo apellido está mal escrito');
@@ -137,10 +140,19 @@ try {
     say($phone, '0');
     check(!$db->one('SELECT phone FROM whatsapp_sessions WHERE phone=?', [$phone]) && str_contains(lastTo($phone), 'Soy el asistente'), 'Responder 0 cancela el reporte y vuelve al menú');
     say('573009998888', '2');
-    check(str_contains(lastTo('573009998888'), 'No hay historias enviadas'), 'Sin historias enviadas a ese WhatsApp, el bot lo indica');
-    $second = pendingRequest($phone, '70000002');
+    say('573009998888', '70000001');
+    check(str_contains(lastTo('573009998888'), 'no tiene historias enviadas a este WhatsApp'), 'Un documento ajeno desde otro WhatsApp no muestra historias');
+    say('573009998888', 'abc');
+    check(str_contains(lastTo('573009998888'), 'Escribe solo el número'), 'Un documento mal escrito se vuelve a pedir sin gastar intentos');
+    say('573009998888', '70000009'); say('573009998888', '70000008');
+    check(str_contains(lastTo('573009998888'), 'No pudimos validar') && !$db->one('SELECT phone FROM whatsapp_sessions WHERE phone=?', ['573009998888']), 'Tras tres documentos que no coinciden, el reporte se cierra');
+    $foreign = pendingRequest($phone, '70000002');
+    $app->respondCase($foreign, $admin, 'approved', 'Historia de otro paciente.', [['path' => $pdf, 'name' => 'historia.pdf']]);
+    $second = pendingRequest($phone, '70000001');
     $app->respondCase($second, $admin, 'approved', 'Segunda historia.', [['path' => $pdf, 'name' => 'historia.pdf']]);
     say($phone, '2');
+    say($phone, '70000001');
+    check(!str_contains(lastTo($phone), $app->request($foreign)['reference']), 'Solo se listan las historias del documento validado, no las de otro paciente del mismo WhatsApp');
     check(str_contains(lastTo($phone), '¿Sobre cuál historia es el reporte?') && str_contains(lastTo($phone), $app->request($second)['reference']), 'Con varias historias, el bot pregunta sobre cuál es el reporte');
     say($phone, '9');
     check(str_contains(lastTo($phone), 'Responde con el número'), 'Una opción inválida se vuelve a pedir');

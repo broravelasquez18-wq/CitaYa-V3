@@ -1057,3 +1057,12 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
   - El brillo de los botones ahora usa `transform`.
   - El fondo se pausa mientras se escribe (`body.is-typing`) y se reanuda 1,2 s después de la última tecla.
 - **Validación.** Login: 36 animaciones infinitas (antes 56) y 0 filtros (antes 20). Formulario: 29 animaciones y 0 filtros. Ninguna animación usa `left` ni `filter`. Se comprobó la pausa al escribir y que el aspecto se mantiene. `prefers-reduced-motion` sigue apagando el fondo.
+
+**Ajuste (2026-10-17, pedido del titular): el reporte por WhatsApp valida primero el documento.**
+- **Antes.** Con la opción 2, el bot identificaba al paciente solo por el número de WhatsApp verificado. Listaba de una vez las historias enviadas a ese número, con su radicado y su fecha.
+- **Ahora.** `SupportDesk` pide primero el *número de documento* del paciente (estado `ask_document`) y no muestra nada hasta validarlo.
+  - Solo se listan las historias enviadas a este WhatsApp **para ese documento** (`claimed_document_number`). Si en un mismo número hay historias de varios pacientes, cada uno ve solo las suyas.
+  - El documento se normaliza igual que en la solicitud (se quitan puntos, espacios y guiones). Un texto que no parece documento se vuelve a pedir sin contar como intento.
+  - Hasta 3 documentos que no coinciden; luego el reporte se cierra. Hay además un límite de 10 consultas de documento por hora por chat (`support-document:`). *0* cancela, como antes.
+- El flujo de n8n no cambia: sigue enviando el mensaje a `conversation.handle`.
+- **Validación.** `support` 53 en verde (5 nuevas: pide el documento sin mostrar historias, documento ajeno, documento mal escrito, cierre tras 3 intentos, solo las historias del documento validado). `whatsapp` 91, `n8n-api` 30, `requests-admin` 46 y `whatsapp-qr` 8 en verde.
