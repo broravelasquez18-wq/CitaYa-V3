@@ -1089,3 +1089,8 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
 - **Causa.** `docker/entrypoint.sh` asignaba los permisos de `storage` antes de `bin/setup.php`. Como `setup.php` corre como root, creó `storage/support` con dueño root y modo 0700, y Apache (www-data) no podía guardar las fotos: `conversation.handle` devolvía 500 y el bot le mostraba el menú al paciente.
 - **Arreglo.** El entrypoint crea también `wa-outbox`, `responses` y `support` antes del `chown`, y vuelve a asignar los permisos después de `setup.php`. Si un adjunto no se puede guardar, el mensaje igual entra al chat con la nota, sin error ni menú.
 - **Validación.** `support` 64 en verde; `sh -n` del entrypoint sin errores. Diagnóstico en los logs de Dokploy: el QR entregaba los mensajes (HTTP 200) y la app registraba `Permission denied` en `storage/support`.
+
+**Ajuste (2026-10-17, pedido del titular): «Cerrar sesión» pasa del menú lateral al encabezado.**
+- El botón sale del final del rail (`templates/admin.php`) y queda al final del encabezado del acceso interno (`templates/layout.php`), solo con sesión iniciada. En el rail queda el nombre y el rol.
+- En pantallas de 650 px o menos el botón muestra solo el ícono (el texto queda para lectores de pantalla). En la barra horizontal del móvil ya no se reserva espacio para la sesión.
+- **Validación.** Revisado en local a 1366 px y a 375 px. Al pulsarlo se cierra la sesión y se vuelve al inicio.

@@ -25,8 +25,8 @@
   .rail-nav a.selected::before{left:var(--s3);right:var(--s3);top:auto;bottom:-2px;width:auto;height:3px;border-radius:3px 3px 0 0}
   .rail-nav a:nth-child(3){margin-bottom:0;margin-right:var(--s3)}
   .rail-nav a:nth-child(3)::after{left:auto;right:calc(var(--s2) * -1);top:10px;bottom:10px;width:1px;height:auto}
-  .rail-session{border-top:0;border-left:1px solid var(--line);padding:0 0 0 var(--s3);flex-shrink:0}
-  .rail-user{display:none}
+  /* En la barra horizontal solo caben las secciones; cerrar sesión está en el encabezado. */
+  .rail-session{display:none}
   .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
   .stat:nth-child(3){border-left:0}
   .stat:nth-child(n+3){border-top:1px solid var(--line)}
@@ -66,6 +66,8 @@
   body.staff .header{padding:0 var(--s4)}
   .brand-context{display:none}
   .header-nav a{padding:0 var(--s2);font-size:var(--t-xs);min-height:44px}
+  .header-logout button{min-height:44px;padding:0 var(--s2)}
+  .header-logout span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
   .shell{padding:var(--s4) var(--s4) var(--s6)}
   body.staff .shell{padding:0}
   .rail{top:56px}

@@ -43,7 +43,7 @@ $pageActions = [
 <a class="<?= $active ? 'selected' : '' ?>" href="?page=<?= $target ?>" <?= $active ? 'aria-current="page"' : '' ?>><?= ui_icon($iconName, 19) ?><span class="rail-label"><?= h($label) ?></span><?php if ($count): ?> <span class="tab-count" aria-label="<?= $count ?> <?= $countLabel ?>"><?= $count ?></span><?php endif ?><?php if ($target === 'whatsapp' && !empty($whatsappDisconnected)): ?><span class="rail-alert" aria-label="desconectado"></span><?php endif ?></a>
 <?php endforeach ?>
 </nav>
-<div class="rail-session"><span class="rail-user"><?= ui_icon('user', 18) ?><span><strong><?= h($_SESSION['admin_name'] ?? '') ?></strong><small><?= $isAdmin ? 'Administrador' : 'Empleado' ?></small></span></span><form method="post"><?= csrf() ?><input type="hidden" name="action" value="logout"><button class="rail-logout" aria-label="Cerrar sesión" title="Cerrar sesión"><?= ui_icon('logout', 18) ?><span>Salir</span></button></form></div>
+<div class="rail-session"><span class="rail-user"><?= ui_icon('user', 18) ?><span><strong><?= h($_SESSION['admin_name'] ?? '') ?></strong><small><?= $isAdmin ? 'Administrador' : 'Empleado' ?></small></span></span></div>
 </aside>
 <div class="console-main">
 <header class="page-head"><div><h1><?= h($pageTitle) ?></h1><?php if ($pageLead !== ''): ?><p><?= h($pageLead) ?></p><?php endif ?></div><?php if ($pageActions !== ''): ?><div class="page-actions"><?= $pageActions ?></div><?php endif ?></header>

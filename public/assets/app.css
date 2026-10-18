@@ -77,6 +77,11 @@ html{scrollbar-color:var(--line-strong) transparent}
 .header-nav a{display:flex;align-items:center;min-height:40px;padding:0 var(--s3);border-radius:var(--radius);color:var(--muted);font-size:var(--t-sm);font-weight:600;text-decoration:none}
 .header-nav a:hover{color:var(--brand-hover);background:var(--brand-soft)}
 .header-nav a[aria-current=page]{color:var(--brand-hover);background:var(--brand-soft)}
+/* Cerrar sesión del acceso interno: al final del encabezado, junto a la navegación. */
+body.staff .header-nav{margin-left:auto}
+.header-logout{margin:0}
+.header-logout button{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 var(--s3);border:1px solid var(--line-strong);border-radius:var(--radius);background:transparent;color:var(--ink-2);font-size:var(--t-sm);font-weight:700;white-space:nowrap}
+.header-logout button:hover{background:var(--surface-2);border-color:var(--brand);color:var(--ink)}
 body.staff .header{padding:0 var(--s5)}
 
 /* Contenedor */
@@ -247,9 +252,7 @@ details>summary:hover{color:var(--brand)}
 .rail-user{display:flex;align-items:center;gap:var(--s2);min-width:0;padding-left:var(--s2)}
 .rail-user strong{display:block;font-size:var(--t-sm);color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rail-user small{color:var(--muted);margin:0}
-.rail-session form{margin:0}
-.rail-logout{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 var(--s3);border:1px solid var(--line-strong);border-radius:var(--radius);background:transparent;color:var(--ink-2);font-size:var(--t-sm);font-weight:700}
-.rail-logout:hover{background:var(--surface-2);border-color:var(--brand)}
+
 .console-main{min-width:0;padding:var(--s6) var(--s6) var(--s7);max-width:1320px}
 .page-head{margin-bottom:var(--s5)}
 .page-head h1{font-size:var(--t-xl);margin:0 0 var(--s1)}
