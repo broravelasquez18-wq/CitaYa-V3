@@ -52,13 +52,16 @@
   .responsive-table td.empty-cell{grid-column:1/-1}
   .responsive-table td.empty-cell::before{content:none}
   .responsive-table td[data-label="Paciente"],.responsive-table td[data-label="Radicado / fecha"],
-  .responsive-table td[data-label="Correo de entrega"],.responsive-table td[data-label="Atención médica"],
+  .responsive-table td[data-label="Correo de entrega"],.responsive-table td[data-label="Contacto"],.responsive-table td[data-label="Atención médica"],
   .responsive-table td[data-label="Atención"],.responsive-table td[data-label="Tipo de requerimiento"],
   .responsive-table td[data-label="Archivos"],.responsive-table td[data-label="Paciente / atención"],
   .responsive-table td[data-label="Resultado"],.responsive-table td[data-label="Persona"]{grid-column:1/-1}
   .responsive-table td:last-child{grid-column:1/-1;border-top:1px solid var(--line);padding-top:var(--s3)}
   .responsive-table td[data-label="Radicado / fecha"]{order:-1}
   .delivery-email{min-width:0}
+  /* En la tarjeta: el nombre sigue en una línea (con «…» si no cabe) y el correo se puede partir. */
+  .responsive-table td .cell-name{overflow:hidden;text-overflow:ellipsis}
+  .cell-email{max-width:none;white-space:normal;overflow-wrap:anywhere}
 }
 
 @media(max-width:650px){

@@ -1103,3 +1103,13 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
   - **Retirar un paquete sigue siendo solo del administrador.** El empleado no ve la columna «Acción», y la acción `withdraw` sigue protegida en el servidor.
   - El separador del menú ahora va después de las 4 secciones de todo el personal, y no se dibuja si es la última (empleado).
 - **Validación.** En local, con un empleado de prueba (`.runtime/empleado-prueba.txt`): ve Repositorio y abre el panel de carga. Su carga llega a la validación de los PDF (un archivo falso se rechaza con el mensaje de siempre), y «Retirar» lo devuelve a Solicitudes con «Esa sección es solo para administradores».
+
+**Ajuste (2026-10-17, pedido del titular): tabla de Solicitudes más clara.**
+- **Antes.** La columna del correo ocupaba el espacio y el nombre del paciente se partía en varias líneas, igual que la cédula (p. ej. «111222094 / 9»). El plazo y los envíos eran columnas aparte, y la tabla se desbordaba en pantallas de 1280 px.
+- **Ahora** (`templates/deliveries.php`; el nombre y la cédula también en `delivery-history-rows.php`):
+  - **Paciente:** el nombre va en una sola línea, y si es muy largo termina en «…» con el nombre completo al pasar el mouse. Debajo va el tipo de documento y el número en mono, sin partirse.
+  - **Contacto:** reemplaza «Correo de entrega». El correo va en una línea (recortado con el completo al pasar el mouse) y, si aplica, «WhatsApp» debajo.
+  - **Estado:** las pastillas van apiladas. En Pendientes, el plazo va aquí en forma corta («Quedan 5 h», «Vencida hace 2 h»; el detalle exacto al pasar el mouse) y los envíos como texto («1 envío»). Quedan 5 columnas en ambas pestañas.
+  - **Fila completa clicable:** abre el detalle de la solicitud, igual que el botón del ojo. Los botones de la fila conservan su acción, y seleccionar texto no abre nada.
+  - En el celular siguen siendo tarjetas; el nombre va en una línea y el correo se puede partir.
+- **Validación.** En local a 1280 px, sin desborde aun con un nombre de 45 caracteres y el plazo vencido. Clic en la fila abre el detalle. Revisado a 375 px. La rama de Pendientes se probó con datos ficticios en CLI («Vencida hace 6 h», «Quedan 50 min»). `requests-admin` 46 y `support` 64 en verde.

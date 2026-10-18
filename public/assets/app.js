@@ -720,6 +720,15 @@ document.addEventListener('click', event => {
   });
 })();
 
+// Tablas de solicitudes: un clic en cualquier parte de la fila abre el detalle (igual que el botón del ojo).
+// Los botones, enlaces y formularios de la fila conservan su propia acción; seleccionar texto no abre nada.
+document.addEventListener('click', event => {
+  const row = event.target.closest('tr[data-row-open]');
+  if (!row || event.target.closest('a, button, form, input, label, select, textarea')) return;
+  if (String(window.getSelection?.() || '').trim()) return;
+  row.querySelector('[data-row-primary]')?.click();
+});
+
 // Chat de un reporte de error: baja al último mensaje, se actualiza cada 8 s y Ctrl+Enter envía.
 (() => {
   const thread = document.querySelector('[data-chat-thread]');

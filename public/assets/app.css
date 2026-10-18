@@ -628,6 +628,24 @@ details[open]>summary::before{transform:rotate(90deg)}
 td[data-label="Radicado / fecha"]{min-width:190px}
 .delivery-email{min-width:220px}
 
+/* Tablas de solicitudes: nombre y documento en una sola línea, fila completa abre el detalle. */
+.nowrap{white-space:nowrap}
+td .cell-name{white-space:nowrap;max-width:210px;overflow:hidden;text-overflow:ellipsis;color:var(--ink)}
+td .cell-doc{white-space:nowrap;color:var(--ink-2)}
+.cell-doc .doc-type{font-weight:700;color:var(--muted);font-size:var(--t-xs)}
+.cell-email{display:block;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-2)}
+td .cell-channel{display:inline-flex;align-items:center;gap:4px;margin-top:4px;color:var(--ok);font-weight:600}
+.status-stack{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.status-stack .pill+.pill{margin-left:0}
+.status-stack small{margin-top:0}
+.requests-table td,.history-table td{vertical-align:middle}
+.requests-table td[data-label="Radicado / fecha"]{min-width:0}
+.requests-table .cell-email{max-width:150px}
+.requests-table th,.requests-table td{padding-left:10px;padding-right:10px}
+tr[data-row-open]{cursor:pointer}
+tr[data-row-open]:hover td{background:var(--surface-2)}
+tr[data-row-open]:hover .cell-name{color:var(--brand-hover)}
+
 /* ───────── Superficies ─────────
    Drawer: formularios (crear, cargar, plantillas). Modal: detalles y formularios cortos (editar).
    Aviso (.alert-modal): algo importante o una confirmación. Toast: fallos, confirmaciones y novedades.
