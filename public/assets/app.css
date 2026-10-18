@@ -246,8 +246,9 @@ details>summary:hover{color:var(--brand)}
 .rail-nav a.selected{background:var(--brand-soft);color:var(--brand-hover)}
 .rail-nav a.selected::before{content:"";position:absolute;left:-12px;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--brand)}
 .rail-label{flex:1;min-width:0}
-.rail-nav a:nth-child(3){margin-bottom:var(--s3)}
-.rail-nav a:nth-child(3)::after{content:"";position:absolute;left:var(--s3);right:var(--s3);bottom:calc(var(--s2) * -1);height:1px;background:var(--line)}
+/* Separa las secciones de todo el personal (4) de las solo de administración. */
+.rail-nav a:nth-child(4):not(:last-child){margin-bottom:var(--s3)}
+.rail-nav a:nth-child(4):not(:last-child)::after{content:"";position:absolute;left:var(--s3);right:var(--s3);bottom:calc(var(--s2) * -1);height:1px;background:var(--line)}
 .rail-session{display:flex;align-items:center;justify-content:space-between;gap:var(--s2);padding:var(--s3) 0 0;border-top:1px solid var(--line)}
 .rail-user{display:flex;align-items:center;gap:var(--s2);min-width:0;padding-left:var(--s2)}
 .rail-user strong{display:block;font-size:var(--t-sm);color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

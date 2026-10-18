@@ -1094,3 +1094,12 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
 - El botón sale del final del rail (`templates/admin.php`) y queda al final del encabezado del acceso interno (`templates/layout.php`), solo con sesión iniciada. En el rail queda el nombre y el rol.
 - En pantallas de 650 px o menos el botón muestra solo el ícono (el texto queda para lectores de pantalla). En la barra horizontal del móvil ya no se reserva espacio para la sesión.
 - **Validación.** Revisado en local a 1366 px y a 375 px. Al pulsarlo se cierra la sesión y se vuelve al inicio.
+
+**Ajuste (2026-10-17, pedido del titular): el empleado puede cargar historias clínicas.**
+- **Antes.** Cargar historias (una atención o carga masiva) y la página Repositorio eran solo del administrador.
+- **Ahora.**
+  - El empleado ve «Repositorio» en el menú y puede usar «Cargar historias», con una atención o con varias.
+  - Las acciones `upload` y `bulk-upload` piden sesión del personal (`requireStaff`). Cada carga queda en el registro de eventos (`histories_uploaded`) con quién la hizo.
+  - **Retirar un paquete sigue siendo solo del administrador.** El empleado no ve la columna «Acción», y la acción `withdraw` sigue protegida en el servidor.
+  - El separador del menú ahora va después de las 4 secciones de todo el personal, y no se dibuja si es la última (empleado).
+- **Validación.** En local, con un empleado de prueba (`.runtime/empleado-prueba.txt`): ve Repositorio y abre el panel de carga. Su carga llega a la validación de los PDF (un archivo falso se rechaza con el mensaje de siempre), y «Retirar» lo devuelve a Solicitudes con «Esa sección es solo para administradores».

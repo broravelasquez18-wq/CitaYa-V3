@@ -23,8 +23,8 @@
   .call-state h2{white-space:normal}
   .rail-nav a{flex-shrink:0;scroll-snap-align:start;min-height:44px;white-space:nowrap}
   .rail-nav a.selected::before{left:var(--s3);right:var(--s3);top:auto;bottom:-2px;width:auto;height:3px;border-radius:3px 3px 0 0}
-  .rail-nav a:nth-child(3){margin-bottom:0;margin-right:var(--s3)}
-  .rail-nav a:nth-child(3)::after{left:auto;right:calc(var(--s2) * -1);top:10px;bottom:10px;width:1px;height:auto}
+  .rail-nav a:nth-child(4):not(:last-child){margin-bottom:0;margin-right:var(--s3)}
+  .rail-nav a:nth-child(4):not(:last-child)::after{left:auto;right:calc(var(--s2) * -1);top:10px;bottom:10px;width:1px;height:auto}
   /* En la barra horizontal solo caben las secciones; cerrar sesión está en el encabezado. */
   .rail-session{display:none}
   .stats{grid-template-columns:repeat(2,minmax(0,1fr))}

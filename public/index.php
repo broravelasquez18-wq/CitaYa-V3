@@ -223,18 +223,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 (new App\MessageTemplates($app))->reset((string)($_POST['code'] ?? ''), (int)$_SESSION['admin_id']);
                 $_SESSION['flash'] = 'Se restauró el texto predeterminado de la plantilla.';
                 go('templates');
+            // Cargar historias: administradores y empleados. Retirar un paquete sigue siendo solo del administrador.
             case 'upload':
-                requireAdmin(); $_SESSION['upload_mode']='single'; $uploads = [];
+                requireStaff(); $_SESSION['upload_mode']='single'; $uploads = [];
                 foreach (($_FILES['pdfs']['name'] ?? []) as $i => $name) $uploads[] = ['name' => $name, 'tmp_name' => $_FILES['pdfs']['tmp_name'][$i], 'error' => $_FILES['pdfs']['error'][$i]];
                 $repository = new App\Repository($app);
                 $_SESSION['single_upload_result'] = $repository->summary($repository->registerPackage($_POST, $uploads)) + ['received' => count($uploads)];
+                $app->event(null, 'histories_uploaded', 'single:staff_' . (int)$_SESSION['admin_id']);
                 $_SESSION['upload_result_pending'] = 'single';
                 $_SESSION['flash'] = 'Historia completa registrada y disponible para solicitudes.'; go('admin');
             case 'bulk-upload':
-                requireAdmin(); $_SESSION['upload_mode']='bulk'; $uploads=[];
+                requireStaff(); $_SESSION['upload_mode']='bulk'; $uploads=[];
                 foreach (($_FILES['bulk_pdfs']['name'] ?? []) as $i=>$name) $uploads[]=['name'=>$name,'tmp_name'=>$_FILES['bulk_pdfs']['tmp_name'][$i],'error'=>$_FILES['bulk_pdfs']['error'][$i]];
                 set_time_limit(180);
                 $_SESSION['bulk_report']=(new App\BulkImport($app))->receive($_POST,$uploads);
+                $app->event(null, 'histories_uploaded', 'bulk:staff_' . (int)$_SESSION['admin_id']);
                 unset($_SESSION['single_upload_result']);
                 $_SESSION['upload_result_pending'] = 'bulk';
                 $_SESSION['csrf']=bin2hex(random_bytes(32));
@@ -263,7 +266,7 @@ if (in_array($page, ['delivery', 'case-history', 'report'], true) && ($_GET['fra
     exit('La sesión administrativa venció. Inicia sesión nuevamente.');
 }
 // Empleado: Solicitudes, reportes de error y su avance. Administrador: además el resto del sistema y los empleados.
-if (in_array($page, ['deliveries','delivery','case-history','reports','report','report-file','progress','notifications'], true)) requireStaff();
+if (in_array($page, ['deliveries','delivery','case-history','reports','report','report-file','progress','notifications','admin'], true)) requireStaff();
 if ($page === 'report-file') {
     // Foto o PDF del chat de un reporte; solo para quien puede ver ese reporte.
     $file = (new App\SupportDesk($app))->attachment((int)($_GET['id'] ?? 0), currentStaff());
@@ -281,7 +284,7 @@ if ($page === 'notifications') {
     echo json_encode(['items' => (new App\SupportDesk($app))->notifications(currentStaff())], JSON_UNESCAPED_UNICODE);
     exit;
 }
-if (in_array($page, ['admin','inbox','mail','history','analytics','templates','whatsapp','employees'], true)) requireAdmin();
+if (in_array($page, ['inbox','mail','history','analytics','templates','whatsapp','employees'], true)) requireAdmin();
 $supportCount = !empty($_SESSION['admin_id']) ? (new App\SupportDesk($app))->unreadCount(currentStaff()) : 0;
 $staffList = $page === 'employees' ? (new App\Staff($app))->all((string)($_GET['q'] ?? '')) : null;
 $myProgress = $page === 'progress' ? ['progress' => (new App\Staff($app))->progress((int)$_SESSION['admin_id']), 'recent' => (new App\Staff($app))->recentResponses((int)$_SESSION['admin_id'])] : null;
