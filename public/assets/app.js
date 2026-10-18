@@ -720,6 +720,65 @@ document.addEventListener('click', event => {
   });
 })();
 
+// Análisis: un solo aviso flotante para las donas (por segmento) y la gráfica de crecimiento (cruz que busca el mes).
+// Los textos se insertan con textContent; los mismos datos están en las tablas de «Ver los datos».
+(() => {
+  const tip = document.querySelector('.chart-tooltip');
+  if (!tip) return;
+  const place = (x, y) => {
+    tip.hidden = false;
+    const box = tip.getBoundingClientRect();
+    tip.style.left = Math.min(window.innerWidth - box.width - 8, x + 14) + 'px';
+    tip.style.top = Math.max(8, y - box.height - 12) + 'px';
+  };
+  const fill = (title, rows) => {
+    tip.replaceChildren();
+    const strong = document.createElement('strong'); strong.textContent = title; tip.append(strong);
+    rows.forEach(([text, value, key]) => {
+      const row = document.createElement('span');
+      if (key) { row.className = 'tip-row'; row.style.setProperty('--key', key); }
+      const b = document.createElement('b'); b.textContent = value;
+      row.append(b, document.createTextNode(' ' + text));
+      tip.append(row);
+    });
+  };
+  const hide = () => { tip.hidden = true; };
+  document.querySelectorAll('.donut-segment').forEach(segment => {
+    const show = (x, y) => { fill(segment.dataset.tip, [['', segment.dataset.tipValue]]); place(x, y); };
+    segment.addEventListener('pointermove', event => show(event.clientX, event.clientY));
+    segment.addEventListener('focus', () => { const r = segment.getBoundingClientRect(); show(r.left + r.width / 2, r.top + r.height / 2); });
+    segment.addEventListener('pointerleave', hide);
+    segment.addEventListener('blur', hide);
+  });
+  document.querySelectorAll('[data-growth]').forEach(frame => {
+    const data = JSON.parse(frame.dataset.growth);
+    const svg = frame.querySelector('svg'), hit = frame.querySelector('.hit-area'), cross = frame.querySelector('.crosshair');
+    let index = data.points.length - 1;
+    const show = (i, x, y) => {
+      index = i;
+      const p = data.points[i];
+      cross.setAttribute('x1', data.x[i]); cross.setAttribute('x2', data.x[i]); cross.classList.add('on');
+      fill(p.label, [['solicitudes', p.requests.toLocaleString('es-CO'), 'var(--series-1)'], ['enviadas', p.sent.toLocaleString('es-CO'), 'var(--series-2)']]);
+      place(x, y);
+    };
+    const nearest = clientX => {
+      const r = svg.getBoundingClientRect(), vx = (clientX - r.left) / r.width * data.width;
+      return data.x.reduce((best, x, i) => Math.abs(x - vx) < Math.abs(data.x[best] - vx) ? i : best, 0);
+    };
+    hit.addEventListener('pointermove', event => show(nearest(event.clientX), event.clientX, event.clientY));
+    const keyShow = i => { const r = svg.getBoundingClientRect(); show(i, r.left + data.x[i] / data.width * r.width, r.top + 20); };
+    hit.addEventListener('focus', () => keyShow(index));
+    hit.addEventListener('keydown', event => {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+      event.preventDefault();
+      keyShow(Math.max(0, Math.min(data.points.length - 1, index + (event.key === 'ArrowRight' ? 1 : -1))));
+    });
+    const leave = () => { cross.classList.remove('on'); hide(); };
+    hit.addEventListener('pointerleave', leave);
+    hit.addEventListener('blur', leave);
+  });
+})();
+
 // Tablas de solicitudes: un clic en cualquier parte de la fila abre el detalle (igual que el botón del ojo).
 // Los botones, enlaces y formularios de la fila conservan su propia acción; seleccionar texto no abre nada.
 document.addEventListener('click', event => {

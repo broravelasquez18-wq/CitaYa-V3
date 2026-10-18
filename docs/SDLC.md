@@ -1113,3 +1113,13 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
   - **Fila completa clicable:** abre el detalle de la solicitud, igual que el botón del ojo. Los botones de la fila conservan su acción, y seleccionar texto no abre nada.
   - En el celular siguen siendo tarjetas; el nombre va en una línea y el correo se puede partir.
 - **Validación.** En local a 1280 px, sin desborde aun con un nombre de 45 caracteres y el plazo vencido. Clic en la fila abre el detalle. Revisado a 375 px. La rama de Pendientes se probó con datos ficticios en CLI («Vencida hace 6 h», «Quedan 50 min»). `requests-admin` 46 y `support` 64 en verde.
+
+**Ajuste (2026-10-17, pedido del titular): Análisis con gráficas circulares y de crecimiento.**
+- **Antes.** Una tabla de especialidades con barras de participación y los totales por día, mes y año.
+- **Ahora** (`templates/analytics.php`, `AppointmentAnalytics::trend()` y `channels()`):
+  - **Resumen del mes:** solicitudes recibidas, historias enviadas y atenciones del mes, con la variación frente al mes anterior. Si el mes anterior fue 0, se muestra la cifra en vez de un porcentaje. Un solo filtro de mes controla todo el módulo.
+  - **Crecimiento de 12 meses:** líneas de solicitudes e historias enviadas, en un solo eje. Al pasar el mouse (o con las flechas del teclado) se ve el mes con sus valores. La tabla queda en «Ver los datos por mes», con las atenciones incluidas.
+  - **Donas:** atenciones por especialidad (top 5 + «Otras») y solicitudes por canal (WhatsApp / solo web). Cada una lleva el total en el centro, leyenda con cifra y porcentaje, aviso al pasar el mouse y su tabla completa.
+  - La paleta categórica está validada para daltonismo con el validador del skill de visualización (pasa todas las pruebas; contraste bajo en 3 colores, compensado con leyenda y tabla). Se asigna por clases porque la CSP (`style-src 'self'`) bloquea los estilos en línea; el primer intento con `style="…"` dejó las líneas sin color.
+  - Los totales por día, mes y año se conservan al final. DESIGN.md actualizado: ya no prohíbe las gráficas circulares.
+- **Validación.** `analytics` 24 en verde (6 nuevas: 12 meses, conteos por mes con ceros, canales, render con dos donas y tabla, mes vacío sin división por cero). Revisado en local a 1366 px y 375 px (sin desplazamiento horizontal), con los avisos de dona y de crecimiento funcionando.

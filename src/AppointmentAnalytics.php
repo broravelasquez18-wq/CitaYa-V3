@@ -33,6 +33,35 @@ final class AppointmentAnalytics
         return ['date'=>$date, 'totals'=>$totals];
     }
 
+    /**
+     * Crecimiento: solicitudes recibidas, envíos reales de la historia y atenciones con PDF por mes, en los $months
+     * meses que terminan en $month (YYYY-MM, ya validado por monthly). Los meses sin datos quedan en 0.
+     */
+    public function trend(string $month, int $months = 12): array
+    {
+        $end = (new \DateTimeImmutable($month . '-01'))->modify('+1 month');
+        $start = $end->modify('-' . $months . ' months');
+        $range = [$start->format('Y-m-d H:i:s'), $end->format('Y-m-d H:i:s')];
+        $series = [
+            'requests' => $this->db->all("SELECT DATE_FORMAT(created_at,'%Y-%m') m, COUNT(*) n FROM requests WHERE created_at>=? AND created_at<? GROUP BY m", $range),
+            'sent' => $this->db->all("SELECT DATE_FORMAT(sent_at,'%Y-%m') m, COUNT(*) n FROM jobs WHERE kind='history' AND status='sent' AND sent_at>=? AND sent_at<? GROUP BY m", $range),
+            'attentions' => $this->db->all("SELECT DATE_FORMAT(e.attended_at,'%Y-%m') m, COUNT(*) n FROM encounters e WHERE e.attended_at>=? AND e.attended_at<? AND " . self::HAS_PDF . ' GROUP BY m', [$start->format('Y-m-d'), $end->format('Y-m-d')]),
+        ];
+        $points = [];
+        for ($cursor = $start; $cursor < $end; $cursor = $cursor->modify('+1 month')) $points[$cursor->format('Y-m')] = ['month' => $cursor->format('Y-m'), 'requests' => 0, 'sent' => 0, 'attentions' => 0];
+        foreach ($series as $key => $rows) foreach ($rows as $row) if (isset($points[$row['m']])) $points[$row['m']][$key] = (int)$row['n'];
+        return array_values($points);
+    }
+
+    /** Solicitudes del mes por canal: las vinculadas a un WhatsApp y las que llegaron solo por la web. */
+    public function channels(string $month): array
+    {
+        $start = new \DateTimeImmutable($month . '-01');
+        $row = $this->db->one('SELECT COALESCE(SUM(whatsapp_phone IS NOT NULL),0) whatsapp, COALESCE(SUM(whatsapp_phone IS NULL),0) web FROM requests WHERE created_at>=? AND created_at<?',
+            [$start->format('Y-m-d H:i:s'), $start->modify('+1 month')->format('Y-m-d H:i:s')]);
+        return ['whatsapp' => (int)$row['whatsapp'], 'web' => (int)$row['web']];
+    }
+
     public function monthly(string $month = ''): array
     {
         if ($month === '') {

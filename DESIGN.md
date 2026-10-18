@@ -331,7 +331,7 @@ Banda noche en Solicitudes con el total en espera en mono 2.25rem y su rótulo e
 ### Cifras y tablas
 - **Estadísticas:** banda blanca de 10px dividida por filetes, etiqueta en `muted` y cifra mono 1.75rem.
 - **Tablas:** cabecera `surface-2` pegajosa a 0.8125rem/700; filas con filete de 1px; en móvil, tarjetas etiquetadas.
-- **Barras de participación (análisis):** columna final de la tabla de especialidades, ordenada de mayor a menor, con una barra SVG de 10px de alto: pista `surface-2`, relleno noche proporcional al máximo, dibujada con atributos (no estilos). Sin paleta categórica ni gráfico de torta.
+- **Gráficas del análisis (desde 2026-10-17, pedido del titular):** el módulo abre con tres cifras del mes y su variación frente al mes anterior. Le sigue una gráfica de crecimiento de 12 meses (líneas de 2px, un solo eje, cruz que busca el mes con aviso flotante) y dos donas: especialidades (las 5 con más atenciones con color, el resto en «Otras», gris) y canal de la solicitud. Las donas tienen leyenda con cifra y porcentaje y un total en el centro, y cada gráfica deja su tabla en «Ver los datos». La paleta categórica es fija y validada para daltonismo (azul, naranja, aguamarina, amarillo, magenta) y se asigna por clase (`c1…c5`, `c-other`), nunca con estilos en línea, porque la CSP no los permite. Los textos van en tinta, nunca en el color de la serie.
 
 ### Diálogos y progreso
 Encabezado noche pegajoso con título blanco y botón de cierre de 44px con filete `night-line`; cuerpo blanco; entrada de 0.28s con `cubic-bezier(.16,1,.3,1)`. La barra de progreso de cola es una pista de 8px con relleno ámbar en barrido (noche para la carga de archivos con porcentaje; rojo si falla).
@@ -355,7 +355,7 @@ Conjunto propio de trazo único de 1.8px en cuadrícula de 24, `currentColor`, 1
 - **Don't** usar atributos `style` ni bloques `<style>`: la CSP `style-src 'self'` los bloquea.
 - **Don't** pintar en ámbar un estado terminado, un botón, un encabezado o un adorno.
 - **Don't** comunicar un estado solo con color.
-- **Don't** usar una paleta categórica (torta, barras multicolor) para comparar especialidades; se ordenan y se miden en tinta noche.
+- **Don't** pasar de 5 colores en una dona ni rotar el orden de la paleta: el resto va a «Otras». Tampoco quitar la tabla de respaldo de una gráfica.
 - **Don't** poner dos placas invertidas dominantes en la misma pantalla.
 - **Don't** añadir sombras a tarjetas, tablas o placas, ni degradados suaves o biseles.
 - **Don't** convertir el rótulo «RADICADO» en un patrón de sobretítulos en mayúsculas para secciones.

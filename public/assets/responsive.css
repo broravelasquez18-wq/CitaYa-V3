@@ -37,6 +37,9 @@
   .analytics-filter{flex-wrap:wrap}
   .activity-grid{grid-template-columns:minmax(0,1fr)}
   .activity-period+.activity-period{border-left:0;border-top:1px solid var(--line)}
+  .analytics-split{grid-template-columns:minmax(0,1fr)}
+  .kpi-row{grid-template-columns:minmax(0,1fr)}
+  .kpi+.kpi{border-left:0;border-top:1px solid var(--line)}
 }
 
 @media(max-width:700px){

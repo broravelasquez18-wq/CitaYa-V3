@@ -43,3 +43,15 @@ foreach(['2026-02-29','2026-04-31','2026-6-1','9999-01-01','invalid'] as $date){
 analyticsCheck(true,'Valida fechas de referencia');
 $analytics=$service->monthly('2026-06');ob_start();require dirname(__DIR__).'/templates/analytics.php';$html=ob_get_clean();
 analyticsCheck(str_contains($html,'Totales de solicitudes y envíos') && str_contains($html,'2026-06-15'),'Render de resumen y filtros conservados');
+// Gráficas: crecimiento de 12 meses y canales del mes.
+$trend=$service->trend('2026-06');
+$june=end($trend);
+analyticsCheck(count($trend)===12 && $trend[0]['month']==='2025-07' && $june['month']==='2026-06','Crecimiento: 12 meses que terminan en el mes consultado');
+analyticsCheck($june===['month'=>'2026-06','requests'=>3,'sent'=>3,'attentions'=>3] && $june['attentions']===$service->monthly('2026-06')['total'] && $trend[5]['month']==='2025-12' && $trend[5]['requests']===1 && $trend[6]['requests']===1,'Crecimiento: cuenta solicitudes, envíos reales y atenciones por mes, con ceros en meses vacíos');
+$db->pdo->exec('ALTER TABLE requests ADD whatsapp_phone VARCHAR(20) NULL');
+$db->pdo->exec("UPDATE requests SET whatsapp_phone='573000000000' WHERE id IN (1,4)");
+analyticsCheck($service->channels('2026-06')===['whatsapp'=>1,'web'=>2] && $service->channels('2026-08')===['whatsapp'=>0,'web'=>0],'Canales: WhatsApp frente a solo web, y mes vacío en cero');
+$channels=$service->channels('2026-06');ob_start();require dirname(__DIR__).'/templates/analytics.php';$html=ob_get_clean();
+analyticsCheck(substr_count($html,'class="donut"')===2 && str_contains($html,'data-growth') && str_contains($html,'Ver los datos por mes') && !str_contains($html,'NAN'),'Render con dos donas, la gráfica de crecimiento y la tabla de respaldo');
+$analytics=$service->monthly('2026-08');$trend=$service->trend('2026-08');$channels=$service->channels('2026-08');ob_start();require dirname(__DIR__).'/templates/analytics.php';$html=ob_get_clean();
+analyticsCheck(str_contains($html,'No hay atenciones registradas') && str_contains($html,'No hubo solicitudes') && !str_contains($html,'NAN') && !str_contains($html,'INF'),'Mes vacío: estados vacíos sin división por cero');

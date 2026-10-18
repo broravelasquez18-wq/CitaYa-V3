@@ -310,6 +310,9 @@ if ($page === 'analytics') {
     $service = new App\AppointmentAnalytics($app->db);
     try { $analytics = $service->monthly((string)($_GET['month'] ?? '')); }
     catch (DomainException $exception) { $error = $exception->getMessage(); $analytics = $service->monthly(); }
+    // Gráficas: crecimiento de 12 meses y canales del mes consultado.
+    $trend = $service->trend($analytics['month']);
+    $channels = $service->channels($analytics['month']);
     try { $activity = $service->activity((string)($_GET['activity_date'] ?? '')); }
     catch (DomainException $exception) { $error = $exception->getMessage(); $activity = $service->activity(); }
 }
