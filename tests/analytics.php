@@ -55,3 +55,19 @@ $channels=$service->channels('2026-06');ob_start();require dirname(__DIR__).'/te
 analyticsCheck(substr_count($html,'class="donut"')===2 && str_contains($html,'data-growth') && str_contains($html,'Ver los datos por mes') && !str_contains($html,'NAN'),'Render con dos donas, la gráfica de crecimiento y la tabla de respaldo');
 $analytics=$service->monthly('2026-08');$trend=$service->trend('2026-08');$channels=$service->channels('2026-08');ob_start();require dirname(__DIR__).'/templates/analytics.php';$html=ob_get_clean();
 analyticsCheck(str_contains($html,'No hay atenciones registradas') && str_contains($html,'No hubo solicitudes') && !str_contains($html,'NAN') && !str_contains($html,'INF'),'Mes vacío: estados vacíos sin división por cero');
+// Especialidad con más demanda por día, mes y año (atenciones con PDF por fecha de atención).
+$day=$service->bySpecialty('day','2026-06-15');
+analyticsCheck($day['total']===1 && $day['top'][0]['name']==='Ortopedia' && $day['start']==='2026-06-15','Demanda del día: solo las atenciones de ese día');
+$monthDemand=$service->bySpecialty('month','2026-06-20');
+analyticsCheck($monthDemand['start']==='2026-06-01' && $monthDemand['total']===$service->monthly('2026-06')['total'] && count($monthDemand['top'])===1 && $monthDemand['top'][0]['name']==='Ortopedia','Demanda del mes: coincide con el análisis mensual y señala la más demandada');
+$yearDemand=$service->bySpecialty('year','2026-03-01');
+analyticsCheck($yearDemand['start']==='2026-01-01' && $yearDemand['total']===4 && $yearDemand['top'][0]['name']==='Medicina general','Demanda del año: suma todos los meses del año y excluye otros años');
+$db->pdo->exec("INSERT INTO encounters VALUES (7,1,'2026-06-20 08:00:00')");$db->pdo->exec('INSERT INTO packages VALUES (7,7)');$db->pdo->exec('INSERT INTO clinical_files VALUES (8,7)');
+analyticsCheck(array_column($service->bySpecialty('month','2026-06-01')['top'],'name')===['Medicina general','Ortopedia'],'Empate: se muestran todas las especialidades en el primer lugar');
+analyticsCheck($service->bySpecialty('day','2026-06-02')['total']===0 && $service->bySpecialty('day','2026-06-02')['top']===[],'Día sin atenciones: total cero y sin más demandada');
+foreach([['week','2026-06-01'],['day','2026-02-30'],['month','junio']] as [$period,$date]){try{$service->bySpecialty($period,$date);throw new RuntimeException('Aceptó período o fecha inválidos');}catch(DomainException){}}
+analyticsCheck(true,'Rechaza períodos y fechas inválidos');
+$specialty=$service->bySpecialty('month','2026-06-01');$analytics=$service->monthly('2026-06');$trend=$service->trend('2026-06');$channels=$service->channels('2026-06');ob_start();require dirname(__DIR__).'/templates/analytics.php';$html=ob_get_clean();
+analyticsCheck(str_contains($html,'¿Qué especialidad tuvo más demanda?') && str_contains($html,'Empate en el primer lugar') && str_contains($html,'Medicina general y Ortopedia') && str_contains($html,'sp=day') && str_contains($html,'sp=year'),'Render: selector día/mes/año y destacado con empate');
+$specialty=$service->bySpecialty('year','2026-01-01');ob_start();require dirname(__DIR__).'/templates/analytics.php';$html=ob_get_clean();
+analyticsCheck(str_contains($html,'el año 2026') && str_contains($html,'type="number" name="sp_date"'),'Render: período anual con selector de año');

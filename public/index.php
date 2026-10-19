@@ -313,6 +313,15 @@ if ($page === 'analytics') {
     // Gráficas: crecimiento de 12 meses y canales del mes consultado.
     $trend = $service->trend($analytics['month']);
     $channels = $service->channels($analytics['month']);
+    // Especialidad con más demanda por día, mes o año. Sin fecha propia, el mes sigue al filtro del resumen.
+    $specialtyPeriod = in_array($_GET['sp'] ?? '', ['day', 'month', 'year'], true) ? $_GET['sp'] : 'month';
+    // El campo cambia según el período: fecha (día), mes (AAAA-MM) o año (AAAA); se lleva al primer día.
+    $specialtyDate = (string)($_GET['sp_date'] ?? '');
+    if (preg_match('/^\d{4}-\d{2}$/D', $specialtyDate)) $specialtyDate .= '-01';
+    elseif (preg_match('/^\d{4}$/D', $specialtyDate)) $specialtyDate .= '-01-01';
+    if ($specialtyDate === '' && $specialtyPeriod === 'month') $specialtyDate = $analytics['month'] . '-01';
+    try { $specialty = $service->bySpecialty($specialtyPeriod, $specialtyDate); }
+    catch (DomainException $exception) { $error = $exception->getMessage(); $specialty = $service->bySpecialty($specialtyPeriod); }
     try { $activity = $service->activity((string)($_GET['activity_date'] ?? '')); }
     catch (DomainException $exception) { $error = $exception->getMessage(); $activity = $service->activity(); }
 }

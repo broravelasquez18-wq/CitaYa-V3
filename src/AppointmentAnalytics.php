@@ -72,15 +72,47 @@ final class AppointmentAnalytics
             throw new \DomainException('Selecciona un mes y año válidos.');
         }
         $start = new \DateTimeImmutable($month . '-01');
+        return ['month'=>$month] + $this->ranking($start, $start->modify('+1 month'));
+    }
+
+    /**
+     * Especialidad con más demanda en un día, mes o año: atenciones con PDF por especialidad en el período que contiene
+     * $date (YYYY-MM-DD). Sin fecha, toma el último día con atenciones. 'top' trae la(s) especialidad(es) con más atenciones (empates).
+     */
+    public function bySpecialty(string $period, string $date = ''): array
+    {
+        if (!in_array($period, ['day', 'month', 'year'], true)) throw new \DomainException('Selecciona día, mes o año.');
+        if ($date === '') {
+            $latest = $this->db->one('SELECT MAX(e.attended_at) latest FROM encounters e WHERE ' . self::HAS_PDF);
+            $date = $latest['latest'] ? substr($latest['latest'], 0, 10) : date('Y-m-d');
+        }
+        $day = \DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+        if (!$day || $day->format('Y-m-d') !== $date || (int)$day->format('Y') < 1000 || (int)$day->format('Y') > 9998) {
+            throw new \DomainException('Selecciona una fecha válida para la demanda por especialidad.');
+        }
+        $start = match ($period) {
+            'day' => $day,
+            'month' => $day->modify('first day of this month'),
+            'year' => $day->setDate((int)$day->format('Y'), 1, 1),
+        };
+        $end = $start->modify(['day' => '+1 day', 'month' => '+1 month', 'year' => '+1 year'][$period]);
+        $result = ['period' => $period, 'date' => $date, 'start' => $start->format('Y-m-d')] + $this->ranking($start, $end);
+        $result['top'] = $result['rows'] ? array_values(array_filter($result['rows'], fn($row) => $row['total'] === $result['rows'][0]['total'])) : [];
+        return $result;
+    }
+
+    /** Atenciones con PDF por especialidad en [$start, $end), de mayor a menor, con su porcentaje. */
+    private function ranking(\DateTimeImmutable $start, \DateTimeImmutable $end): array
+    {
         $rows = $this->db->all('SELECT s.id, s.name, COUNT(*) total FROM encounters e JOIN specialties s ON s.id=e.specialty_id
             WHERE e.attended_at>=? AND e.attended_at<? AND ' . self::HAS_PDF . '
-            GROUP BY s.id,s.name ORDER BY total DESC,s.name ASC,s.id ASC', [$start->format('Y-m-d'), $start->modify('+1 month')->format('Y-m-d')]);
+            GROUP BY s.id,s.name ORDER BY total DESC,s.name ASC,s.id ASC', [$start->format('Y-m-d'), $end->format('Y-m-d')]);
         $total = array_sum(array_column($rows, 'total'));
         foreach ($rows as &$row) {
             $row['total'] = (int)$row['total'];
             $row['percentage'] = $row['total'] / $total * 100;
         }
         unset($row);
-        return ['month'=>$month, 'total'=>$total, 'rows'=>$rows];
+        return ['total'=>$total, 'rows'=>$rows];
     }
 }

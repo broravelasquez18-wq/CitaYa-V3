@@ -38,6 +38,9 @@
   .activity-grid{grid-template-columns:minmax(0,1fr)}
   .activity-period+.activity-period{border-left:0;border-top:1px solid var(--line)}
   .analytics-split{grid-template-columns:minmax(0,1fr)}
+  .demand-filter{width:100%}
+  .demand-filter .segmented{display:flex;width:100%}
+  .demand-filter .segmented a{flex:1}
   .kpi-row{grid-template-columns:minmax(0,1fr)}
   .kpi+.kpi{border-left:0;border-top:1px solid var(--line)}
 }

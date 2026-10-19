@@ -1092,7 +1092,7 @@ html[data-theme=light] body.request-page .request-hero h1{color:var(--ink)}
 
 /* ───────── Análisis: resumen, crecimiento y donas ─────────
    Paleta categórica validada (orden fijo, nunca rotado); «Otras» va en gris. Los textos usan tokens de tinta, nunca el color de la serie. */
-.analytics-overview,.analytics-split,.chart-tooltip{--series-1:#2a78d6;--series-2:#eb6834;--series-3:#1baf7a;--series-4:#eda100;--series-5:#e87ba4;--series-other:#b4b9c0}
+.analytics-overview,.analytics-split,.demand-card,.chart-tooltip{--series-1:#2a78d6;--series-2:#eb6834;--series-3:#1baf7a;--series-4:#eda100;--series-5:#e87ba4;--series-other:#b4b9c0}
 .analytics-overview{margin-bottom:var(--s5)}
 .kpi-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin:var(--s4) 0 var(--s5);border:1px solid var(--line);border-radius:var(--radius-lg);overflow:hidden}
 .kpi{padding:var(--s4) var(--s5);min-width:0}
@@ -1124,7 +1124,7 @@ html[data-theme=light] body.request-page .request-hero h1{color:var(--ink)}
 .chart-table{margin-top:var(--s4)}
 .chart-table summary{cursor:pointer;font-size:var(--t-sm);font-weight:700;color:var(--info)}
 .chart-table .table-wrap{margin-top:var(--s3)}
-.analytics-split{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:var(--s5);margin-bottom:var(--s5);align-items:start}
+.analytics-split{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:var(--s5);margin-bottom:var(--s5);align-items:start}
 .analytics-split .card{margin:0}
 .donut-block{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:var(--s5);margin-top:var(--s3)}
 .donut-wrap{position:relative;width:180px;flex-shrink:0}
@@ -1135,14 +1135,25 @@ html[data-theme=light] body.request-page .request-hero h1{color:var(--ink)}
 .donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;margin:0;pointer-events:none}
 .donut-center strong{font-size:1.75rem;line-height:1.1;color:var(--ink)}
 .donut-center span{font-size:var(--t-xs);color:var(--muted)}
-.donut-legend{list-style:none;margin:0;padding:0;flex:1 1 220px;min-width:0;display:grid;gap:var(--s2)}
+.donut-legend{list-style:none;margin:0;padding:0;flex:1 1 220px;min-width:0;max-width:480px;display:grid;gap:var(--s2)}
 .donut-legend li{display:grid;grid-template-columns:12px minmax(0,1fr) auto auto;align-items:center;gap:var(--s2);font-size:var(--t-sm)}
 .swatch{width:12px;height:12px;border-radius:3px;background:var(--c)}
 /* Color de cada serie por clase (la CSP no permite estilos en línea). */
-.c1{--c:var(--series-1)}.c2{--c:var(--series-2)}.c3{--c:var(--series-3)}.c4{--c:var(--series-4)}.c5{--c:var(--series-5)}.c-other{--c:var(--series-other)}
+.sc1{--c:var(--series-1)}.sc2{--c:var(--series-2)}.sc3{--c:var(--series-3)}.sc4{--c:var(--series-4)}.sc5{--c:var(--series-5)}.sc-other{--c:var(--series-other)}
 .legend-name{color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .legend-value{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;color:var(--ink)}
 .legend-share{min-width:48px;text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+.demand-card{margin-bottom:var(--s5)}
+.demand-card .donut-block{justify-content:flex-start;gap:var(--s6,40px)}
+
+.demand-filter{display:flex;flex-wrap:wrap;align-items:flex-end;gap:var(--s3)}
+.demand-filter .segmented{margin:0}
+.demand-filter .segmented a{white-space:nowrap;justify-content:center}
+.demand-filter input[type=number]{min-width:110px}
+.demand-top{display:flex;flex-direction:column;gap:2px;margin:var(--s3) 0 var(--s4);padding:var(--s4) var(--s5);border:1px solid var(--line);border-left:4px solid var(--brand);border-radius:var(--radius)}
+.demand-kicker{display:inline-flex;align-items:center;gap:6px;font-size:var(--t-xs);font-weight:700;color:var(--ink-2)}
+.demand-top strong{font-size:var(--t-lg);line-height:1.25;color:var(--ink)}
+.demand-top>span:last-child{font-size:var(--t-sm);color:var(--ink-2)}
 .chart-note{margin:var(--s3) 0 0;font-size:var(--t-xs);color:var(--muted)}
 .chart-tooltip{position:fixed;z-index:60;pointer-events:none;min-width:120px;padding:var(--s2) var(--s3);border-radius:var(--radius);background:var(--surface);border:1px solid var(--line-strong);box-shadow:0 6px 20px rgba(16,24,40,.14);font-size:var(--t-sm)}
 .chart-tooltip strong{display:block;color:var(--ink)}

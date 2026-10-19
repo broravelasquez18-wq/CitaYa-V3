@@ -1123,3 +1123,13 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
   - La paleta categórica está validada para daltonismo con el validador del skill de visualización (pasa todas las pruebas; contraste bajo en 3 colores, compensado con leyenda y tabla). Se asigna por clases porque la CSP (`style-src 'self'`) bloquea los estilos en línea; el primer intento con `style="…"` dejó las líneas sin color.
   - Los totales por día, mes y año se conservan al final. DESIGN.md actualizado: ya no prohíbe las gráficas circulares.
 - **Validación.** `analytics` 24 en verde (6 nuevas: 12 meses, conteos por mes con ceros, canales, render con dos donas y tabla, mes vacío sin división por cero). Revisado en local a 1366 px y 375 px (sin desplazamiento horizontal), con los avisos de dona y de crecimiento funcionando.
+
+**Ajuste (2026-10-17, pedido del titular): especialidad con más demanda por día, mes y año.**
+- **Necesidad.** Una función central del análisis es ver qué especialidad tuvo más demanda en un día, un mes o un año. Antes solo se podía ver por mes.
+- **Ahora** (`AppointmentAnalytics::bySpecialty()`; `monthly()` comparte la consulta en `ranking()`):
+  - Sección a todo el ancho «¿Qué especialidad tuvo más demanda?», con selector Día / Mes / Año y su propio campo de fecha (fecha, mes o año). Parámetros `sp` y `sp_date`. Sin fecha propia, el mes sigue al filtro del resumen y el día toma el último día con atenciones.
+  - Un destacado nombra la especialidad más demandada con sus atenciones y su porcentaje. Si hay empate, nombra todas («Empate en el primer lugar»).
+  - Debajo van la dona (top 5 + «Otras»), la leyenda y la tabla completa del período. Un período sin atenciones muestra un estado vacío.
+  - La métrica sigue siendo la base del módulo: atenciones con PDF por fecha de atención, cada una contada una vez.
+- **Corrección de paso.** Las clases de color `c1…c5` chocaban con las cápsulas decorativas del login (`.c3`, `.c4` con opacidad; `.c3`, `.c5` ocultas en móvil). Se renombraron a `sc1…sc5` / `sc-other`.
+- **Validación.** `analytics` 32 en verde (8 nuevas: día, mes igual al análisis mensual, año, empate, día vacío, períodos o fechas inválidos, y render del selector con empate y del período anual). Revisado en local a 1366 px y 375 px con día (vacío), mes y año.

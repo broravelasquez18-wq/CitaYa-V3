@@ -27,7 +27,7 @@ $donut = static function (array $parts, string $label): string {
     }
     return $svg . '</svg>';
 };
-$colors = ['c1', 'c2', 'c3', 'c4', 'c5'];
+$colors = ['sc1', 'sc2', 'sc3', 'sc4', 'sc5'];
 $current = isset($trend) ? end($trend) : null;
 $previous = isset($trend) && count($trend) > 1 ? $trend[count($trend) - 2] : null;
 ?>
@@ -53,14 +53,14 @@ $line = static fn(string $key) => implode(' ', array_map(fn($i) => number_format
 $points = array_map(fn($p) => ['label' => $monthNames[substr($p['month'], 5, 2)] . ' ' . substr($p['month'], 0, 4), 'requests' => $p['requests'], 'sent' => $p['sent']], $trend);
 ?>
 <figure class="growth-chart">
-<figcaption><span class="chart-title">Crecimiento en los últimos 12 meses</span><span class="chart-legend"><span class="legend-line c1">Solicitudes recibidas</span><span class="legend-line c2">Historias enviadas</span></span></figcaption>
+<figcaption><span class="chart-title">Crecimiento en los últimos 12 meses</span><span class="chart-legend"><span class="legend-line sc1">Solicitudes recibidas</span><span class="legend-line sc2">Historias enviadas</span></span></figcaption>
 <div class="chart-frame" data-growth='<?= h(json_encode(['points' => $points, 'x' => array_map(fn($i) => round($x($i), 1), array_keys($trend)), 'width' => $w], JSON_UNESCAPED_UNICODE)) ?>'>
 <svg viewBox="0 0 <?= $w ?> <?= $hgt ?>" role="img" aria-label="Solicitudes y envíos por mes, últimos 12 meses. Los valores están en la tabla de abajo.">
 <?php for ($t = 0; $t <= 4; $t++): $value = $step * $t; $ty = $y($value); ?><line class="grid" x1="<?= $left ?>" x2="<?= $w - $right ?>" y1="<?= $ty ?>" y2="<?= $ty ?>"/><text class="tick" x="<?= $left - 8 ?>" y="<?= $ty + 4 ?>" text-anchor="end"><?= $fmt($value) ?></text><?php endfor ?>
 <?php foreach ($trend as $i => $p): $mm = substr($p['month'], 5, 2); ?><text class="tick" x="<?= $x($i) ?>" y="<?= $hgt - 10 ?>" text-anchor="middle"><?= $monthShort[$mm] ?><?= $mm === '01' || $i === 0 ? ' ' . substr($p['month'], 2, 2) : '' ?></text><?php endforeach ?>
-<polyline class="series-line c1" points="<?= $line('requests') ?>"/>
-<polyline class="series-line c2" points="<?= $line('sent') ?>"/>
-<?php $last = $count - 1; foreach (['requests' => 'c1', 'sent' => 'c2'] as $key => $color): ?><circle class="series-dot <?= $color ?>" cx="<?= $x($last) ?>" cy="<?= $y($trend[$last][$key]) ?>" r="4.5"/><?php endforeach ?>
+<polyline class="series-line sc1" points="<?= $line('requests') ?>"/>
+<polyline class="series-line sc2" points="<?= $line('sent') ?>"/>
+<?php $last = $count - 1; foreach (['requests' => 'sc1', 'sent' => 'sc2'] as $key => $color): ?><circle class="series-dot <?= $color ?>" cx="<?= $x($last) ?>" cy="<?= $y($trend[$last][$key]) ?>" r="4.5"/><?php endforeach ?>
 <line class="crosshair" x1="0" x2="0" y1="<?= $top ?>" y2="<?= $hgt - $bottom ?>" />
 <rect class="hit-area" x="<?= $left ?>" y="0" width="<?= $w - $left - $right ?>" height="<?= $hgt - $bottom ?>" tabindex="0" aria-label="Recorre los meses con las flechas"/>
 </svg>
@@ -72,35 +72,56 @@ $points = array_map(fn($p) => ['label' => $monthNames[substr($p['month'], 5, 2)]
 </section>
 <?php endif ?>
 
-<div class="analytics-split">
-<section class="card analytics-card" aria-labelledby="specialty-title">
-<div class="chart-heading"><h2 id="specialty-title">Atenciones por especialidad</h2><p class="muted"><?= h(ucfirst($monthLabel)) ?> · según la fecha de atención del PDF</p></div>
-<?php if (!isset($trend)): ?><form method="get" class="analytics-filter"><input type="hidden" name="page" value="analytics"><label>Mes de atención<input type="month" name="month" min="1000-01" max="9998-12" value="<?= h($analytics['month']) ?>" required></label><button class="button primary">Consultar</button></form><?php endif ?>
-<?php if (!$analytics['total']): ?>
-<div class="empty-state"><?= ui_icon('chart', 28) ?><h3>No hay atenciones registradas en <?= h($monthLabel) ?></h3><p>Selecciona otro mes o carga las historias clínicas correspondientes.</p></div>
+<?php
+// Especialidad con más demanda: por día, mes o año (lo trae index.php; las pruebas solo pasan el mes).
+$sp = $specialty ?? ['period' => 'month', 'date' => $analytics['month'] . '-01', 'start' => $analytics['month'] . '-01', 'total' => $analytics['total'], 'rows' => $analytics['rows'],
+    'top' => $analytics['rows'] ? array_values(array_filter($analytics['rows'], fn($r) => $r['total'] === $analytics['rows'][0]['total'])) : []];
+$spStart = new DateTimeImmutable($sp['start']);
+$spLabel = match ($sp['period']) {
+    'day' => 'el ' . (int)$spStart->format('j') . ' de ' . $monthNames[$spStart->format('m')] . ' de ' . $spStart->format('Y'),
+    'month' => $monthNames[$spStart->format('m')] . ' de ' . $spStart->format('Y'),
+    default => 'el año ' . $spStart->format('Y'),
+};
+$spQuery = static fn(array $extra) => '?' . http_build_query(['page' => 'analytics', 'month' => $analytics['month']] + (isset($activity) ? ['activity_date' => $activity['date']] : []) + $extra);
+?>
+<section class="card analytics-card demand-card" aria-labelledby="specialty-title">
+<div class="analytics-heading"><div><h2 id="specialty-title">¿Qué especialidad tuvo más demanda?</h2><p class="muted">Atenciones registradas en las historias clínicas cargadas, por la fecha de atención del PDF.</p></div>
+<div class="demand-filter"><nav class="segmented" aria-label="Período"><?php foreach (['day' => 'Día', 'month' => 'Mes', 'year' => 'Año'] as $key => $name): ?><a href="<?= h($spQuery(['sp' => $key, 'sp_date' => $sp['date']])) ?>#specialty-title" <?= $sp['period'] === $key ? 'aria-current="page"' : '' ?>><?= $name ?></a><?php endforeach ?></nav>
+<form method="get" class="analytics-filter" action="#specialty-title"><input type="hidden" name="page" value="analytics"><input type="hidden" name="month" value="<?= h($analytics['month']) ?>"><?php if (isset($activity)): ?><input type="hidden" name="activity_date" value="<?= h($activity['date']) ?>"><?php endif ?><input type="hidden" name="sp" value="<?= h($sp['period']) ?>">
+<?php if ($sp['period'] === 'day'): ?><label>Día<input type="date" name="sp_date" min="1000-01-01" max="9998-12-31" value="<?= h($sp['date']) ?>" required></label>
+<?php elseif ($sp['period'] === 'month'): ?><label>Mes<input type="month" name="sp_date" min="1000-01" max="9998-12" value="<?= h(substr($sp['start'], 0, 7)) ?>" required></label>
+<?php else: ?><label>Año<input type="number" name="sp_date" min="1000" max="9998" step="1" inputmode="numeric" value="<?= h(substr($sp['start'], 0, 4)) ?>" required></label><?php endif ?>
+<button class="button primary">Ver</button></form></div></div>
+<?php if (!$sp['total']): ?>
+<div class="empty-state"><?= ui_icon('chart', 28) ?><h3>No hay atenciones registradas <?= h($sp['period'] === 'month' ? 'en ' . $spLabel : $spLabel) ?></h3><p>Elige otra fecha o carga las historias clínicas correspondientes.</p></div>
 <?php else:
+    $topNames = array_column($sp['top'], 'name');
+    $topText = count($topNames) > 1 ? implode(', ', array_slice($topNames, 0, -1)) . ' y ' . end($topNames) : $topNames[0];
     // Las 5 especialidades con más atenciones llevan color; el resto se agrupa en «Otras» (gris).
     $parts = [];
-    foreach (array_slice($analytics['rows'], 0, 5) as $i => $row) $parts[] = ['label' => $row['name'], 'value' => $row['total'], 'color' => $colors[$i]];
-    $rest = array_slice($analytics['rows'], 5);
-    if ($rest) $parts[] = ['label' => 'Otras (' . count($rest) . ')', 'value' => array_sum(array_column($rest, 'total')), 'color' => 'c-other'];
+    foreach (array_slice($sp['rows'], 0, 5) as $i => $row) $parts[] = ['label' => $row['name'], 'value' => $row['total'], 'color' => $colors[$i]];
+    $rest = array_slice($sp['rows'], 5);
+    if ($rest) $parts[] = ['label' => 'Otras (' . count($rest) . ')', 'value' => array_sum(array_column($rest, 'total')), 'color' => 'sc-other'];
 ?>
-<div class="donut-block"><div class="donut-wrap"><?= $donut($parts, 'Atenciones por especialidad en ' . $monthLabel) ?><p class="donut-center"><strong><?= $fmt($analytics['total']) ?></strong><span>atenciones</span></p></div>
-<ul class="donut-legend"><?php foreach ($parts as $part): ?><li><span class="swatch <?= $part['color'] ?>"></span><span class="legend-name"><?= h($part['label']) ?></span><span class="legend-value"><?= $fmt($part['value']) ?></span><span class="legend-share"><?= $pct($part['value'] / $analytics['total'] * 100) ?></span></li><?php endforeach ?></ul></div>
-<details class="chart-table"><summary>Ver todas las especialidades (<?= count($analytics['rows']) ?>)</summary>
-<div class="table-wrap"><table class="analytics-table"><caption>Especialidades ordenadas de mayor a menor cantidad de atenciones. Porcentajes redondeados a un decimal.</caption><thead><tr><th scope="col">Especialidad</th><th scope="col">Atenciones</th><th scope="col">Porcentaje</th></tr></thead><tbody>
-<?php foreach ($analytics['rows'] as $row): ?><tr><th scope="row"><?= h($row['name']) ?></th><td class="num"><?= $row['total'] ?></td><td class="num"><strong><?= number_format($row['percentage'],1,',','.') ?>%</strong></td></tr><?php endforeach ?>
+<div class="demand-top"><span class="demand-kicker"><?= ui_icon('flag', 16) ?><?= count($topNames) > 1 ? 'Empate en el primer lugar' : 'Más demandada' ?> · <?= h($spLabel) ?></span><strong><?= h($topText) ?></strong><span><?= $fmt($sp['top'][0]['total']) ?> <?= $sp['top'][0]['total'] === 1 ? 'atención' : 'atenciones' ?><?= count($topNames) > 1 ? ' cada una' : '' ?> · <?= $pct($sp['top'][0]['percentage']) ?> de <?= $fmt($sp['total']) ?></span></div>
+<div class="donut-block"><div class="donut-wrap"><?= $donut($parts, 'Atenciones por especialidad, ' . $spLabel) ?><p class="donut-center"><strong><?= $fmt($sp['total']) ?></strong><span><?= $sp['total'] === 1 ? 'atención' : 'atenciones' ?></span></p></div>
+<ol class="donut-legend"><?php foreach ($parts as $part): ?><li><span class="swatch <?= $part['color'] ?>"></span><span class="legend-name"><?= h($part['label']) ?></span><span class="legend-value"><?= $fmt($part['value']) ?></span><span class="legend-share"><?= $pct($part['value'] / $sp['total'] * 100) ?></span></li><?php endforeach ?></ol></div>
+<details class="chart-table"><summary>Ver todas las especialidades (<?= count($sp['rows']) ?>)</summary>
+<div class="table-wrap"><table class="analytics-table"><caption>Especialidades de mayor a menor cantidad de atenciones, <?= h($spLabel) ?>. Porcentajes redondeados a un decimal.</caption><thead><tr><th scope="col">Especialidad</th><th scope="col">Atenciones</th><th scope="col">Porcentaje</th></tr></thead><tbody>
+<?php foreach ($sp['rows'] as $row): ?><tr><th scope="row"><?= h($row['name']) ?></th><td class="num"><?= $row['total'] ?></td><td class="num"><strong><?= number_format($row['percentage'],1,',','.') ?>%</strong></td></tr><?php endforeach ?>
 </tbody></table></div></details>
 <p class="chart-note">Cada atención cuenta una vez, aunque tenga varios anexos o versiones. Incluye historias retiradas.</p>
 <?php endif ?>
 </section>
+
+<div class="analytics-split">
 
 <?php if (isset($channels)): $channelTotal = $channels['whatsapp'] + $channels['web']; ?>
 <section class="card analytics-card" aria-labelledby="channel-title">
 <div class="chart-heading"><h2 id="channel-title">Solicitudes por canal</h2><p class="muted"><?= h(ucfirst($monthLabel)) ?> · por fecha de la solicitud</p></div>
 <?php if (!$channelTotal): ?>
 <div class="empty-state"><?= ui_icon('inbox', 28) ?><h3>No hubo solicitudes en <?= h($monthLabel) ?></h3><p>Las solicitudes aparecen aquí según el día en que se crearon.</p></div>
-<?php else: $channelParts = [['label' => 'WhatsApp', 'value' => $channels['whatsapp'], 'color' => 'c1'], ['label' => 'Solo web', 'value' => $channels['web'], 'color' => 'c2']]; ?>
+<?php else: $channelParts = [['label' => 'WhatsApp', 'value' => $channels['whatsapp'], 'color' => 'sc1'], ['label' => 'Solo web', 'value' => $channels['web'], 'color' => 'sc2']]; ?>
 <div class="donut-block"><div class="donut-wrap"><?= $donut($channelParts, 'Solicitudes por canal en ' . $monthLabel) ?><p class="donut-center"><strong><?= $fmt($channelTotal) ?></strong><span>solicitudes</span></p></div>
 <ul class="donut-legend"><?php foreach ($channelParts as $part): ?><li><span class="swatch <?= $part['color'] ?>"></span><span class="legend-name"><?= h($part['label']) ?></span><span class="legend-value"><?= $fmt($part['value']) ?></span><span class="legend-share"><?= $pct($part['value'] / $channelTotal * 100) ?></span></li><?php endforeach ?></ul></div>
 <p class="chart-note">WhatsApp: la solicitud quedó vinculada a un número (bot o código). Solo web: el paciente no vinculó WhatsApp.</p>
