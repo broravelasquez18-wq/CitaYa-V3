@@ -11,7 +11,6 @@ $sections = [
     ['analytics', 'Análisis mensual', 'chart', $page === 'analytics', true, 0, ''],
     ['employees', 'Empleados', 'users', $page === 'employees', true, 0, ''],
     ['templates', 'Plantillas', 'template', $page === 'templates', true, 0, ''],
-    ['inbox', 'Bandeja local', 'mail', $page === 'inbox', true, 0, ''],
 ];
 if ($isAdmin && (!empty($whatsappDisconnected) || $page === 'whatsapp')) $sections[] = ['whatsapp', 'WhatsApp del bot', 'chat', $page === 'whatsapp', true, 0, ''];
 $titles = [
@@ -24,7 +23,6 @@ $titles = [
     'report' => ['Reporte de error', 'Conversación con el paciente por el número del bot.'],
     'progress' => ['Mi avance', 'Lo que has respondido hoy, este mes y este año.'],
     'employees' => ['Empleados', 'Cuentas del personal, roles y avance.'],
-    'inbox' => ['Bandeja local', 'Correos de simulación guardados en el servidor.'],
     'analytics' => ['Análisis mensual', 'Actividad del sistema y atenciones por especialidad.'],
     'templates' => ['Plantillas de mensajes', 'Textos que recibe el paciente por WhatsApp y correo.'],
     'whatsapp' => ['WhatsApp del bot', 'Vinculación del número que atiende a los pacientes.'],
@@ -58,15 +56,6 @@ $pageActions = [
 <?php elseif ($page === 'delivery'): require __DIR__ . '/delivery.php'; ?>
 <?php elseif ($page === 'case-history'): require __DIR__ . '/case-history.php'; ?>
 <?php elseif (in_array($page, ['deliveries','history'], true)): require __DIR__ . '/deliveries.php'; ?>
-<?php elseif ($page === 'inbox'): ?>
-<section class="card"><h2>Correos de simulación</h2><p class="muted">Estos mensajes se generaron con PHPMailer y se guardaron localmente. No se enviaron al destinatario externo.</p>
-<?php if ($app->config['mail_transport'] !== 'local'): ?><div class="notice"><?= ui_icon('info') ?><p>La bandeja local está desactivada porque el transporte configurado es SMTP.</p></div>
-<?php else: $messages = $app->db->all("SELECT j.*,r.reference FROM jobs j JOIN requests r ON r.id=j.request_id WHERE j.status='simulated' ORDER BY j.id DESC LIMIT 30"); ?>
-<?php if (!$messages): ?><div class="empty-state"><?= ui_icon('mail', 28) ?><p>Aún no hay correos. Crea una solicitud y mantén el procesador de cola en ejecución.</p></div><?php endif ?>
-<div class="mail-list"><?php foreach ($messages as $message): $mailPath = $app->config['storage_path'] . '/outbox/' . $message['id'] . '.eml'; $code = null;
-if ($message['kind'] === 'otp' && is_file($mailPath)) { preg_match('/Tu código de verificación es: ([0-9]{6})/u', quoted_printable_decode(file_get_contents($mailPath)), $codeMatch); $code = $codeMatch[1] ?? null; }
-?><article class="mail-item"><div class="mail-top"><span class="pill"><?= $message['kind'] === 'otp' ? 'Verificación' : 'Historia completa' ?></span><small class="mono"><?= h($message['sent_at']) ?></small></div><h3 class="mono"><?= h($message['reference']) ?></h3><p class="muted">Para: <?= h($message['recipient']) ?></p><?php if ($code): ?><p>Código de prueba: <strong class="mail-code"><?= h($code) ?></strong></p><small>Puede haber vencido o haber sido reemplazado por un código más reciente.</small><?php else: ?><p>Mensaje preparado con los documentos del paquete solicitado.</p><?php endif ?><a class="back-link" href="?page=mail&amp;id=<?= $message['id'] ?>"><?= ui_icon('file', 16) ?>Descargar correo .eml</a></article><?php endforeach ?></div>
-<?php endif ?></section>
 <?php else:
 $counts = [
     'Pacientes' => $app->db->one('SELECT COUNT(*) n FROM patients')['n'],

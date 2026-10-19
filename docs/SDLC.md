@@ -1133,3 +1133,9 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
   - La métrica sigue siendo la base del módulo: atenciones con PDF por fecha de atención, cada una contada una vez.
 - **Corrección de paso.** Las clases de color `c1…c5` chocaban con las cápsulas decorativas del login (`.c3`, `.c4` con opacidad; `.c3`, `.c5` ocultas en móvil). Se renombraron a `sc1…sc5` / `sc-other`.
 - **Validación.** `analytics` 32 en verde (8 nuevas: día, mes igual al análisis mensual, año, empate, día vacío, períodos o fechas inválidos, y render del selector con empate y del período anual). Revisado en local a 1366 px y 375 px con día (vacío), mes y año.
+
+**Ajuste (2026-10-19, pedido del titular): se elimina la Bandeja local.**
+- Sale del menú del administrador la página «Bandeja local» (`?page=inbox`), con la lista de correos de simulación. También sale la descarga del `.eml` (`?page=mail`), que solo usaba esa bandeja. Ambas direcciones muestran ahora «Página no encontrada».
+- Se quitan sus estilos (`mail-*`) y la mención «Acceso interno → Bandeja local» del aviso del portal cuando el correo no está habilitado.
+- No cambia el envío: en modo `local` los correos se siguen guardando en `storage/outbox/` y cuentan como simulados en Análisis.
+- **Validación.** En local, el menú del administrador ya no la muestra y las dos direcciones responden «Página no encontrada». `requests-admin` 46, `support` 64 y `analytics` 32 en verde. `tests/http.php` se ajustó (ya no pide `inbox`/`mail`), pero falla igual que antes del cambio porque apunta a CitaYaV2, como `admin-http`.

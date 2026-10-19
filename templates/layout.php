@@ -1,5 +1,5 @@
 <?php require_once __DIR__ . '/icons.php';
-$staffPages = ['admin','inbox','deliveries','delivery','case-history','history','analytics','templates','whatsapp','employees','progress','reports','report'];
+$staffPages = ['admin','deliveries','delivery','case-history','history','analytics','templates','whatsapp','employees','progress','reports','report'];
 $isStaffPage = in_array($page, $staffPages, true);
 $isPortal = isset($steps[$page]);
 $bodyClass = $isPortal ? 'patient-portal' : ($isStaffPage ? 'staff' : ($page === 'admin-login' ? 'login' : ''));
@@ -31,7 +31,7 @@ if ($ambient) $bodyClass .= ' ambient' . ($page === 'home' ? ' request-page' : '
 <?php elseif ($page === 'verify'): ?>
 <span class="stage-icon"><?= ui_icon('mail', 26) ?></span>
 <?php if ($app->config['mail_transport'] === 'local'): ?>
-<h2>El envío por correo aún no está habilitado</h2><div class="notice"><?= ui_icon('info') ?><p>Esta instalación está en modo de prueba y no envía mensajes a tu correo. Primero debemos configurar el servicio de correo para recibir códigos reales.</p></div><p class="muted">Para registros habilitados de prueba, el código se guarda en Acceso interno → Bandeja local cuando se procesa la solicitud.</p>
+<h2>El envío por correo aún no está habilitado</h2><div class="notice"><?= ui_icon('info') ?><p>Esta instalación está en modo de prueba y no envía mensajes a tu correo. Primero debemos configurar el servicio de correo para recibir códigos reales.</p></div>
 <?php else: ?>
 <h2>Revisa el correo de tu solicitud</h2><p class="muted">Si los datos corresponden a un registro habilitado, recibirás un código. Revisa también la carpeta de correo no deseado.</p>
 <?php endif ?>

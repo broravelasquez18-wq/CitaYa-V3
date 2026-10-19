@@ -561,12 +561,6 @@ body.overlay-open,body.queue-progress-open{overflow:hidden}
 /* Plantillas, WhatsApp, empleados, bandeja */
 .template-card textarea{margin:6px 0 var(--s3);resize:vertical;line-height:1.55}
 .template-preview{white-space:pre-wrap;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius);padding:var(--s3);font:inherit;font-size:var(--t-sm);margin:var(--s2) 0 0}
-.mail-top{display:flex;align-items:center;justify-content:space-between;gap:var(--s3);margin-bottom:var(--s3)}
-.mail-top h3{margin:0}
-.mail-list{display:grid;gap:var(--s3);margin-top:var(--s4)}
-.mail-item{border:1px solid var(--line);padding:var(--s4);border-radius:var(--radius)}
-.mail-item h3{font-size:var(--t-base)}
-.mail-code{font-family:var(--mono);font-size:var(--t-xl);letter-spacing:.2em}
 .wa-state{display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap}
 .wa-link .wa-qr{display:block;margin:var(--s4) 0;border:10px solid #fff;outline:1px solid var(--line);border-radius:var(--radius);max-width:100%;height:auto}
 .wa-link .wa-steps{padding-left:var(--s5)}

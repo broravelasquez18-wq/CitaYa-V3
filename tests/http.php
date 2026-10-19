@@ -24,7 +24,7 @@ expect(str_contains($badBody,'sesión del formulario venció'),'Rechaza POST sin
 foreach(['config/local.php','storage/outbox/1.eml','.runtime/first-login.txt','database/schema.sql','vendor/autoload.php','src/bootstrap.php','bin/setup.php','tests/run.php'] as $path) {
     [$status]=requestUrl($base.$path);expect(in_array($status,[403,404],true),'Acceso directo bloqueado: '.$path);
 }
-foreach(['admin','inbox','mail&id=1'] as $page) {
+foreach(['admin','analytics'] as $page) {
     [$status,$headers]=requestUrl($base.'public/?page='.$page);expect($status===302 && str_contains($headers,'admin-login'),'Exige acceso interno: '.$page);
 }
 [$status,$headers]=requestUrl($base.'public/?page=appointments');expect($status===302 && str_contains($headers,'home'),'Atenciones requieren una solicitud de esta sesión');

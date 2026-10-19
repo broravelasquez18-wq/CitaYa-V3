@@ -1,6 +1,6 @@
 /* CitaYa v2 · adaptación. Escritorio primero; la consola pasa de rail lateral a barra deslizable y las tablas a tarjetas. */
 .shell,.card,.patient-layout>*,.grid>*,.upload-option-copy,.console-main{min-width:0}
-.card,.alert,.encounter,.mail-item,.notice{overflow-wrap:anywhere}
+.card,.alert,.encounter,.notice{overflow-wrap:anywhere}
 .button{white-space:normal;text-align:center}
 
 @media(max-width:1180px){
@@ -111,7 +111,6 @@
   .load-data{grid-template-columns:minmax(0,1fr)}
   .load-data>div+div{border-left:0;border-top:1px solid var(--line)}
   .delivery-facts{grid-template-columns:minmax(0,1fr)}
-  .mail-top{flex-direction:column;align-items:flex-start}
   .case-respond-head{flex-direction:column}
   .case-tools{width:100%}
   .case-tools .case-menu{flex:1}

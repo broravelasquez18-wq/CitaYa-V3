@@ -284,7 +284,7 @@ if ($page === 'notifications') {
     echo json_encode(['items' => (new App\SupportDesk($app))->notifications(currentStaff())], JSON_UNESCAPED_UNICODE);
     exit;
 }
-if (in_array($page, ['inbox','mail','history','analytics','templates','whatsapp','employees'], true)) requireAdmin();
+if (in_array($page, ['history','analytics','templates','whatsapp','employees'], true)) requireAdmin();
 $supportCount = !empty($_SESSION['admin_id']) ? (new App\SupportDesk($app))->unreadCount(currentStaff()) : 0;
 $staffList = $page === 'employees' ? (new App\Staff($app))->all((string)($_GET['q'] ?? '')) : null;
 $myProgress = $page === 'progress' ? ['progress' => (new App\Staff($app))->progress((int)$_SESSION['admin_id']), 'recent' => (new App\Staff($app))->recentResponses((int)$_SESSION['admin_id'])] : null;
@@ -337,13 +337,6 @@ if (in_array($page, ['deliveries','delivery','case-history','history'], true)) {
     } else {
         $deliverySearch = $adminDeliveries->search((string)($_GET['q'] ?? ''), (int)($_GET['p'] ?? 1), $page==='history', $page === 'deliveries' && ($_GET['f'] ?? 'pending') !== 'all');
     }
-}
-if ($page === 'mail') {
-    $job = $app->db->one("SELECT id FROM jobs WHERE id=? AND status='simulated'", [(int) ($_GET['id'] ?? 0)]);
-    if (!$job || $app->config['mail_transport'] !== 'local') { http_response_code(404); exit; }
-    $path = $app->config['storage_path'] . '/outbox/' . (int) $job['id'] . '.eml';
-    if (!is_file($path)) { http_response_code(404); exit; }
-    header('Content-Type: message/rfc822'); header('Content-Disposition: attachment; filename="correo-' . $job['id'] . '.eml"'); readfile($path); exit;
 }
 $specialties = $app->db->all('SELECT * FROM specialties WHERE active=1 ORDER BY name');
 $request = null; $encounters = []; $historyResend = null; $recentSuggestion = null;
