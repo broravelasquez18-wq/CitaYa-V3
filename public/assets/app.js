@@ -478,7 +478,7 @@ if (queueProgress && typeof queueProgress.showModal === 'function') {
   if (document.querySelector('[data-toasts] .toast.error')) setTimeout(validateAll, 0);
 })();
 
-// Cambio de tema claro u oscuro en el inicio de sesión; la elección queda guardada en este navegador.
+// Cambio de tema claro u oscuro (inicio de sesión, formulario y consola interna); la elección queda guardada en este navegador.
 document.querySelectorAll('[data-theme-toggle]').forEach(button => {
   const root = document.documentElement;
   const label = button.querySelector('[data-theme-label]');
@@ -499,7 +499,7 @@ document.querySelectorAll('[data-theme-toggle]').forEach(button => {
 });
 
 // Fondo animado: se pausa mientras se escribe y se reanuda un momento después de la última tecla.
-if (document.body.classList.contains('ambient')) {
+if (document.body.classList.contains('ambient') || document.body.classList.contains('console-ambient')) {
   let typingTimer;
   document.addEventListener('input', () => {
     document.body.classList.add('is-typing');

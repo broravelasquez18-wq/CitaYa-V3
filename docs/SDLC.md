@@ -1151,3 +1151,17 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
   - **Reglas:** nombre de 3 a 80 caracteres, único por uso; texto de 10 a 3000; solo se admiten las variables del uso. Crear, editar y eliminar queda en el registro de eventos.
   - La página separa «Plantillas creadas» de «Plantillas del sistema».
 - **Validación.** `support` 74 en verde (10 nuevas: crear, variables reemplazadas, nombre repetido, variable ajena, «No Registra» sin `{enlace}`, uso inválido, nombre corto, editar y listar por uso, eliminar, eliminar dos veces). `requests-admin` 46 y `whatsapp` 91 en verde. En local: se creó una plantilla «No Registra» desde el navegador; aparece en el menú de respuesta con los datos de la solicitud, y una de chat aparece como respuesta rápida y llena el mensaje. Para probarlo se crearon en la base local una solicitud y un reporte ficticios («Paciente Ficticio Plantillas»).
+
+**Ajuste (2026-10-19, pedido del titular): la consola interna con el diseño del login.**
+- **Pedido.** Al titular solo le gustaba cómo quedaron el login y el formulario, y eligió llevar a toda la consola cuatro rasgos: el fondo oscuro animado, el modo claro/oscuro, las tarjetas de vidrio y la tipografía y el espaciado.
+- **Cómo:**
+  - `layout.php` marca la consola con sesión como `console-ambient` y le pone el fondo de `ambient.php` en variante `console`, con menos formas y chispas, más tenues.
+  - El botón de tema aparece también en el encabezado de la consola.
+  - En `app.css`, un bloque de tokens: el oscuro (predeterminado) y el claro redefinen las variables de superficie, tinta, líneas y estados, y agregan `--glass`. Tarjetas, rail y encabezado son de vidrio, sin `backdrop-filter`.
+  - Los títulos llevan el rótulo mono «Acceso interno», con letra más grande y más aire.
+  - La pausa del fondo mientras se escribe también aplica en la consola.
+- **Validación.**
+  - En local, en las 9 páginas de la consola en oscuro: ningún fondo claro sobrante y ningún texto sin contraste (revisión automática de colores calculados).
+  - Revisados también el detalle de la solicitud (modal) y un drawer, en oscuro y en claro; el móvil a 375 px queda sin desplazamiento horizontal.
+  - Fondo: 15 animaciones, solo `transform`/`opacity`, sin filtros. No se midieron los FPS porque el panel del navegador estaba oculto.
+  - DESIGN.md actualizado con la excepción de sombras para el vidrio.

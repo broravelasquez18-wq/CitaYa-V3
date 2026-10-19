@@ -6,6 +6,9 @@ $bodyClass = $isPortal ? 'patient-portal' : ($isStaffPage ? 'staff' : ($page ===
 // Páginas con fondo animado y cambio de tema claro/oscuro.
 $ambient = in_array($page, ['admin-login', 'home'], true);
 if ($ambient) $bodyClass .= ' ambient' . ($page === 'home' ? ' request-page' : '');
+// La consola interna (con sesión) usa el mismo fondo animado, más tenue, y el mismo cambio de tema.
+$consoleAmbient = $isStaffPage && !empty($_SESSION['admin_id']);
+if ($consoleAmbient) $bodyClass .= ' console-ambient';
 ?><!DOCTYPE html>
 <html lang="es">
 <head>
@@ -17,10 +20,10 @@ if ($ambient) $bodyClass .= ' ambient' . ($page === 'home' ? ' request-page' : '
     <link rel="stylesheet" href="assets/app.css?v=<?= filemtime(dirname(__DIR__) . '/public/assets/app.css') ?>"><link rel="stylesheet" href="assets/responsive.css?v=<?= filemtime(dirname(__DIR__) . '/public/assets/responsive.css') ?>"><script src="assets/app.js?v=<?= filemtime(dirname(__DIR__) . '/public/assets/app.js') ?>" defer></script>
 </head>
 <body class="<?= $bodyClass ?>">
-<?php if ($ambient) require __DIR__ . '/ambient.php'; ?>
+<?php if ($ambient || $consoleAmbient) { $ambientVariant = $consoleAmbient ? 'console' : 'full'; require __DIR__ . '/ambient.php'; } ?>
 <a class="skip-link" href="#contenido">Saltar al contenido</a>
 <header class="header"><a class="brand" href="?page=<?= $isStaffPage ? 'deliveries' : 'home' ?>" aria-label="CitaYa, inicio"><span class="brand-mark" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 30 30"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h19A2.5 2.5 0 0 1 27 7.5V11a4 4 0 0 0 0 8v3.5a2.5 2.5 0 0 1-2.5 2.5h-19A2.5 2.5 0 0 1 3 22.5V19a4 4 0 0 0 0-8Z" fill="#00acc4"/><path d="M15 10v10M10 15h10" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg></span><span class="brand-name">Cita<span>Ya</span></span><span class="brand-context"><?= $isStaffPage || $page === 'admin-login' ? 'Acceso interno' : 'Historias clínicas' ?></span></a>
-<nav class="header-nav" aria-label="Navegación principal"><a href="?page=home" <?= $isPortal ? 'aria-current="page"' : '' ?>>Solicitar historia</a><a href="?page=<?= $isStaffPage ? 'deliveries' : 'admin' ?>" <?= $isStaffPage || $page === 'admin-login' ? 'aria-current="page"' : '' ?>>Acceso interno</a></nav><?php if ($ambient): ?><button type="button" class="theme-toggle" data-theme-toggle aria-pressed="false" hidden><span class="theme-icon-dark"><?= ui_icon('sun', 16) ?></span><span class="theme-icon-light"><?= ui_icon('moon', 16) ?></span><span data-theme-label>Modo claro</span></button><?php endif ?><?php if ($isStaffPage && !empty($_SESSION['admin_id'])): ?><form method="post" class="header-logout"><?= csrf() ?><input type="hidden" name="action" value="logout"><button title="Cerrar sesión"><?= ui_icon('logout', 18) ?><span>Cerrar sesión</span></button></form><?php endif ?></header>
+<nav class="header-nav" aria-label="Navegación principal"><a href="?page=home" <?= $isPortal ? 'aria-current="page"' : '' ?>>Solicitar historia</a><a href="?page=<?= $isStaffPage ? 'deliveries' : 'admin' ?>" <?= $isStaffPage || $page === 'admin-login' ? 'aria-current="page"' : '' ?>>Acceso interno</a></nav><?php if ($ambient || $consoleAmbient): ?><button type="button" class="theme-toggle" data-theme-toggle aria-pressed="false" hidden><span class="theme-icon-dark"><?= ui_icon('sun', 16) ?></span><span class="theme-icon-light"><?= ui_icon('moon', 16) ?></span><span data-theme-label>Modo claro</span></button><?php endif ?><?php if ($isStaffPage && !empty($_SESSION['admin_id'])): ?><form method="post" class="header-logout"><?= csrf() ?><input type="hidden" name="action" value="logout"><button title="Cerrar sesión"><?= ui_icon('logout', 18) ?><span>Cerrar sesión</span></button></form><?php endif ?></header>
 <main class="shell" id="contenido">
 <?php if ($isPortal): ?>
 <?php if ($page !== 'home'): ?><div class="intro"><h1>Tu historia clínica, en tu correo.</h1><p>Busca la atención con tus datos y recibe el paquete completo, con sus anexos.</p></div>

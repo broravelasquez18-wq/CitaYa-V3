@@ -282,7 +282,7 @@ Plano en reposo. La profundidad se construye con tono (el tablero noche frente a
 - **Pop** (`box-shadow: 0 18px 48px rgba(15,27,45,.24), 0 2px 6px rgba(15,27,45,.12)`): modales de detalle, progreso, resultado de carga, reapertura, menú de decisión y avisos emergentes. Nada más.
 
 ### Named Rules
-**The Float-Only Shadow Rule.** Una superficie lleva sombra solo si flota sobre el contenido (diálogo, menú, aviso). Tarjetas, tablas y placas nunca la llevan.
+**The Float-Only Shadow Rule.** Una superficie lleva sombra solo si flota sobre el contenido (diálogo, menú, aviso). Tarjetas, tablas y placas nunca la llevan. **Excepción desde 2026-10-19:** en la consola interna con fondo animado, tarjetas, rail y bandas de cifras son de vidrio, translúcidas y con una sombra suave que las separa del fondo en movimiento. Sin `backdrop-filter`.
 
 ## Shapes
 
@@ -357,5 +357,14 @@ Conjunto propio de trazo único de 1.8px en cuadrícula de 24, `currentColor`, 1
 - **Don't** comunicar un estado solo con color.
 - **Don't** pasar de 5 colores en una dona ni rotar el orden de la paleta: el resto va a «Otras». Tampoco quitar la tabla de respaldo de una gráfica.
 - **Don't** poner dos placas invertidas dominantes en la misma pantalla.
-- **Don't** añadir sombras a tarjetas, tablas o placas, ni degradados suaves o biseles.
+- **Don't** añadir sombras a tarjetas, tablas o placas fuera de la consola con fondo animado, ni degradados suaves o biseles. Tampoco usar `backdrop-filter` sobre el fondo animado: se recalcula en cada cuadro.
 - **Don't** convertir el rótulo «RADICADO» en un patrón de sobretítulos en mayúsculas para secciones.
+
+
+## Consola interna: fondo animado, vidrio y tema claro/oscuro (2026-10-19)
+
+A pedido del titular, la consola del personal toma el lenguaje del login y del formulario del paciente.
+- **Fondo:** el mismo `ambient.php`, en variante `console`: halos, barrido, 4 formas y 7 chispas (el login usa 10 y 14), más tenues. Solo anima `transform` y `opacity` (15 animaciones), se pausa mientras se escribe y se queda quieto con «reducir movimiento».
+- **Tema:** oscuro por defecto y claro con el botón del encabezado. La elección se comparte con el login (`localStorage` `citaya-theme`). El oscuro redefine los tokens (`--ground`, `--surface`, `--surface-2`, `--line`, `--ink`, `--muted` y los de estado) bajo `body.console-ambient`, así los componentes no se tocan uno por uno.
+- **Vidrio:** tarjetas, rail, encabezado y bandas de cifras usan `--glass`, una translucidez con un borde interior claro y una sombra suave. Radio de 14px en las tarjetas.
+- **Tipografía:** cada título de página lleva arriba el rótulo «Acceso interno» en mono, como el `login-kicker`; el título y el texto de apoyo son más grandes y hay más aire arriba.
