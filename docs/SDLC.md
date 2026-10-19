@@ -1139,3 +1139,15 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
 - Se quitan sus estilos (`mail-*`) y la mención «Acceso interno → Bandeja local» del aviso del portal cuando el correo no está habilitado.
 - No cambia el envío: en modo `local` los correos se siguen guardando en `storage/outbox/` y cuentan como simulados en Análisis.
 - **Validación.** En local, el menú del administrador ya no la muestra y las dos direcciones responden «Página no encontrada». `requests-admin` 46, `support` 64 y `analytics` 32 en verde. `tests/http.php` se ajustó (ya no pide `inbox`/`mail`), pero falla igual que antes del cambio porque apunta a CitaYaV2, como `admin-http`.
+
+**Ajuste (2026-10-19, pedido del titular): el administrador puede crear plantillas.**
+- **Antes.** Plantillas tenía solo los 17 textos del sistema: editables y restaurables, pero no se podían agregar nuevos.
+- **Ahora:**
+  - Botón «Crear plantilla» en Plantillas. Cada plantilla nueva tiene nombre, uso y texto, y se puede editar o eliminar. Va en la tabla nueva `custom_templates`, que crea `schema.sql` al arrancar.
+  - **Usos:**
+    - **Respuesta «Aprobado»** y **Respuesta «No Registra»**: aparecen en el menú «Plantillas» al responder una solicitud, con los datos del paciente ya puestos, y seleccionan el estado.
+    - **Chat de reportes de error**: aparece como «Respuesta rápida» en el chat; pregunta antes de reemplazar lo escrito.
+  - **Variables por uso:** `{radicado} {nombre} {documento} {fecha} {especialidad}`; en «No Registra» también `{enlace}`, que es obligatorio, como en las del sistema; en el chat, `{nombre} {radicado} {reporte}`.
+  - **Reglas:** nombre de 3 a 80 caracteres, único por uso; texto de 10 a 3000; solo se admiten las variables del uso. Crear, editar y eliminar queda en el registro de eventos.
+  - La página separa «Plantillas creadas» de «Plantillas del sistema».
+- **Validación.** `support` 74 en verde (10 nuevas: crear, variables reemplazadas, nombre repetido, variable ajena, «No Registra» sin `{enlace}`, uso inválido, nombre corto, editar y listar por uso, eliminar, eliminar dos veces). `requests-admin` 46 y `whatsapp` 91 en verde. En local: se creó una plantilla «No Registra» desde el navegador; aparece en el menú de respuesta con los datos de la solicitud, y una de chat aparece como respuesta rápida y llena el mensaje. Para probarlo se crearon en la base local una solicitud y un reporte ficticios («Paciente Ficticio Plantillas»).

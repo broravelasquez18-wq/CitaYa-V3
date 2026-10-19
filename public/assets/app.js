@@ -779,6 +779,16 @@ document.addEventListener('click', event => {
   });
 })();
 
+// Plantillas creadas: al cambiar el uso se muestran su ayuda y las variables que admite.
+document.addEventListener('change', event => {
+  const select = event.target.closest('[data-usage-select]');
+  if (!select) return;
+  const option = select.selectedOptions[0], help = select.form.querySelector('[data-usage-help]');
+  if (!option || !help) return;
+  const code = document.createElement('code'); code.dataset.usageVariables = ''; code.textContent = option.dataset.variables;
+  help.replaceChildren(document.createTextNode(option.dataset.help + ' Variables: '), code);
+});
+
 // Tablas de solicitudes: un clic en cualquier parte de la fila abre el detalle (igual que el botón del ojo).
 // Los botones, enlaces y formularios de la fila conservan su propia acción; seleccionar texto no abre nada.
 document.addEventListener('click', event => {
@@ -809,6 +819,17 @@ document.addEventListener('click', event => {
   const input = document.querySelector('[data-chat-input]');
   input?.addEventListener('keydown', event => {
     if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); input.form.requestSubmit(); }
+  });
+  // Respuesta rápida: pone el texto de la plantilla en el mensaje (pregunta antes de reemplazar lo escrito).
+  const quick = document.querySelector('[data-chat-template]');
+  quick?.addEventListener('change', () => {
+    const text = quick.value;
+    quick.value = '';
+    if (!text || !input) return;
+    const apply = () => { input.value = text; input.focus(); };
+    if (input.value.trim() && input.value.trim() !== text) {
+      window.CitaYa.confirm({title: '¿Reemplazar tu mensaje?', text: 'Lo que escribiste se cambiará por la plantilla.', label: 'Usar la plantilla'}).then(ok => { if (ok) apply(); });
+    } else apply();
   });
   // PDF adjunto: se muestra su nombre y permite enviar sin texto. Se valida tipo y tamaño antes de subirlo.
   const file = document.querySelector('[data-chat-file]');

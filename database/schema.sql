@@ -234,6 +234,19 @@ CREATE TABLE IF NOT EXISTS message_templates (
  updated_at DATETIME NOT NULL
 ) ENGINE=InnoDB;
 
+-- Plantillas que crea el administrador: respuestas a solicitudes (Aprobado / No Registra) y respuestas rápidas del chat de reportes.
+CREATE TABLE IF NOT EXISTS custom_templates (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ name VARCHAR(80) NOT NULL,
+ usage_code VARCHAR(20) NOT NULL,
+ body TEXT NOT NULL,
+ created_by BIGINT UNSIGNED NULL,
+ updated_by BIGINT UNSIGNED NULL,
+ created_at DATETIME NOT NULL,
+ updated_at DATETIME NOT NULL,
+ UNIQUE KEY custom_template_name (usage_code, name)
+) ENGINE=InnoDB;
+
 -- Archivos que la persona encargada adjunta al responder una solicitud (Aprobado / No Registra).
 -- job_id: correo que los lleva; wa_job_id: mensaje de WhatsApp que los lleva.
 CREATE TABLE IF NOT EXISTS response_files (

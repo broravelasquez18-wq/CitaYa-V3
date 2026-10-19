@@ -546,6 +546,11 @@ body.overlay-open,body.queue-progress-open{overflow:hidden}
 .chat-form{display:flex;gap:var(--s3);align-items:flex-end;margin-top:var(--s3)}
 .chat-form textarea{flex:1;min-height:76px;resize:vertical;margin:0}
 .chat-actions{display:flex;flex-direction:column;gap:var(--s2)}
+.chat-form{flex-wrap:wrap}
+.chat-quick{flex-basis:100%;margin:0;font-size:var(--t-sm);font-weight:600}
+.chat-quick select{margin-top:4px;max-width:420px}
+.custom-template-form label{margin-bottom:var(--s4)}
+.usage-help{margin:calc(var(--s2) * -1) 0 var(--s4);font-size:var(--t-sm)}
 .chat-attach{cursor:pointer}
 .chat-attach:focus-within{outline:2px solid var(--brand);outline-offset:2px}
 .chat-file-picked{margin:var(--s2) 0 0;font-size:var(--t-sm);color:var(--ink-2)}

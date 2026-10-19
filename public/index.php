@@ -223,6 +223,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 (new App\MessageTemplates($app))->reset((string)($_POST['code'] ?? ''), (int)$_SESSION['admin_id']);
                 $_SESSION['flash'] = 'Se restauró el texto predeterminado de la plantilla.';
                 go('templates');
+            case 'custom-template-save':
+                requireAdmin();
+                $templateId = (int)($_POST['template_id'] ?? 0);
+                (new App\MessageTemplates($app))->saveCustom($templateId ?: null, (string)($_POST['name'] ?? ''), (string)($_POST['usage'] ?? ''), (string)($_POST['body'] ?? ''), (int)$_SESSION['admin_id']);
+                $_SESSION['csrf'] = bin2hex(random_bytes(32));
+                $_SESSION['flash'] = $templateId ? 'Plantilla actualizada.' : 'Plantilla creada. Ya está disponible donde corresponde a su uso.';
+                go('templates');
+            case 'custom-template-delete':
+                requireAdmin();
+                (new App\MessageTemplates($app))->deleteCustom((int)($_POST['template_id'] ?? 0), (int)$_SESSION['admin_id']);
+                $_SESSION['csrf'] = bin2hex(random_bytes(32));
+                $_SESSION['flash'] = 'Plantilla eliminada.';
+                go('templates');
             // Cargar historias: administradores y empleados. Retirar un paquete sigue siendo solo del administrador.
             case 'upload':
                 requireStaff(); $_SESSION['upload_mode']='single'; $uploads = [];

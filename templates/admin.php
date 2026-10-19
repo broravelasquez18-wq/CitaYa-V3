@@ -32,6 +32,7 @@ $titles = [
 $pageActions = [
     'admin' => '<a class="button primary" href="#upload-drawer" data-open="upload-drawer">' . ui_icon('upload', 18) . 'Cargar historias</a>',
     'employees' => '<a class="button primary" href="#staff-create-drawer" data-open="staff-create-drawer">' . ui_icon('users', 18) . 'Agregar empleado</a>',
+    'templates' => '<a class="button primary" href="#custom-template-new" data-open="custom-template-new">' . ui_icon('plus', 18) . 'Crear plantilla</a>',
 ][$page] ?? '';
 ?>
 <div class="console">

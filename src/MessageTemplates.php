@@ -98,11 +98,70 @@ final class MessageTemplates
         $this->app->event(null, 'template_reset', $code . ':admin_' . $adminId);
     }
 
+    // --- Plantillas creadas por el administrador ---
+
+    /** uso => [nombre, para qué sirve, variables permitidas]. Las de respuesta salen en el menú «Plantillas» al responder. */
+    public const CUSTOM_USES = [
+        'approved' => ['Respuesta «Aprobado»', 'Aparece en «Plantillas» al responder una solicitud como Aprobado.', ['radicado', 'nombre', 'documento', 'fecha', 'especialidad']],
+        'not_registered' => ['Respuesta «No Registra»', 'Aparece en «Plantillas» al responder una solicitud como No Registra. Debe incluir {enlace}.', ['radicado', 'nombre', 'documento', 'fecha', 'especialidad', 'enlace']],
+        'report_chat' => ['Chat de reportes de error', 'Respuesta rápida en el chat con el paciente de un reporte de error.', ['nombre', 'radicado', 'reporte']],
+    ];
+
+    /** Plantillas creadas, ordenadas por uso y nombre (o solo las de un uso). */
+    public function custom(?string $use = null): array
+    {
+        return $use === null
+            ? $this->app->db->all('SELECT * FROM custom_templates ORDER BY FIELD(usage_code,\'approved\',\'not_registered\',\'report_chat\'), name')
+            : $this->app->db->all('SELECT * FROM custom_templates WHERE usage_code=? ORDER BY name', [$use]);
+    }
+
+    /** Crea ($id null) o edita una plantilla. Devuelve su id. */
+    public function saveCustom(?int $id, string $name, string $use, string $body, int $adminId): int
+    {
+        $name = trim(preg_replace('/\s+/u', ' ', $name));
+        $body = trim(str_replace("\r\n", "\n", $body));
+        if (!isset(self::CUSTOM_USES[$use])) throw new \DomainException('Elige para qué se usará la plantilla.');
+        if (mb_strlen($name) < 3 || mb_strlen($name) > 80) throw new \DomainException('El nombre debe tener entre 3 y 80 caracteres.');
+        if (mb_strlen($body) < 10 || mb_strlen($body) > 3000) throw new \DomainException('El texto debe tener entre 10 y 3000 caracteres.');
+        preg_match_all('/\{([a-z_]+)\}/', $body, $used);
+        $unknown = array_diff(array_unique($used[1]), self::CUSTOM_USES[$use][2]);
+        if ($unknown) throw new \DomainException('Variable no permitida para este uso: {' . implode('}, {', $unknown) . '}.');
+        // Igual que las de «No Registra» del sistema: sin el enlace el paciente no podría hacer una nueva solicitud.
+        if ($use === 'not_registered' && !str_contains($body, '{enlace}')) throw new \DomainException('Las respuestas «No Registra» deben incluir {enlace}.');
+        $taken = $this->app->db->one('SELECT id FROM custom_templates WHERE usage_code=? AND name=? AND id<>?', [$use, $name, (int)$id]);
+        if ($taken) throw new \DomainException('Ya existe una plantilla con ese nombre para este uso.');
+        if ($id === null) {
+            $id = $this->app->db->insert('custom_templates', ['name' => $name, 'usage_code' => $use, 'body' => $body, 'created_by' => $adminId, 'updated_by' => $adminId,
+                'created_at' => $this->app->now(), 'updated_at' => $this->app->now()]);
+            $this->app->event(null, 'template_created', 'custom_' . $id . ':admin_' . $adminId);
+            return $id;
+        }
+        $changed = $this->app->db->run('UPDATE custom_templates SET name=?,usage_code=?,body=?,updated_by=?,updated_at=? WHERE id=?', [$name, $use, $body, $adminId, $this->app->now(), $id])->rowCount();
+        if (!$changed && !$this->app->db->one('SELECT id FROM custom_templates WHERE id=?', [$id])) throw new \DomainException('La plantilla ya no existe.');
+        $this->app->event(null, 'template_saved', 'custom_' . $id . ':admin_' . $adminId);
+        return $id;
+    }
+
+    public function deleteCustom(int $id, int $adminId): void
+    {
+        if (!$this->app->db->run('DELETE FROM custom_templates WHERE id=?', [$id])->rowCount()) throw new \DomainException('La plantilla ya no existe.');
+        $this->app->event(null, 'template_deleted', 'custom_' . $id . ':admin_' . $adminId);
+    }
+
+    /** Texto de una plantilla creada con sus variables reemplazadas (sin los asteriscos si es para correo). */
+    public static function renderCustom(array $template, array $values, bool $plain = false): string
+    {
+        $pairs = [];
+        foreach (self::CUSTOM_USES[$template['usage_code']][2] ?? [] as $name) $pairs['{' . $name . '}'] = (string)($values[$name] ?? '');
+        $text = strtr($template['body'], $pairs);
+        return $plain ? preg_replace('/\*([^*\n]+)\*/u', '$1', $text) : $text;
+    }
+
     /** Valores de ejemplo para la vista previa. */
     public static function sample(): array
     {
         return ['radicado' => 'HC-261006-A1B2C3D4E5', 'nombre' => 'Paciente Demo', 'horas' => '24', 'vigencia' => '6',
             'enlace' => 'https://portal.ejemplo/?page=home', 'correo' => 'paciente@correo.com', 'documentos' => '2',
-            'documento' => 'CC 1000000000', 'fecha' => '15/09/2026', 'especialidad' => 'Medicina general'];
+            'documento' => 'CC 1000000000', 'fecha' => '15/09/2026', 'especialidad' => 'Medicina general', 'reporte' => 'RE-261019-A1B2C3'];
     }
 }

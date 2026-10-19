@@ -204,6 +204,25 @@ try {
     check((int)$db->one('SELECT resolved_by FROM requests WHERE id=?', [$requestId])['resolved_by'] === $employee && (int)$db->one('SELECT assigned_to FROM support_tickets WHERE id=?', [$openOfAdmin])['assigned_to'] === $helper, 'Se conserva quién respondió y sus reportes abiertos pasan a otro empleado');
     check($staff->create('1088000111', 'Laura Empleada', 'laura@example.test', 'employee')['id'] !== $employee, 'La cédula y el correo de una cuenta eliminada se pueden volver a usar');
 
+    // --- Plantillas creadas por el administrador ---
+    $templates = new App\MessageTemplates($app);
+    $approvedId = $templates->saveCustom(null, '  Aprobado   con anexos ', 'approved', "Hola, {nombre}. Tu solicitud *{radicado}* fue aprobada.", $admin);
+    $created = $db->one('SELECT * FROM custom_templates WHERE id=?', [$approvedId]);
+    check($created['name'] === 'Aprobado con anexos' && $created['usage_code'] === 'approved', 'Crea una plantilla de respuesta «Aprobado» con el nombre limpio');
+    check(App\MessageTemplates::renderCustom($created, ['nombre' => 'Ana', 'radicado' => 'HC-1'], true) === 'Hola, Ana. Tu solicitud HC-1 fue aprobada.', 'La plantilla creada reemplaza sus variables (sin asteriscos para el correo)');
+    rejects(fn() => $templates->saveCustom(null, 'Aprobado con anexos', 'approved', 'Otro texto suficiente.', $admin), 'No permite dos plantillas con el mismo nombre y uso', 'Ya existe');
+    rejects(fn() => $templates->saveCustom(null, 'Con variable ajena', 'approved', 'Hola {enlace} y {reporte}.', $admin), 'Solo admite las variables de su uso', '{enlace}, {reporte}');
+    rejects(fn() => $templates->saveCustom(null, 'Sin enlace', 'not_registered', 'No encontramos tu historia, {nombre}.', $admin), 'Las respuestas «No Registra» exigen {enlace}', '{enlace}');
+    rejects(fn() => $templates->saveCustom(null, 'Uso inventado', 'email', 'Texto suficientemente largo.', $admin), 'Rechaza un uso que no existe', 'para qué');
+    rejects(fn() => $templates->saveCustom(null, 'Ok', 'approved', 'Texto suficientemente largo.', $admin), 'Exige un nombre de al menos 3 caracteres', 'nombre');
+    $chatId = $templates->saveCustom(null, 'Seguimos revisando', 'report_chat', 'Hola, {nombre}. Seguimos revisando tu reporte {reporte}.', $admin);
+    $templates->saveCustom($approvedId, 'Aprobado completo', 'approved', 'Tu solicitud {radicado} fue aprobada.', $admin);
+    check($db->one('SELECT name FROM custom_templates WHERE id=?', [$approvedId])['name'] === 'Aprobado completo' && count($templates->custom()) === 2
+        && array_column($templates->custom('report_chat'), 'id') === [$chatId], 'Edita una plantilla y las lista por uso');
+    $templates->deleteCustom($chatId, $admin);
+    check(array_column($templates->custom(), 'id') === [$approvedId], 'Elimina una plantilla');
+    rejects(fn() => $templates->deleteCustom($chatId, $admin), 'No elimina dos veces la misma plantilla', 'ya no existe');
+
     // --- Interfaz para n8n ---
     $api = new App\N8nApi($app);
     $result = $api->handle(['action' => 'conversation.handle', 'phone' => $phone, 'message_id' => 'n8n-1', 'text' => 'Sigo esperando']);
