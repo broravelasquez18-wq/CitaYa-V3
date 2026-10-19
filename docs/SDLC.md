@@ -1165,3 +1165,15 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
   - Revisados también el detalle de la solicitud (modal) y un drawer, en oscuro y en claro; el móvil a 375 px queda sin desplazamiento horizontal.
   - Fondo: 15 animaciones, solo `transform`/`opacity`, sin filtros. No se midieron los FPS porque el panel del navegador estaba oculto.
   - DESIGN.md actualizado con la excepción de sombras para el vidrio.
+
+**Corrección (2026-10-19): el bot pedía el nombre completo aunque el documento ya tuviera datos guardados.**
+- **Causa.** El bot pide el nombre cuando el chat no es el `whatsapp_phone` del perfil del documento, para que quien solo sepa un número de documento no vea los datos ni reciba la historia. Pero ese número solo se guardaba al radicar desde el bot, así que pedía el nombre en cada conversación cuando:
+  - el perfil venía del formulario web sin WhatsApp, o vinculado con el código CONFIRMAR;
+  - el nombre ya se había validado, pero la conversación quedó sin terminar.
+- **Decisión del titular.** Pedir el nombre **solo la primera vez por cada WhatsApp**. Se descartó no pedirlo nunca, por el riesgo de que un tercero reciba la historia.
+- **Arreglo.**
+  - Tabla nueva `patient_profile_chats` (perfil + chat). El bot no pide el nombre si el chat es el del perfil o ya está en esa tabla.
+  - Un chat queda recordado al validar el nombre en el bot, al confirmar con el código CONFIRMAR y al radicar una solicitud vinculada a ese chat (`saveProfile`).
+  - `bin/setup.php` agrega, una sola vez y sin duplicar, los chats que ya tenían solicitudes vinculadas a cada documento.
+  - Dos nombres incorrectos no recuerdan el chat. n8n no cambia.
+- **Validación.** `whatsapp` 93 en verde (2 nuevas: el chat validado no vuelve a pedir el nombre, y CONFIRMAR recuerda el chat; además, un chat con nombres incorrectos no queda recordado). `support` 74, `n8n-api` 30, `requests-admin` 46 y `whatsapp-qr` 8 en verde.

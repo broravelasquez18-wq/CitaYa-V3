@@ -6,8 +6,8 @@ namespace App;
  * Solicitud de historia clínica conversando con el bot (en lugar del formulario web).
  *
  * El bot pide el número de documento y busca los datos de la última solicitud (patient_profiles). Si es la primera
- * vez, envía el enlace del formulario (allí quedan guardados). Si ya existen, le pide confirmarlos —desde otro número
- * primero debe escribir el nombre completo del paciente, como en el formulario— y luego pregunta fecha y especialidad.
+ * vez, envía el enlace del formulario (allí quedan guardados). Si ya existen, le pide confirmarlos —desde un WhatsApp que
+ * aún no conoce al paciente, primero debe escribir el nombre completo, una sola vez— y luego pregunta fecha y especialidad.
  * La solicitud se radica con la misma búsqueda directa del formulario y queda vinculada a este chat.
  * El paso de la conversación se guarda en whatsapp_sessions con estados intake_*.
  */
@@ -66,15 +66,20 @@ final class WhatsAppIntake
             $this->sendFormLink($phone, $messageId);
             return;
         }
-        if ($profile['whatsapp_phone'] === $phone) { $this->showData($phone, $messageId, $profile, false); return; }
-        // Desde otro número: se exige el nombre completo, igual que en el formulario, antes de mostrar los datos.
+        if ($this->app->isKnownProfileChat($profile, $phone)) { $this->showData($phone, $messageId, $profile, false); return; }
+        // Desde un WhatsApp que aún no conoce al paciente: se exige el nombre completo (una sola vez) antes de mostrar los datos.
         $this->saveSession($phone, 'intake_name', ['profile_id' => (int)$profile['id'], 'tries' => 0]);
         $this->reply($phone, 'Escribe el *nombre completo* del paciente, como aparece en el documento.', $messageId, 'name');
     }
 
     private function name(string $phone, string $messageId, string $text, array $profile, array $data): void
     {
-        if (Application::nameKey($text) === Application::nameKey($profile['full_name'])) { $this->showData($phone, $messageId, $profile, true); return; }
+        if (Application::nameKey($text) === Application::nameKey($profile['full_name'])) {
+            // Nombre correcto: este chat queda recordado y no se le vuelve a pedir.
+            $this->app->rememberProfileChat((int)$profile['id'], $phone);
+            $this->showData($phone, $messageId, $profile, true);
+            return;
+        }
         $tries = (int)($data['tries'] ?? 0) + 1;
         if ($tries >= self::NAME_TRIES) {
             $this->endSession($phone);

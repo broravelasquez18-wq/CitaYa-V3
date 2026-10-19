@@ -159,6 +159,7 @@ try {
     check($app->request($webId)['whatsapp_phone'] === null && str_contains(lastText(), 'no válido'), 'Un código incorrecto no vincula el número');
     $bot->receive(inbound('wamid.c2', '573001239999', 'confirmar ' . strtolower($code)));
     check($app->request($webId)['whatsapp_phone'] === '573001239999' && (bool)$db->one("SELECT id FROM whatsapp_outbox WHERE request_id=? AND kind='history'", [$webId]), 'Al confirmar, la historia ya enviada por correo sale también por WhatsApp');
+    check((bool)$db->one('SELECT 1 FROM patient_profile_chats c JOIN patient_profiles p ON p.id=c.profile_id JOIN requests r ON r.claimed_document_number=p.document_number WHERE r.id=? AND c.phone=?', [$webId, '573001239999']), 'Confirmar con el código recuerda ese WhatsApp para el documento de la solicitud');
     $bot->receive(inbound('wamid.c3', '573001239999', 'CONFIRMAR ' . $code));
     check(str_contains(lastText(), 'no válido'), 'El código no se puede usar dos veces');
     $webMissing = $app->createRequest(['document_number' => '99999999', 'email' => 'web2@example.test'] + $form, 'ip-7', true);
@@ -255,8 +256,13 @@ try {
     $masked = $say($other, 'ANA MARIA PEREZ');
     check(str_contains($masked, 'pa******@example.test') && !str_contains($masked, 'paciente@'), 'Con el nombre correcto muestra los datos con el correo oculto');
     $say($other, 'menu');
-    $say($other, 'historia'); $say($other, '1012345678'); $say($other, 'Otra Persona');
-    check(str_contains($say($other, 'Otra Persona'), 'wa='), 'Tras dos nombres incorrectos recibe el formulario');
+    $say($other, 'historia');
+    $again = $say($other, '1012345678');
+    check(!str_contains($again, 'nombre completo') && str_contains($again, '¿Tus datos son correctos?'), 'Con el nombre ya validado, ese WhatsApp no lo vuelve a pedir');
+    $say($other, 'menu');
+    $stranger = '573004447777';
+    $say($stranger, 'historia'); $say($stranger, '1012345678'); $say($stranger, 'Otra Persona');
+    check(str_contains($say($stranger, 'Otra Persona'), 'wa=') && !$db->one('SELECT 1 FROM patient_profile_chats WHERE phone=?', [$stranger]), 'Tras dos nombres incorrectos recibe el formulario y ese chat no queda recordado');
     check(App\WhatsAppIntake::parseDate('5-3-26') === '2026-03-05' && App\WhatsAppIntake::parseDate('2026/03/05') === '2026-03-05' && App\WhatsAppIntake::parseDate('ayer') === false, 'Entiende fechas día/mes/año y año/mes/día');
     $written = array_map([App\WhatsAppIntake::class, 'parseDate'], ['10 de julio del 2026', '10 julio 2026', '10 jul. 2026', 'Julio 10, 2026', '3 setiembre 2025']);
     check($written === ['2026-07-10', '2026-07-10', '2026-07-10', '2026-07-10', '2025-09-03'], 'Entiende fechas con el mes escrito («10 de julio del 2026»)');

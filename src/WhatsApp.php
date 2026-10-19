@@ -116,6 +116,9 @@ final class WhatsApp
             return $this->app->request((int)$request['id']);
         });
         if (!$request) return null;
+        // El código lo tiene quien hizo la solicitud: este chat queda recordado para el perfil de ese documento.
+        $profile = $this->app->db->one('SELECT id FROM patient_profiles WHERE document_type=? AND document_number=?', [$request['claimed_document_type'], $request['claimed_document_number']]);
+        if ($profile) $this->app->rememberProfileChat((int)$profile['id'], $phone);
         $next = 'none';
         $delivered = $this->app->db->one("SELECT package_id FROM jobs WHERE request_id=? AND kind='history' ORDER BY id DESC LIMIT 1", [$request['id']]);
         if ($delivered && $delivered['package_id']) { $this->queueHistory((int)$request['id'], (int)$delivered['package_id']); $next = 'history'; }

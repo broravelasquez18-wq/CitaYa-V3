@@ -53,6 +53,10 @@ if (!$db->one("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SC
 foreach (['attachment_storage' => 'VARCHAR(80) NULL', 'attachment_name' => 'VARCHAR(190) NULL', 'attachment_mime' => 'VARCHAR(40) NULL', 'attachment_size' => 'BIGINT UNSIGNED NULL', 'attachment_sha256' => 'CHAR(64) NULL', 'outbox_id' => 'BIGINT UNSIGNED NULL'] as $column => $definition) {
     if (!$db->one("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='support_messages' AND COLUMN_NAME=?", [$column])) $db->pdo->exec("ALTER TABLE support_messages ADD $column $definition");
 }
+// WhatsApp ya vinculados a solicitudes de un documento: el bot los reconoce y no les vuelve a pedir el nombre.
+$db->pdo->exec("INSERT IGNORE INTO patient_profile_chats (profile_id,phone,verified_at)
+    SELECT p.id, r.whatsapp_phone, MAX(r.created_at) FROM requests r JOIN patient_profiles p ON p.document_type=r.claimed_document_type AND p.document_number=r.claimed_document_number
+    WHERE r.whatsapp_phone IS NOT NULL GROUP BY p.id, r.whatsapp_phone");
 foreach (['Medicina general','Ortopedia y traumatología','Medicina interna','Ginecología','Pediatría','Dermatología','Cardiología','Neurología','Alergología'] as $name) {
     $db->run('INSERT IGNORE INTO specialties (name) VALUES (?)', [$name]);
 }

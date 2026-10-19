@@ -116,12 +116,26 @@ final class Application
     {
         $profile = $this->db->one('SELECT * FROM patient_profiles WHERE document_type=? AND document_number=? FOR UPDATE', [$type, $number]);
         if (!$profile) {
-            $this->db->insert('patient_profiles', ['document_type' => $type, 'document_number' => $number, 'full_name' => $name, 'email' => $email,
+            $id = $this->db->insert('patient_profiles', ['document_type' => $type, 'document_number' => $number, 'full_name' => $name, 'email' => $email,
                 'whatsapp_phone' => $phone, 'created_at' => $this->now(), 'updated_at' => $this->now()]);
+            if ($phone) $this->rememberProfileChat($id, $phone);
             return;
         }
         if (!$patientMatched && self::nameKey($profile['full_name']) !== self::nameKey($name)) return;
         $this->db->run('UPDATE patient_profiles SET full_name=?,email=?,whatsapp_phone=COALESCE(?,whatsapp_phone),updated_at=? WHERE id=?', [$name, $email, $phone, $this->now(), $profile['id']]);
+        if ($phone) $this->rememberProfileChat((int)$profile['id'], $phone);
+    }
+
+    /** Recuerda que este WhatsApp ya demostró conocer al paciente del perfil: el bot no le vuelve a pedir el nombre. */
+    public function rememberProfileChat(int $profileId, string $phone): void
+    {
+        $this->db->run('INSERT INTO patient_profile_chats (profile_id,phone,verified_at) VALUES (?,?,?) ON DUPLICATE KEY UPDATE verified_at=VALUES(verified_at)', [$profileId, $phone, $this->now()]);
+    }
+
+    /** ¿Este WhatsApp es el del perfil o ya fue validado para él? */
+    public function isKnownProfileChat(array $profile, string $phone): bool
+    {
+        return $profile['whatsapp_phone'] === $phone || (bool)$this->db->one('SELECT 1 FROM patient_profile_chats WHERE profile_id=? AND phone=?', [$profile['id'], $phone]);
     }
 
     public function whatsapp(): WhatsApp { return new WhatsApp($this); }

@@ -327,3 +327,13 @@ CREATE TABLE IF NOT EXISTS patient_profiles (
  UNIQUE KEY profile_identity (document_type, document_number),
  INDEX profile_document (document_number)
 ) ENGINE=InnoDB;
+
+-- WhatsApp que ya demostraron conocer al paciente de un perfil (nombre validado en el bot, código CONFIRMAR o una
+-- solicitud vinculada a ese chat). Desde ellos el bot no vuelve a pedir el nombre completo.
+CREATE TABLE IF NOT EXISTS patient_profile_chats (
+ profile_id BIGINT UNSIGNED NOT NULL,
+ phone VARCHAR(20) NOT NULL,
+ verified_at DATETIME NOT NULL,
+ PRIMARY KEY (profile_id, phone),
+ FOREIGN KEY (profile_id) REFERENCES patient_profiles(id)
+) ENGINE=InnoDB;
