@@ -1,4 +1,4 @@
-<?php require_once __DIR__ . '/icons.php'; if (empty($deliveryModal)): ?><a class="back-link" href="?page=deliveries<?= ($_GET['from'] ?? '') === 'history' ? '&amp;f=approved' : '' ?>&amp;q=<?= rawurlencode(mb_substr((string)($_GET['q'] ?? ''),0,160)) ?>&amp;p=<?= max(1,(int)($_GET['p'] ?? 1)) ?>"><?= ui_icon('arrow-left', 16) ?>Volver a los resultados</a><?php endif ?>
+<?php require_once __DIR__ . '/icons.php'; if (empty($deliveryModal)): ?><a class="back-link" href="?page=deliveries<?= ($_GET['from'] ?? '') === 'history' ? '&amp;f=approved' : '' ?>&amp;p=<?= max(1,(int)($_GET['p'] ?? 1)) ?>"><?= ui_icon('arrow-left', 16) ?>Volver a los resultados</a><?php endif ?>
 <?php if (!$deliveryDetail): ?><section class="card spaced"><h2>Solicitud no encontrada</h2><p class="muted">El radicado indicado no está disponible.</p></section>
 <?php else: $record=$deliveryDetail['request']; ?>
 <?php

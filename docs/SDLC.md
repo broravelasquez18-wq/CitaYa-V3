@@ -1291,3 +1291,26 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
   - recargar conserva la página y la búsqueda; Atrás y Adelante vuelven a la página correcta;
   - «Cerrar sesión» envía a la página real; el modal de detalle abre;
   - no hay errores en la consola.
+
+**Ajuste (2026-10-20, continuación del anterior): la búsqueda de Solicitudes ya no viaja en la URL.**
+- **Antes.**
+  - El buscador del encabezado (`.head-search` en `templates/admin.php`) enviaba el término por GET: `?page=deliveries&f=…&q=<nombre o cédula>`.
+  - Las tarjetas de estado, la paginación, el enlace al detalle y «Volver a los resultados» repetían `q=`.
+  - Aunque `clean-url.js` limpiara la barra, el historial del navegador (Ctrl+H) guardaba el nombre o la cédula buscados.
+- **Ahora:**
+  - El formulario va por POST (`action=delivery-search`, con `csrf()` y `requireStaff()`).
+  - El servidor guarda el término en `$_SESSION['search']['deliveries']`, recortado a 160 caracteres, y redirige a `?page=deliveries&f=…` (PRG).
+  - «Limpiar» es un botón del mismo formulario (`name="clear"`) que borra el término de la sesión.
+  - `public/index.php` lee `$deliveryQuery` desde la sesión, no desde `$_GET['q']`. El campo muestra el término, y `AdminDeliveries::counts` y la lista lo usan como antes.
+  - Las tarjetas, la paginación (`p`), el detalle y «Volver a los resultados» ya no llevan `q=`: conservan la búsqueda porque está en la sesión.
+  - Una dirección vieja con `?q=` se ignora.
+- **Validación.**
+  - `requests-admin` 49, `resend-ui` 19 y `support` 76 en verde.
+  - Flujo HTTP local con sesión de administrador, contra el servidor embebido de PHP:
+    - el formulario es POST y un CSRF inválido no busca;
+    - buscar responde 302 a `?page=deliveries&f=all`, sin `q`;
+    - el término queda visible en el campo y la tarjeta «Todas» cuenta 0 con un término inexistente (4 sin búsqueda);
+    - al cambiar a «Pendientes» el término sigue;
+    - «Limpiar» restablece los contadores;
+    - ni la lista ni la paginación ni el detalle contienen `q=`.
+- **Pendiente.** `tests/admin-http.php` aún busca con `?q=` por GET y apunta a la URL de CitaYaV2. Hay que pasarlo a POST cuando se actualice esa prueba.
