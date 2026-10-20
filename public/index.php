@@ -260,6 +260,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['upload_result_pending'] = 'bulk';
                 $_SESSION['csrf']=bin2hex(random_bytes(32));
                 go('admin');
+            case 'delivery-search':
+                // Búsqueda de Solicitudes por POST (PRG): el término se guarda en la sesión y no viaja en la URL ni en el historial.
+                requireStaff();
+                $searchTerm = isset($_POST['clear']) ? '' : mb_substr(trim((string)($_POST['q'] ?? '')), 0, 160);
+                if ($searchTerm === '') unset($_SESSION['search']['deliveries']); else $_SESSION['search']['deliveries'] = $searchTerm;
+                $searchFilter = in_array($_POST['f'] ?? '', ['pending','approved','not_registered','all'], true) ? $_POST['f'] : 'pending';
+                header('Location: ?page=deliveries&f=' . $searchFilter); exit;
             case 'withdraw':
                 requireAdmin();
                 $app->db->transaction(function () use ($app) {
@@ -360,7 +367,7 @@ if (in_array($page, ['deliveries','delivery','case-history','history'], true)) {
     } else {
         // Tarjetas de Solicitudes: pendientes (por defecto), aprobadas (enviadas), no registra o todas.
         $deliveryFilter = in_array($_GET['f'] ?? '', ['pending','approved','not_registered','all'], true) ? $_GET['f'] : 'pending';
-        $deliveryQuery = (string)($_GET['q'] ?? '');
+        $deliveryQuery = (string)($_SESSION['search']['deliveries'] ?? '');
         $deliverySearch = $adminDeliveries->search($deliveryQuery, (int)($_GET['p'] ?? 1), $deliveryFilter === 'approved', $deliveryFilter === 'pending', $deliveryFilter === 'not_registered');
         $deliverySearch['filter'] = $deliveryFilter;
         $deliveryCounts = $adminDeliveries->counts($deliveryQuery);
