@@ -20,6 +20,7 @@ if (!function_exists('ui_icon')) {
             'files' => '<path d="M9 7h8l3 3v11H9Z"/><path d="M17 7v3h3M5 17V3h9l2 2M12 14h5M12 17h3"/>',
             'upload' => '<path d="M12 15V4M7 9l5-5 5 5"/><path d="M4 15v4.5A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5V15"/>',
             'inbox' => '<path d="M21 12h-5.5l-2 3h-3l-2-3H3"/><path d="M5.6 5h12.8L21 12v6.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5V12Z"/>',
+            'menu' => '<path d="M4 7h16M4 12h16M4 17h16"/>',
             'list' => '<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/>',
             'archive' => '<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10.5A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V9M10 13h4"/>',
             'flag' => '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',

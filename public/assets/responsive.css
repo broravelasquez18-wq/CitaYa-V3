@@ -1,4 +1,8 @@
-/* CitaYa v2 · adaptación. Escritorio primero; la consola pasa de rail lateral a barra deslizable y las tablas a tarjetas. */
+/* CitaYa v2 · adaptación. Escritorio primero; la consola pasa de rail lateral a menú de hamburguesa y las tablas a tarjetas. */
+.nav-toggle{display:none;align-items:center;justify-content:center;flex-shrink:0;width:44px;height:44px;margin-right:calc(var(--s2) * -1);padding:0;border:0;border-radius:var(--radius);background:transparent;color:var(--ink)}
+.nav-toggle:hover{background:var(--surface-2)}
+.rail-backdrop,.rail-portal{display:none}
+@media(prefers-reduced-motion:reduce){.rail,.rail-backdrop{transition:none!important}}
 .shell,.card,.patient-layout>*,.grid>*,.upload-option-copy,.console-main{min-width:0}
 .card,.alert,.encounter,.notice{overflow-wrap:anywhere}
 .button{white-space:normal;text-align:center}
@@ -15,18 +19,26 @@
   .patient-layout{grid-template-columns:minmax(0,1fr)}
   .sidebar{position:static}
   .console{grid-template-columns:minmax(0,1fr)}
-  .rail{position:sticky;top:63px;z-index:15;height:auto;border-right:0;border-bottom:1px solid var(--line);flex-direction:row;align-items:center;padding:var(--s2) var(--s3);overflow:visible}
-  .rail-nav{flex-direction:row;gap:var(--s1);overflow-x:auto;scroll-snap-type:x proximity;scrollbar-width:none;flex:1;min-width:0;padding-bottom:2px}
-  .rail-nav::-webkit-scrollbar{display:none}
-  .rail-nav{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 32px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 32px),transparent);padding-right:24px}
+  .rail-backdrop{display:block}
   .console{background:none}
   .call-state h2{white-space:normal}
-  .rail-nav a{flex-shrink:0;scroll-snap-align:start;min-height:44px;white-space:nowrap}
-  .rail-nav a.selected::before{left:var(--s3);right:var(--s3);top:auto;bottom:-2px;width:auto;height:3px;border-radius:3px 3px 0 0}
-  .rail-nav a:nth-child(4):not(:last-child){margin-bottom:0;margin-right:var(--s3)}
-  .rail-nav a:nth-child(4):not(:last-child)::after{left:auto;right:calc(var(--s2) * -1);top:10px;bottom:10px;width:1px;height:auto}
-  /* En la barra horizontal solo caben las secciones; cerrar sesión está en el encabezado. */
-  .rail-session{display:none}
+  /* El rail pasa a menú lateral que abre el botón de hamburguesa del encabezado. */
+  .nav-toggle{display:inline-flex}
+  .rail{position:fixed;top:63px;left:0;bottom:0;z-index:19;align-self:stretch;width:min(300px,86vw);height:auto;padding:var(--s4) var(--s3) max(var(--s4),env(safe-area-inset-bottom));border-right:1px solid var(--line);box-shadow:var(--shadow-pop);overscroll-behavior:contain;transform:translateX(-100%);visibility:hidden;transition:transform .26s var(--ease-out),visibility 0s linear .26s}
+  body.console-ambient .rail{background:var(--surface)}
+  body.rail-open .rail{transform:none;visibility:visible;transition:transform .26s var(--ease-out)}
+  .rail-nav a{min-height:48px}
+  .rail-nav a.selected::before{left:-12px}
+  .rail-backdrop{position:fixed;inset:63px 0 0;z-index:18;background:rgba(6,16,28,.5);opacity:0;visibility:hidden;transition:opacity .2s,visibility 0s linear .2s}
+  body.rail-open .rail-backdrop{opacity:1;visibility:visible;transition:opacity .2s}
+  body.rail-open{overflow:hidden}
+  /* En el encabezado quedan hamburguesa, marca, tema y salir; «Solicitar historia» pasa al menú. */
+  body.console-ambient .header-nav{display:none}
+  body.console-ambient .header .theme-toggle{margin-left:auto}
+  .rail-session{flex-direction:column;align-items:stretch}
+  .rail-portal{display:flex;align-items:center;gap:var(--s3);min-height:48px;padding:0 var(--s3);border-radius:var(--radius);color:var(--ink-2);font-size:var(--t-sm);font-weight:600;text-decoration:none}
+  .rail-portal:hover{background:var(--surface-2);color:var(--ink)}
+  .rail-user{padding:var(--s2) var(--s3) 0}
   .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
   .stat:nth-child(3){border-left:0}
   .stat:nth-child(n+3){border-top:1px solid var(--line)}
@@ -80,6 +92,7 @@
   .shell{padding:var(--s4) var(--s4) var(--s6)}
   body.staff .shell{padding:0}
   .rail{top:56px}
+  .rail-backdrop{top:56px}
   .console-main{padding:var(--s4) var(--s4) var(--s6)}
   .footer{margin:0 var(--s4);flex-direction:column;gap:var(--s1);padding-bottom:max(var(--s5),env(safe-area-inset-bottom))}
   .card{padding:var(--s4)}

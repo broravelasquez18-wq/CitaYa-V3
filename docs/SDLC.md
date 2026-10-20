@@ -1177,3 +1177,13 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
   - `bin/setup.php` agrega, una sola vez y sin duplicar, los chats que ya tenían solicitudes vinculadas a cada documento.
   - Dos nombres incorrectos no recuerdan el chat. n8n no cambia.
 - **Validación.** `whatsapp` 93 en verde (2 nuevas: el chat validado no vuelve a pedir el nombre, y CONFIRMAR recuerda el chat; además, un chat con nombres incorrectos no queda recordado). `support` 74, `n8n-api` 30, `requests-admin` 46 y `whatsapp-qr` 8 en verde.
+
+**Ajuste (2026-10-20, pedido del titular): el menú lateral de la consola es una hamburguesa en móvil.**
+- **Antes.** Hasta 960 px el rail de secciones se volvía una barra horizontal deslizable bajo el encabezado: había que deslizar para encontrar secciones y el usuario no se veía. A 375 px el encabezado se desbordaba («Solicitar historia», «Acceso interno», tema y «Cerrar sesión» no cabían).
+- **Ahora (≤ 960 px, todas las páginas de la consola):**
+  - Botón de hamburguesa a la izquierda del encabezado (`layout.php`, ícono nuevo `menu`). Abre el rail como panel lateral de hasta 300 px con fondo oscurecido.
+  - Se cierra con Escape (el foco vuelve al botón), con un clic en el fondo o al elegir una sección; al abrir, el foco va a la sección actual. `aria-expanded` y la etiqueta del botón cambian con el estado. Al pasar a escritorio se cierra solo.
+  - Cerrado, el panel queda con `visibility:hidden`, así que sus enlaces no reciben foco. Mientras está abierto la página no se desplaza detrás.
+  - En el encabezado quedan hamburguesa, marca, tema y salir. «Solicitar historia» pasa al pie del panel, junto al usuario.
+  - Escritorio sin cambios.
+- **Validación.** En local, con una sesión de prueba creada en `storage/sessions` (ya borrada): a 375 px y 768 px el botón abre y cierra el panel (botón, fondo, Escape), el panel ocupa todo el alto y no hay desplazamiento horizontal; a 1280 px el rail lateral sigue igual y el botón no aparece. La animación de apertura no se pudo ver en movimiento porque el panel del navegador estaba oculto (se probó el estado final con transiciones desactivadas).

@@ -478,6 +478,34 @@ if (queueProgress && typeof queueProgress.showModal === 'function') {
   if (document.querySelector('[data-toasts] .toast.error')) setTimeout(validateAll, 0);
 })();
 
+// Menú de secciones de la consola en móvil: la hamburguesa abre el rail como panel lateral.
+// Se cierra con Escape, con un clic en el fondo o al elegir una sección; el foco vuelve al botón.
+(() => {
+  const toggle = document.querySelector('[data-rail-toggle]');
+  const rail = document.getElementById('console-rail');
+  if (!toggle || !rail) return;
+  const mobile = matchMedia('(max-width:960px)');
+  const set = open => {
+    document.body.classList.toggle('rail-open', open);
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.setAttribute('aria-label', open ? 'Cerrar el menú de secciones' : 'Abrir el menú de secciones');
+  };
+  toggle.addEventListener('click', () => {
+    const open = !document.body.classList.contains('rail-open');
+    set(open);
+    if (open) (rail.querySelector('a.selected') || rail.querySelector('a'))?.focus();
+  });
+  document.addEventListener('click', event => {
+    if (event.target.closest('[data-rail-close]') || event.target.closest('#console-rail a')) set(false);
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || !document.body.classList.contains('rail-open')) return;
+    set(false);
+    toggle.focus();
+  });
+  mobile.addEventListener('change', () => { if (!mobile.matches) set(false); });
+})();
+
 // Cambio de tema claro u oscuro (inicio de sesión, formulario y consola interna); la elección queda guardada en este navegador.
 document.querySelectorAll('[data-theme-toggle]').forEach(button => {
   const root = document.documentElement;

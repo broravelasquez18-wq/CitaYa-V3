@@ -36,14 +36,15 @@ $pageActions = [
 ][$page] ?? '';
 ?>
 <div class="console">
-<aside class="rail" aria-label="Secciones del acceso interno">
+<aside class="rail" id="console-rail" aria-label="Secciones del acceso interno">
 <nav class="rail-nav tabs" aria-label="Secciones">
 <?php foreach ($sections as [$target, $label, $iconName, $active, $adminOnly, $count, $countLabel]): if ($adminOnly && !$isAdmin) continue; ?>
 <a class="<?= $active ? 'selected' : '' ?>" href="?page=<?= $target ?>" <?= $active ? 'aria-current="page"' : '' ?>><?= ui_icon($iconName, 19) ?><span class="rail-label"><?= h($label) ?></span><?php if ($count): ?> <span class="tab-count" aria-label="<?= $count ?> <?= $countLabel ?>"><?= $count ?></span><?php endif ?><?php if ($target === 'whatsapp' && !empty($whatsappDisconnected)): ?><span class="rail-alert" aria-label="desconectado"></span><?php endif ?></a>
 <?php endforeach ?>
 </nav>
-<div class="rail-session"><span class="rail-user"><?= ui_icon('user', 18) ?><span><strong><?= h($_SESSION['admin_name'] ?? '') ?></strong><small><?= $isAdmin ? 'Administrador' : 'Empleado' ?></small></span></span></div>
+<div class="rail-session"><a class="rail-portal" href="?page=home"><?= ui_icon('file', 18) ?>Solicitar historia</a><span class="rail-user"><?= ui_icon('user', 18) ?><span><strong><?= h($_SESSION['admin_name'] ?? '') ?></strong><small><?= $isAdmin ? 'Administrador' : 'Empleado' ?></small></span></span></div>
 </aside>
+<div class="rail-backdrop" data-rail-close></div>
 <div class="console-main">
 <header class="page-head"><div><h1><?= h($pageTitle) ?></h1><?php if ($pageLead !== ''): ?><p><?= h($pageLead) ?></p><?php endif ?></div><?php if ($pageActions !== ''): ?><div class="page-actions"><?= $pageActions ?></div><?php endif ?></header>
 <?php if (!empty($whatsappDisconnected) && $page !== 'whatsapp'): ?><dialog id="wa-down-modal" class="modal alert-modal" aria-labelledby="wa-down-title" aria-describedby="wa-down-text" data-auto-open data-once="wa-down"><div class="alert-modal-icon stop"><?= ui_icon('chat', 26) ?></div><h2 id="wa-down-title">El WhatsApp del bot está desconectado</h2><p id="wa-down-text">Los pacientes que escriban al bot no reciben respuesta hasta que lo vuelvas a vincular.</p><div class="alert-modal-actions"><button type="button" class="button secondary" data-close>Más tarde</button><?php if ($isAdmin): ?><a class="button primary" href="?page=whatsapp">Vincular ahora</a><?php endif ?></div></dialog><?php endif ?>
