@@ -52,15 +52,16 @@ final class BulkImport
                 if(!isset($groups[$key])) $groups[$key]=['patient'=>$metadata['full_name'],'document'=>$metadata['document_type'].' '.$metadata['document_number'],'date'=>substr($metadata['attended_at'],0,10),'admission'=>$metadata['admission'],'sources'=>[],'names'=>[]];
                 $groups[$key]['sources'][]=$source;
                 $groups[$key]['names'][]=$name;
-            } catch(\DomainException $e){$errors[]=['files'=>[$name],'status'=>'error','message'=>$e->getMessage()];}
-            catch(\Throwable){$errors[]=['files'=>[$name],'status'=>'error','message'=>'No se pudo analizar este PDF. Revisa el archivo e inténtalo nuevamente.'];}
+            } catch(ClinicalPdfException $e){$errors[]=['files'=>[$name],'status'=>'error','reason'=>$e->getMessage(),'page'=>$e->page];}
+            catch(\DomainException $e){$errors[]=['files'=>[$name],'status'=>'error','reason'=>$e->getMessage()];}
+            catch(\Throwable){$errors[]=['files'=>[$name],'status'=>'error','reason'=>'No se pudo analizar este PDF. Revisa que no esté dañado.'];}
         }
-        $report=['file_count'=>count($sources),'saved'=>0,'reused'=>0,'failed'=>count($errors),'blocked'=>0,'results'=>$errors];
-        // An unreadable annex cannot be assigned safely to a package: publish nothing yet.
-        if($errors){
-            foreach($groups as $group){$report['results'][]=['files'=>$group['names'],'status'=>'blocked','patient'=>$group['patient'],'document'=>$group['document'],'date'=>$group['date'],'message'=>'Sin guardar: corrige los PDF que no se pudieron leer y vuelve a cargar el lote completo.'];$report['blocked']++;}
-            return $report;
-        }
+        // Los PDF que no se pudieron leer no frenan al resto: se guardan las atenciones legibles y cada fallo se informa
+        // con su motivo. Si el PDF fallido era un anexo de una atención guardada, hay que volver a subirlo junto con los
+        // demás PDF de esa atención: subido solo, el sistema lo tomaría como una versión nueva con ese único archivo.
+        foreach($errors as &$error) $error['message']=$error['reason'].' Corrígelo y vuelve a subirlo junto con los demás PDF de su atención.';
+        unset($error);
+        $report=['file_count'=>count($sources),'saved'=>0,'reused'=>0,'failed'=>count($errors),'unreadable'=>count($errors),'blocked'=>0,'results'=>$errors];
         $repository=new Repository($this->app);
         foreach($groups as $group){
             $result=['files'=>$group['names'],'patient'=>$group['patient'],'document'=>$group['document'],'date'=>$group['date']];

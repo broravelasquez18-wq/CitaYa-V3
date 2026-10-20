@@ -313,8 +313,9 @@ try {
     $badBulkPath=$config['storage_path'].'/histories/bulk-invalid.pdf';file_put_contents($badBulkPath,'not a PDF');
     $newBulkPath=$config['storage_path'].'/histories/bulk-new.pdf';file_put_contents($newBulkPath,testPdf('7000000033','BULKC001'));
     $badReport=$bulk->import([['path'=>$newBulkPath,'name'=>'nueva.pdf'],['path'=>$badBulkPath,'name'=>'ilegible.pdf']]);
-    check($badReport['saved']===0 && $badReport['failed']===1 && $badReport['blocked']===1,'Un PDF no identificable bloquea publicación del lote completo');
-    check($db->one("SELECT id FROM patients WHERE document_number='7000000033'")===null,'Lote bloqueado no deja pacientes ni historias parciales');
+    check($badReport['saved']===1 && $badReport['failed']===1 && $badReport['unreadable']===1 && $badReport['blocked']===0,'Un PDF ilegible no frena el lote: se guarda lo legible');
+    check($badReport['results'][0]['files']===['ilegible.pdf'] && $badReport['results'][0]['status']==='error' && str_contains($badReport['results'][0]['message'],'Adjunta un PDF válido') && str_contains($badReport['results'][0]['message'],'junto con los demás PDF'),'El PDF fallido sale primero, con su motivo y cómo volver a subirlo');
+    check($db->one("SELECT id FROM patients WHERE document_number='7000000033'")!==null,'La atención legible del lote queda registrada');
     rejects(fn()=>$bulk->import([]),'Carga masiva rechaza lote vacío');
     rejects(fn()=>$bulk->import(array_fill(0,21,$bulkSources[0])),'Carga masiva impone límite de archivos en servidor');
     rejects(fn()=>$bulk->receive(['complete'=>'0'],[]),'Carga masiva exige confirmar documentos completos');
@@ -323,7 +324,7 @@ try {
     $conflictPath=$config['storage_path'].'/histories/bulk-conflict.pdf';
     file_put_contents($conflictPath,str_replace('Paciente ficticio','Paciente distinto',testPdf('7000000011','BULKA001','CONFLICTO')));
     $conflictReport=$bulk->import([$bulkSources[0],['path'=>$conflictPath,'name'=>'contradictorio.pdf'],['path'=>$newBulkPath,'name'=>'valido.pdf']]);
-    check($conflictReport['failed']===1 && $conflictReport['saved']===1,'Conflicto en una atención no mezcla datos ni impide guardar otro grupo válido');
+    check($conflictReport['failed']===1 && $conflictReport['saved']+$conflictReport['reused']===1,'Conflicto en una atención no mezcla datos ni impide guardar otro grupo válido');
     check($adminView->search($app->request($direct)['reference'],1,true)['total']===0,'Historial excluye entregas simuladas');
     check($adminView->search($app->request($unknownDateRequest)['reference'],1,true)['total']===0,'Historial excluye solicitudes todavía en cola');
     $firstAccepted=$app->now();

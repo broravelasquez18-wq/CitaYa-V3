@@ -27,6 +27,22 @@ rejectRead(fn()=>$reader->extract([$text,str_replace('ABC123','OTHER456',$contin
 rejectRead(fn()=>$reader->extract([$text,str_replace('10/07/2026','11/07/2026',$continuation)]),'Rechaza fechas de atención distintas');
 rejectRead(fn()=>$reader->extract([$text,'Anexo sin referencias']),'Rechaza anexos sin identificación o referencia comprobable');
 rejectRead(fn()=>$reader->extract(['']),'Indica necesidad de OCR para escaneos sin texto');
+// Cada error dice en qué página está el problema.
+$pageOf=function(array $texts):array{try{(new App\ClinicalPdfReader())->extract($texts);return [null,''];}catch(App\ClinicalPdfException $e){return [$e->page,$e->getMessage()];}};
+[$page,$message]=$pageOf([$text,$continuation,str_replace('001234','005678',$text)]);
+expectRead($page===3 && str_starts_with($message,'Página 3: es de otro paciente') && str_contains($message,'005678'),'Señala la página de otro paciente y su documento');
+[$page,$message]=$pageOf([$text,$continuation,str_replace('ABC123','OTHER456',$continuation)]);
+expectRead($page===3 && str_contains($message,'OTHER456'),'Señala la página de otro ingreso');
+[$page,$message]=$pageOf([$text,'   ',$continuation]);
+expectRead($page===2 && str_contains($message,'parece escaneada'),'Señala la página escaneada sin texto dentro del PDF');
+[$page,$message]=$pageOf([$text,$continuation,'Anexo sin referencias']);
+expectRead($page===3 && str_contains($message,'no trae los datos del paciente'),'Señala el anexo sin identificación');
+[$page,$message]=$pageOf([str_replace('Ingreso: ABC123','',$text)]);
+expectRead($page===1 && str_starts_with($message,'Página 1: No se pudo identificar el número de ingreso'),'Los datos de la atención se buscan en la página 1');
+[$page,$message]=$pageOf(['',$continuation]);
+expectRead($page===1 && str_contains($message,'parece escaneada'),'Una página 1 escaneada se señala como tal');
+[$page]=$pageOf(['','']);
+expectRead($page===null,'Un PDF sin texto en ninguna página no señala una página concreta');
 rejectRead(fn()=>$reader->extract([str_replace('10/07/2026','31/02/2026',$text)]),'Rechaza fechas inválidas');
 $path=dirname(__DIR__).'/.runtime/parser-test-'.bin2hex(random_bytes(5)).'.pdf';
 try{file_put_contents($path,testPdf('000456','TEST123','NOTA'));$parsed=$reader->read($path);expectRead($parsed['document_number']==='000456' && $parsed['page_count']===1,'Extrae datos desde bytes de un PDF real de prueba');}finally{if(is_file($path))unlink($path);}

@@ -1329,3 +1329,35 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
     - «Limpiar» restablece los contadores;
     - ni la lista ni la paginación ni el detalle contienen `q=`.
 - **Pendiente.** `tests/admin-http.php` aún busca con `?q=` por GET y apunta a la URL de CitaYaV2. Hay que pasarlo a POST cuando se actualice esa prueba.
+
+**Ajuste (2026-10-20, pedido del titular): la carga masiva guarda los PDF legibles y dice cuál falló y por qué.**
+- **Antes.** Si un solo PDF del lote no se podía leer, no se guardaba ninguno; todas las atenciones quedaban «Sin guardar». El titular subió 7 PDF y no se cargó nada.
+- **Decisión del titular.** Cargar los que sí se pudieron leer y mostrar cuál no se cargó y su falla.
+- **Ahora (`BulkImport::import`):**
+  - Se guardan las atenciones cuyos PDF se leyeron.
+  - Cada PDF ilegible aparece primero en el resultado, con «No se cargó», el motivo del lector (escaneado sin texto, falta el documento, la fecha, el ingreso, página sin identificación, archivo dañado…) y la indicación de volver a subirlo junto con los demás PDF de su atención.
+  - Un aviso arriba del resultado explica que, si el PDF fallido era anexo de una atención guardada, esa historia quedó sin ese anexo.
+  - Hay que volver a subirlo con todos los PDF de la atención porque, subido solo, `importPackage` lo tomaría como una versión nueva de esa atención con ese único archivo y retiraría la completa.
+  - El texto del formulario de carga masiva se actualizó con la nueva regla.
+- **Riesgo aceptado.** Una atención puede quedar publicada sin un anexo que no se pudo leer, porque no se sabe a qué atención pertenecía ese PDF. El aviso lo hace visible para corregirlo.
+- **Validación.** `run` 159 en verde. La prueba «Un PDF no identificable bloquea el lote» se reemplazó por tres:
+  - un PDF ilegible no frena el lote;
+  - el fallido sale primero, con su motivo y cómo volver a subirlo;
+  - la atención legible queda registrada.
+  - La prueba de conflicto se ajustó: la atención válida ya estaba registrada y ahora aparece como «ya registrada».
+  - `requests-admin` 49, `support` 85, `whatsapp` 95 y `resend-ui` 19 en verde. El resultado se revisó en el navegador con un informe de ejemplo.
+  - `tests/bulk-http.php` sigue apuntando a CitaYaV2 y falla por eso, igual que antes; no se tocó.
+
+**Ajuste (2026-10-20, pedido del titular): el resultado de la carga dice en qué página está el problema del PDF.**
+- **Antes.** El motivo del fallo se mostraba sin la página. Varios mensajes eran genéricos: «El PDF contiene datos de más de un paciente», «…más de un ingreso», «Hay una página sin identificación…».
+- **Ahora:**
+  - Nueva `App\ClinicalPdfException` (extiende `DomainException`): lleva el motivo y la página, y su mensaje empieza con «Página N: …».
+  - `ClinicalPdfReader` la usa en todos los fallos de contenido:
+    - Datos del paciente y de la atención (documento, nombre, ingreso, fecha, hora, especialidad): página 1.
+    - Otro paciente, otro ingreso u otra fecha: la página donde aparece, con el dato encontrado frente al del inicio del PDF (por ejemplo, «Página 3: es de otro ingreso (OTHER456); el PDF empieza con el ingreso ABC123»).
+    - Página sin texto (escaneada) dentro del PDF: se señala como tal, en vez del error genérico de identificación.
+    - Anexo sin datos del paciente ni de la atención: su página.
+    - PDF sin texto en ninguna página, dañado o fuera de tamaño: sin página, porque es todo el archivo.
+  - En el resultado de la carga masiva, cada PDF fallido muestra «Página N» junto al nombre del archivo y el motivo completo; se quitó el «No se cargó» repetido del mensaje.
+  - La carga individual muestra el mismo mensaje con la página.
+- **Validación.** `pdf-reader` 24 en verde (7 nuevas: página de otro paciente con su documento, de otro ingreso, página escaneada dentro del PDF, anexo sin identificación, datos de la atención en la página 1, página 1 escaneada y PDF sin texto sin página concreta). `run` 159, `requests-admin` 49, `support` 85 y `whatsapp` 95 en verde. Revisado en el navegador con un informe de ejemplo.

@@ -815,6 +815,9 @@ form.sheet-body,.sheet-body>form{display:flex;flex-direction:column}
 .item-main small{margin:2px 0 0}
 .notice.stop{background:var(--stop-soft);border-color:var(--stop-line)}
 .notice.stop>.icon{color:var(--stop)}
+.notice.warn{background:var(--amber-soft);border-color:#efd08c;color:var(--amber-ink)}
+.notice.warn>.icon{color:var(--amber-ink)}
+.bulk-files .bulk-page{margin-top:var(--s1)}
 .result-launch{display:flex;align-items:center;justify-content:space-between;gap:var(--s3);flex-wrap:wrap;margin-top:var(--s5)}
 .result-launch p{margin:0}
 .history-modal .sheet-body{padding-bottom:0}
