@@ -223,6 +223,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 (new App\MessageTemplates($app))->reset((string)($_POST['code'] ?? ''), (int)$_SESSION['admin_id']);
                 $_SESSION['flash'] = 'Se restauró el texto predeterminado de la plantilla.';
                 go('templates');
+            case 'remove-template':
+                requireAdmin();
+                (new App\MessageTemplates($app))->remove((string)($_POST['code'] ?? ''), (int)$_SESSION['admin_id']);
+                $_SESSION['flash'] = 'Plantilla eliminada. Puedes recuperarla con «Restaurar».';
+                go('templates');
             case 'custom-template-save':
                 requireAdmin();
                 $templateId = (int)($_POST['template_id'] ?? 0);

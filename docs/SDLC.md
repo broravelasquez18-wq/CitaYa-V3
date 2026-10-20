@@ -1291,3 +1291,18 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
   - recargar conserva la página y la búsqueda; Atrás y Adelante vuelven a la página correcta;
   - «Cerrar sesión» envía a la página real; el modal de detalle abre;
   - no hay errores en la consola.
+
+**Ajuste (2026-10-20, pedido del titular): el administrador puede eliminar plantillas del sistema.**
+- **Antes.**
+  - Las plantillas creadas ya se podían eliminar, pero el botón solo aparecía dentro de «Editar».
+  - Las 17 del sistema solo se podían editar o restaurar.
+- **Decisión del titular.** Poder eliminar también las del sistema. Se protegieron las que el bot y los correos usan en cada solicitud: Bienvenida, Enlace al formulario, Historia encontrada, Solicitud con radicado, Historia aprobada y No registra (`MessageTemplates::PROTECTED`).
+- **Ahora:**
+  - Las 11 opcionales tienen «Eliminar» en la lista, con confirmación: los 4 motivos «No registra» (documento, nombre, fecha, especialidad) y las 7 indicaciones de órdenes médicas. Las protegidas muestran «Necesaria» con un candado.
+  - Una plantilla eliminada se marca en la tabla nueva `removed_templates`, que crea `schema.sql` y `bin/setup.php` corre al arrancar el contenedor. Su texto personalizado se borra.
+  - Una plantilla eliminada aparece como «Eliminada» con «Restaurar», que la recupera con su texto predeterminado. Mientras está eliminada no se puede editar.
+  - **Efecto de los motivos «No registra»:** dejan de aparecer en «Plantillas» al responder una solicitud.
+  - **Efecto de las indicaciones de órdenes:** el bot deja de enviar esa línea debajo de las órdenes de ese tipo; la orden se sigue enviando.
+  - Eliminar queda en el registro de eventos (`template_removed`).
+  - En móvil, las filas de la lista ponen el texto a todo el ancho y los botones debajo.
+- **Validación.** `support` 85 en verde (9 nuevas: las 6 protegidas rechazan eliminarse; eliminar una opcional deja registro y borra su texto personalizado; no se edita estando eliminada; restaurar la recupera). `whatsapp` 95 en verde (2 nuevas: una indicación de orden eliminada no se envía y restaurarla la vuelve a enviar). `requests-admin` 49 en verde. En local se eliminó «No registra: nombre» desde la lista, con confirmación: desapareció del menú de respuesta y se restauró. Revisado a 1440 y 375 px. La base local quedó sin plantillas eliminadas.

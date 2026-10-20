@@ -53,7 +53,9 @@ $templateValues = ['radicado' => $record['reference'], 'nombre' => $record['clai
     'especialidad' => $record['specialty'] ?? 'la especialidad indicada'];
 // Plantillas del menú: código => [título, estado que selecciona].
 $responseTemplates = ['response_approved' => ['Historia aprobada', 'approved'], 'nr_document' => ['No registra: número de documento', 'not_registered'], 'nr_name' => ['No registra: nombre', 'not_registered'],
-    'nr_date' => ['No registra: fecha de atención', 'not_registered'], 'nr_specialty' => ['No registra: especialidad', 'not_registered'], 'not_registered' => ['No registra: general', 'not_registered']]; ?>
+    'nr_date' => ['No registra: fecha de atención', 'not_registered'], 'nr_specialty' => ['No registra: especialidad', 'not_registered'], 'not_registered' => ['No registra: general', 'not_registered']];
+// Los motivos que el administrador eliminó no se ofrecen.
+$responseTemplates = array_filter($responseTemplates, fn($code) => !$messageTemplates->isRemoved($code), ARRAY_FILTER_USE_KEY); ?>
 <form method="post" action="?page=deliveries" enctype="multipart/form-data" class="case-respond" data-case-respond novalidate><?= csrf() ?><input type="hidden" name="action" value="respond-case"><input type="hidden" name="request_id" value="<?= (int)$record['id'] ?>">
 <div class="case-body">
 <div class="case-respond-head"><label class="case-section-title" for="case-comment-<?= (int)$record['id'] ?>"><span class="case-icon-box brand"><?= $icon('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>') ?></span>Comentario de gestión / respuesta</label>

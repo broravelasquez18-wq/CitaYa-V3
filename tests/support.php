@@ -225,6 +225,14 @@ try {
     $templates->deleteCustom($chatId, $admin);
     check(array_column($templates->custom(), 'id') === [$approvedId], 'Elimina una plantilla');
     rejects(fn() => $templates->deleteCustom($chatId, $admin), 'No elimina dos veces la misma plantilla', 'ya no existe');
+    // Plantillas del sistema: las opcionales se eliminan y se restauran; las que usa el bot están protegidas.
+    foreach (App\MessageTemplates::PROTECTED as $protected) rejects(fn() => $templates->remove($protected, $admin), 'No elimina la plantilla necesaria ' . $protected, 'no se puede eliminar');
+    $templates->save('nr_name', 'Tu solicitud {radicado} no registra con ese nombre: {enlace}', $admin);
+    $templates->remove('nr_name', $admin);
+    check($templates->isRemoved('nr_name') && !$templates->isCustom('nr_name') && $db->one("SELECT COUNT(*) n FROM events WHERE action='template_removed'")['n'] >= 1, 'Elimina una plantilla opcional del sistema y queda en el registro de eventos');
+    rejects(fn() => $templates->save('nr_name', 'Tu solicitud {radicado} no registra: {enlace}', $admin), 'No edita una plantilla eliminada', 'Restáurala');
+    $templates->reset('nr_name', $admin);
+    check(!$templates->isRemoved('nr_name') && $templates->body('nr_name') === App\MessageTemplates::DEFINITIONS['nr_name'][3], 'Restaurar recupera la plantilla eliminada con su texto predeterminado');
 
     // --- Interfaz para n8n ---
     $api = new App\N8nApi($app);

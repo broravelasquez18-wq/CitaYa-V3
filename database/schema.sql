@@ -234,6 +234,13 @@ CREATE TABLE IF NOT EXISTS message_templates (
  updated_at DATETIME NOT NULL
 ) ENGINE=InnoDB;
 
+-- Plantillas del sistema opcionales que el administrador eliminó (motivos «No registra» e indicaciones de órdenes).
+CREATE TABLE IF NOT EXISTS removed_templates (
+ code VARCHAR(40) PRIMARY KEY,
+ removed_by BIGINT UNSIGNED NULL,
+ removed_at DATETIME NOT NULL
+) ENGINE=InnoDB;
+
 -- Plantillas que crea el administrador: respuestas a solicitudes (Aprobado / No Registra) y respuestas rápidas del chat de reportes.
 CREATE TABLE IF NOT EXISTS custom_templates (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

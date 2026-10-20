@@ -160,6 +160,9 @@
   .report-item{flex-direction:column;align-items:flex-start}
   .report-meta{flex-direction:row;align-items:center;flex-wrap:wrap}
   .case-info{padding:var(--s4)}
+  /* Listas con acciones (Plantillas): el texto a todo el ancho y los botones juntos debajo. */
+  .item-row{flex-wrap:wrap;gap:var(--s2)}
+  .item-row>.item-main{flex:1 1 100%}
   .staff-progress-head{flex-wrap:wrap;align-items:flex-start}
   .staff-progress-head>div{flex-basis:calc(100% - 56px)}
   .staff-progress-head .pill{margin-left:56px}

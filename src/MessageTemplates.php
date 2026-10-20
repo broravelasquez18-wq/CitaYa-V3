@@ -55,6 +55,31 @@ final class MessageTemplates
         return $saved['body'] ?? self::DEFINITIONS[$code][3];
     }
 
+    /** Plantillas que el bot o los correos necesitan siempre: se editan o restauran, pero no se eliminan. */
+    public const PROTECTED = ['menu', 'form_link', 'history_found', 'pending', 'response_approved', 'not_registered'];
+
+    public static function isRemovable(string $code): bool
+    {
+        return isset(self::DEFINITIONS[$code]) && !in_array($code, self::PROTECTED, true);
+    }
+
+    public function isRemoved(string $code): bool
+    {
+        return (bool)$this->app->db->one('SELECT code FROM removed_templates WHERE code=?', [$code]);
+    }
+
+    /** Elimina una plantilla opcional: deja de aparecer en «Plantillas» al responder y de enviarse con las órdenes. */
+    public function remove(string $code, int $adminId): void
+    {
+        if (!isset(self::DEFINITIONS[$code])) throw new \DomainException('Plantilla desconocida.');
+        if (!self::isRemovable($code)) throw new \DomainException('Esta plantilla la usa el sistema en cada solicitud y no se puede eliminar. Puedes editar su texto.');
+        $this->app->db->transaction(function () use ($code, $adminId) {
+            $this->app->db->run('DELETE FROM message_templates WHERE code=?', [$code]);
+            $this->app->db->run('INSERT INTO removed_templates (code,removed_by,removed_at) VALUES (?,?,?) ON DUPLICATE KEY UPDATE removed_by=VALUES(removed_by),removed_at=VALUES(removed_at)', [$code, $adminId, $this->app->now()]);
+        });
+        $this->app->event(null, 'template_removed', $code . ':admin_' . $adminId);
+    }
+
     public function isCustom(string $code): bool
     {
         return (bool)$this->app->db->one('SELECT code FROM message_templates WHERE code=?', [$code]);
@@ -78,6 +103,7 @@ final class MessageTemplates
     public function save(string $code, string $body, int $adminId): void
     {
         if (!isset(self::DEFINITIONS[$code])) throw new \DomainException('Plantilla desconocida.');
+        if ($this->isRemoved($code)) throw new \DomainException('Esta plantilla está eliminada. Restáurala para volver a usarla y editarla.');
         $body = trim(str_replace("\r\n", "\n", $body));
         if (mb_strlen($body) < 10 || mb_strlen($body) > 3000) throw new \DomainException('El texto debe tener entre 10 y 3000 caracteres.');
         preg_match_all('/\{([a-z_]+)\}/', $body, $used);
@@ -94,7 +120,9 @@ final class MessageTemplates
     public function reset(string $code, int $adminId): void
     {
         if (!isset(self::DEFINITIONS[$code])) throw new \DomainException('Plantilla desconocida.');
+        // Restaurar también recupera una plantilla eliminada, con su texto predeterminado.
         $this->app->db->run('DELETE FROM message_templates WHERE code=?', [$code]);
+        $this->app->db->run('DELETE FROM removed_templates WHERE code=?', [$code]);
         $this->app->event(null, 'template_reset', $code . ':admin_' . $adminId);
     }
 

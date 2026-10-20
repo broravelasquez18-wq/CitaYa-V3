@@ -807,6 +807,10 @@ form.sheet-body,.sheet-body>form{display:flex;flex-direction:column}
 .button.danger-outline:hover{border-color:var(--stop);background:var(--stop-soft)}
 .item-list{list-style:none;margin:var(--s4) 0 0;padding:0;border-top:1px solid var(--line)}
 .item-row{display:flex;align-items:center;gap:var(--s4);padding:var(--s3) 0;border-bottom:1px solid var(--line)}
+.item-row>form{margin:0}
+.item-row.is-removed .item-main{opacity:.6}
+.button.danger-text{color:var(--stop)}
+.button.danger-text:hover{border-color:var(--stop);background:var(--stop-soft);color:var(--stop)}
 .item-main{flex:1;min-width:0}
 .item-main small{margin:2px 0 0}
 .notice.stop{background:var(--stop-soft);border-color:var(--stop-line)}

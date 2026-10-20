@@ -491,7 +491,9 @@ final class WhatsApp
         $lines = count($items) === 1 && $type !== 'formula'
             ? [$icon . ' *' . $items[0] . '*']
             : array_merge([$icon . ' *' . (self::ORDER_GROUPS[$type] ?? MedicalOrders::label($type)) . '*'], array_map(fn($item) => '• ' . $item, $items));
-        $lines[] = isset(MessageTemplates::DEFINITIONS['order_' . $type]) ? $this->templates()->render('order_' . $type) : MedicalOrders::guidance($type);
+        // Si el administrador eliminó la indicación de este tipo de orden, no se agrega.
+        if (!isset(MessageTemplates::DEFINITIONS['order_' . $type])) $lines[] = MedicalOrders::guidance($type);
+        elseif (!$this->templates()->isRemoved('order_' . $type)) $lines[] = $this->templates()->render('order_' . $type);
         if (!empty($details['when'])) $lines[] = '📅 Pídela para dentro de *' . $details['when'] . '*.';
         if (!empty($details['validity'])) $lines[] = '⏳ Tienes ' . (int)$details['validity'] . ' días para usar esta orden.';
         return implode("\n", $lines);

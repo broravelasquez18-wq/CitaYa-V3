@@ -146,6 +146,12 @@ try {
     $ordersAgain = (new ReflectionMethod($bot, 'orderMessages'))->invoke($bot, $app->packageFiles($uploaded));
     check(str_contains($ordersAgain[1]['caption'], 'farmacia Central'), 'Las indicaciones de cada orden se editan en Plantillas');
     $templates->reset('order_formula', 1);
+    $guidance = $templates->render('order_formula');
+    $templates->remove('order_formula', 1);
+    $withoutGuidance = (new ReflectionMethod($bot, 'orderMessages'))->invoke($bot, $app->packageFiles($uploaded));
+    check(str_contains($withoutGuidance[1]['caption'], '💊 *Medicamentos*') && !str_contains($withoutGuidance[1]['caption'], $guidance), 'Una indicación de orden eliminada ya no se envía; la orden sí');
+    $templates->reset('order_formula', 1);
+    check(str_contains((new ReflectionMethod($bot, 'orderMessages'))->invoke($bot, $app->packageFiles($uploaded))[1]['caption'], $guidance), 'Restaurar la indicación la vuelve a enviar');
     check($app->resolveWaitingRequests($uploaded) === [] && $db->one("SELECT COUNT(*) n FROM whatsapp_outbox WHERE request_id=? AND kind='history'", [$pendingId])['n'] == 1, 'Recargar la misma historia no duplica el envío');
 
     // --- WhatsApp escrito en el formulario web (RF-29) ---
