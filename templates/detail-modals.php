@@ -7,7 +7,7 @@ $withDelivery ??= true; ?>
 </dialog>
 <?php if ($withDelivery): ?>
 <dialog id="delivery-modal" class="modal modal-wide" aria-labelledby="delivery-modal-title">
-<header class="sheet-head"><div><h2 id="delivery-modal-title">Detalle de la solicitud</h2><p>Datos del paciente, contacto y gestión del caso.</p></div><button type="button" class="sheet-close" data-close aria-label="Cerrar detalle de la solicitud"><?= ui_icon('x', 20) ?></button></header>
+<header class="sheet-head case-sheet-head"><div><h2 id="delivery-modal-title"><span class="case-live-dot" aria-hidden="true"></span><span data-case-heading>Detalle de la solicitud</span><span class="case-badge">Sistema clínico</span></h2><p>Datos del paciente, contacto y gestión del caso.</p></div><button type="button" class="sheet-close" data-close aria-label="Cerrar detalle de la solicitud"><?= ui_icon('x', 20) ?></button></header>
 <div class="sheet-body flush" data-remote-content aria-live="polite"></div>
 </dialog>
 <?php endif ?>

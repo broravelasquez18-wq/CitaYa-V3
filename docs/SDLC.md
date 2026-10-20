@@ -1208,3 +1208,86 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
   - El tablero «N solicitudes en espera» se quitó porque repetía el número de Pendientes; queda el botón «Atender la más antigua».
   - Código: `AdminDeliveries::counts()` y el filtro «No registra» en `search()`; tarjetas en `deliveries.php`; ícono nuevo `file-x`.
 - **Validación.** `requests-admin` 49 en verde (3 nuevas: la tarjeta «No registra» lista la solicitud respondida, cada tarjeta cuenta lo mismo que su lista y, al buscar un radicado, solo cuenta lo que coincide). `support` 74 y `run` 158 en verde. En local, a 1280 px en oscuro y claro, y a 375 y 320 px: filtros, búsqueda, `?page=history` y sin desplazamiento horizontal. La base local tiene pocas solicitudes (ninguna aprobada), así que la tabla de Aprobadas con datos no se vio en local.
+
+**Ajuste (2026-10-20, pedido del titular): el buscador de Solicitudes sube al encabezado, junto al título.**
+- **Antes.** El buscador estaba dentro de la tarjeta, debajo de las tarjetas de estado, con su etiqueta encima.
+- **Ahora:**
+  - El encabezado tiene el título «Solicitudes» a la izquierda y el buscador a la derecha, en la misma franja (lugar de acciones de la página, `admin.php`). Campo con ícono de lupa, «Buscar» y, si hay búsqueda, «Limpiar».
+  - La etiqueta queda oculta a la vista pero disponible para lectores de pantalla. Al buscar se conserva la tarjeta elegida.
+  - En móvil (≤ 650 px) el campo ocupa su fila y «Buscar» / «Limpiar» se reparten la de abajo.
+  - A 360 px o menos se ocultan los íconos de las tarjetas, porque chocaban con los títulos de una sola palabra («Pendientes», «Aprobadas»).
+- **Validación.** En local, en claro a 1440 px y a 375, 361, 360 y 320 px: el buscador queda junto al título en escritorio, sin desplazamiento horizontal, y ningún título de tarjeta choca con su ícono.
+
+**Ajuste (2026-10-20, pedido del titular): rediseño del modal de detalle de la solicitud.**
+- **Antes:**
+  - El encabezado solo decía «Detalle de la solicitud». El radicado y el estado iban en una placa oscura dentro de la columna izquierda.
+  - La decisión (Aprobado / No Registra) estaba escondida en un menú «Seleccionar estado», y el título «Comentario de gestión / respuesta» se partía en dos líneas por compartir fila con dos menús.
+  - «Historial del caso» quedaba debajo de los botones de guardar.
+- **Ahora (`delivery.php`, `app.css`, `responsive.css`):**
+  - **Cabecera del caso:** radicado (con copiar), nombre del paciente, estado, fecha de radicación y canal, y el botón «Historial del caso» arriba a la derecha.
+  - **Columna de datos (320 px):** Paciente, Contacto y, si aplica, Gestión (respuesta dada o caso reabierto), como listas de datos con etiquetas.
+  - **Respuesta en tres pasos numerados:**
+    1. Decisión, con dos tarjetas visibles que explican qué pasa al elegir.
+    2. Mensaje para el paciente, con «Plantillas» a la derecha.
+    3. Documentos, obligatorios para «Aprobado».
+  - **Pie fijo** con a quién se notifica, «Cerrar» y «Guardar y notificar»; queda visible al desplazar.
+  - **Solicitudes ya gestionadas:** un estado vacío claro con enlace al historial, en vez de una franja de aviso.
+  - **Responsive:** en tablet los datos van en dos columnas sobre el formulario; en móvil todo va en una columna, las decisiones se apilan y el botón principal ocupa el espacio sobrante.
+  - Se quitaron las clases CSS que quedaron sin uso. El JS ya no depende del menú de decisión; si falta la decisión, el foco va a la primera opción.
+- **Validación.** `requests-admin` 49 y `resend-ui` 19 en verde. En local, con una solicitud pendiente y una gestionada, a 1440, 820 y 375 px, en oscuro y claro: elegir la decisión propone su plantilla; enviar «Aprobado» sin documentos muestra el aviso; el pie queda fijo; no hay desplazamiento horizontal. También en la página sin modal (`?page=delivery&id=…`). Se corrigió en el camino una etiqueta de estado que decía «Pendiente de gestión» en un caso gestionado y en cola.
+
+**Ajuste (2026-10-20, pedido del titular): el modal de detalle según la imagen de referencia del titular.**
+- Reemplaza el rediseño anterior del mismo día (cabecera del caso y pasos numerados).
+- **Encabezado:** punto verde, «Detalle de la solicitud», distintivo «Sistema clínico» y subtítulo. Se omitió «en tiempo real» porque el detalle se carga al abrir y no se actualiza solo.
+- **Columna izquierda en tarjetas:**
+  - **Radicado oficial:** con «Copiar» y el estado.
+  - **Paciente:** nombre y cuatro casillas (documento con copiar, fecha, especialidad y coincidencia en los PDF).
+  - **Contacto registrado** y **Requerimiento.**
+  - El distintivo dice «Identificación verificada» solo si la solicitud tiene `matched_at` o `verified_at`; si no, «Por verificar». La imagen lo mostraba siempre.
+- **Columna derecha:**
+  - «Comentario de gestión / respuesta» con «Seleccionar estado» y «Plantillas» en la misma fila.
+  - Editor con pie: pista de plantillas y contador de caracteres. La imagen mostraba «Variables disponibles: {paciente}, {radicado}», pero el comentario se envía tal cual, así que no se anunció.
+  - Zona para adjuntar, aviso de a quién se envía y fila «Historial del caso» que abre el historial.
+  - Pie fijo con «Cerrar» y «Guardar y notificar».
+- **Corrección de paso:** al pulsar «Guardar» sin estado, la validación nativa del navegador intentaba señalar la opción escondida en el menú cerrado y el botón no hacía nada, sin aviso (pasaba también antes del rediseño). El formulario usa ahora `novalidate`: el JS abre el menú de estado o enfoca el comentario (mínimo 10 caracteres, como exige el servidor) con un aviso claro.
+- **Validación.** `requests-admin` 49 y `resend-ui` 19 en verde. En local, a 1440 px en oscuro y claro, y a 375 y 320 px:
+  - Elegir el estado propone su plantilla, sin reemplazar un comentario escrito a mano.
+  - El contador se actualiza.
+  - Ambos avisos de validación funcionan.
+  - El caso gestionado muestra el mensaje y el historial centrados.
+  - No hay desplazamiento horizontal.
+
+**Ajuste (2026-10-20, pedido del titular): «Ver avance» de cada empleado en Empleados.**
+- **Antes.** La tabla de Empleados mostraba solo los conteos de hoy, mes, año y reportes por persona. El detalle (últimas respuestas) existía solo en «Mi avance», para la propia cuenta.
+- **Ahora:**
+  - Cada fila de Empleados tiene «Ver avance», junto a «Editar». Abre un modal con:
+    - la ficha de la persona (nombre, rol, cédula, correo y si está activa);
+    - solicitudes respondidas hoy, en el mes y en el año, y reportes resueltos en el mes;
+    - una barra con las respuestas del mes por tipo (Aprobado / No Registra, e Historia asignada si hay) y sus porcentajes;
+    - sus últimas 15 respuestas.
+  - Sin JavaScript, el botón lleva a la página `?page=staff-progress&id=…`, con «Volver a Empleados».
+  - Solo administradores (`requireAdmin`): un empleado que lo intente vuelve a Solicitudes, y sin sesión el fragmento responde 401.
+  - «Mi avance» usa el mismo panel (`templates/progress-panel.php`), en primera persona y sin la ficha, y ahora también muestra la barra por tipo.
+  - Código: `Staff::resolutionCounts()` y `Staff::report()`. La barra es un SVG con anchos como atributos, porque la CSP no admite estilos en línea.
+- **Validación.** `support` 76 en verde (2 nuevas: `report()` reúne cuenta, avance y respuestas del mes por tipo; una persona sin respuestas cuenta cero y una cuenta inexistente no tiene avance). En local:
+  - modal a 1440 y 375 px sin desplazamiento horizontal; «Mi avance»; la página propia; «Cuenta no encontrada»;
+  - acceso de un empleado redirigido a Solicitudes y fragmento sin sesión con 401.
+  - Para ver la barra con datos se asignó temporalmente la solicitud ficticia 3 al «Empleado Prueba Local» y luego se restauró (`resolved_by=3`, `resolved_at=2026-10-11 11:41:20`).
+
+**Ajuste (2026-10-20, pedido del titular): la barra de direcciones no muestra los enlaces del sistema.**
+- **Pedido.** Que en la barra del navegador no se vean direcciones como `?page=deliveries&f=all&q=…` (página, ids, filtros ni términos de búsqueda).
+- **Cómo (`public/assets/clean-url.js`, cargado primero en `layout.php`):**
+  - Al cargar, la dirección real se guarda en `history.state` de la pestaña y la barra queda con la base del sitio (`/`).
+  - Al recargar o usar Atrás/Adelante sobre una entrada limpia, el script vuelve a cargar su dirección real.
+  - `window.citayaUrl()` da la dirección real al código que antes leía `location`: el refresco del estado de la solicitud, abrir un reporte y la subida de archivos.
+  - Los formularios sin `action` (login, cerrar sesión, verificación…) reciben la dirección real al enviarse, para no perder `?page=`.
+  - El cierre de modales por `#` conserva el estado del historial.
+- **Límites.** No es una medida de seguridad: las direcciones siguen existiendo.
+  - Al pasar el mouse sobre un enlace o copiarlo se ven completas.
+  - El historial del navegador (Ctrl+H) puede registrar la dirección completa de cada página cargada, incluida una búsqueda por nombre o cédula.
+  - Sin JavaScript la barra muestra la dirección como antes.
+- **Validación.** `resend-ui` 19, `requests-admin` 49 y `support` 76 en verde. En local, en la consola, el login y el formulario del paciente:
+  - la barra muestra solo la base;
+  - recargar conserva la página y la búsqueda; Atrás y Adelante vuelven a la página correcta;
+  - «Cerrar sesión» envía a la página real; el modal de detalle abre;
+  - no hay errores en la consola.

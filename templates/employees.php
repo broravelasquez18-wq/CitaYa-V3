@@ -38,7 +38,7 @@ $posted = static fn(string $field, string $fallback, bool $use): string => $use 
 <td role="cell" data-label="Mes" class="num"><strong><?= $member['progress']['month']['requests'] ?></strong></td>
 <td role="cell" data-label="Año" class="num"><strong><?= $member['progress']['year']['requests'] ?></strong></td>
 <td role="cell" data-label="Reportes (mes)" class="num"><?= $member['progress']['month']['reports'] ?></td>
-<td role="cell" data-label="Acciones"><a class="button secondary small" href="#staff-edit-<?= $id ?>" data-open="staff-edit-<?= $id ?>" aria-label="Editar la cuenta de <?= h($member['name']) ?>"><?= ui_icon('user', 16) ?>Editar</a></td></tr>
+<td role="cell" data-label="Acciones"><div class="row-actions"><a class="button secondary small" href="?page=staff-progress&amp;id=<?= $id ?>" data-staff-progress aria-haspopup="dialog" aria-controls="staff-progress-modal" aria-label="Ver el avance de <?= h($member['name']) ?>"><?= ui_icon('gauge', 16) ?>Ver avance</a><a class="button secondary small" href="#staff-edit-<?= $id ?>" data-open="staff-edit-<?= $id ?>" aria-label="Editar la cuenta de <?= h($member['name']) ?>"><?= ui_icon('user', 16) ?>Editar</a></div></td></tr>
 <?php endforeach ?>
 </tbody></table></div><?php endif ?></section>
 
@@ -74,4 +74,8 @@ $posted = static fn(string $field, string $fallback, bool $use): string => $use 
 <label>Rol<select name="role"><?= $roleOptions(ui_reopen('staff-create') ? (string)($_POST['role'] ?? 'employee') : 'employee') ?></select></label>
 <div class="sheet-foot"><a class="button secondary" href="#" data-close>Cancelar</a><button class="button primary"><?= ui_icon('users', 18) ?>Crear cuenta</button></div>
 </form>
+</dialog>
+<dialog id="staff-progress-modal" class="modal modal-wide" aria-labelledby="staff-progress-title">
+<header class="sheet-head"><div><h2 id="staff-progress-title">Avance del empleado</h2><p>Solicitudes respondidas y reportes resueltos hoy, este mes y este año.</p></div><button type="button" class="sheet-close" data-close aria-label="Cerrar el avance"><?= ui_icon('x', 20) ?></button></header>
+<div class="sheet-body" data-remote-content aria-live="polite"></div>
 </dialog>

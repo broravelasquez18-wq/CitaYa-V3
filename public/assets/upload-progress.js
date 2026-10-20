@@ -97,7 +97,7 @@
       xhr.addEventListener('abort', connectionError);
       try {
         // The hidden input named "action" shadows the form.action DOM property.
-        xhr.open('POST', form.getAttribute('action') || window.location.href);
+        xhr.open('POST', form.getAttribute('action') || window.citayaUrl().href);
         xhr.setRequestHeader('Accept', 'application/json');
         xhr.responseType = 'json';
         xhr.timeout = 300000;

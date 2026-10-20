@@ -1,5 +1,5 @@
 <?php require_once __DIR__ . '/icons.php';
-$staffPages = ['admin','deliveries','delivery','case-history','history','analytics','templates','whatsapp','employees','progress','reports','report'];
+$staffPages = ['admin','deliveries','delivery','case-history','history','analytics','templates','whatsapp','employees','progress','staff-progress','reports','report'];
 $isStaffPage = in_array($page, $staffPages, true);
 $isPortal = isset($steps[$page]);
 $bodyClass = $isPortal ? 'patient-portal' : ($isStaffPage ? 'staff' : ($page === 'admin-login' ? 'login' : ''));
@@ -15,6 +15,7 @@ if ($consoleAmbient) $bodyClass .= ' console-ambient';
     <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#ffffff">
     <title><?= $isStaffPage ? 'Acceso interno · CitaYa' : 'Historias clínicas · CitaYa' ?></title>
+    <script src="assets/clean-url.js?v=<?= filemtime(dirname(__DIR__) . '/public/assets/clean-url.js') ?>"></script>
     <script src="assets/theme.js?v=<?= filemtime(dirname(__DIR__) . '/public/assets/theme.js') ?>"></script>
     <link rel="preload" href="assets/fonts/atkinson-hyperlegible-next-400.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="assets/app.css?v=<?= filemtime(dirname(__DIR__) . '/public/assets/app.css') ?>"><link rel="stylesheet" href="assets/responsive.css?v=<?= filemtime(dirname(__DIR__) . '/public/assets/responsive.css') ?>"><script src="assets/app.js?v=<?= filemtime(dirname(__DIR__) . '/public/assets/app.js') ?>" defer></script>

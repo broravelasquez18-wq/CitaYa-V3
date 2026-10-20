@@ -5,7 +5,7 @@ window.CitaYa = (() => {
   const openers = new WeakMap();
   const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const syncBody = () => document.body.classList.toggle('overlay-open', !!document.querySelector('dialog.drawer[open],dialog.modal[open],dialog.alert-modal[open]'));
-  const clearHash = id => { if (location.hash === '#' + id) history.replaceState(null, '', location.pathname + location.search); };
+  const clearHash = id => { if (location.hash === '#' + id) history.replaceState(history.state, '', location.pathname + location.search); };
 
   const open = (dialog, opener = document.activeElement) => {
     if (!dialog) return;
@@ -281,7 +281,7 @@ if (queueProgress && typeof queueProgress.showModal === 'function') {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
     try {
-      const response = await fetch(window.location.href, {credentials: 'same-origin', cache: 'no-store', signal: controller.signal});
+      const response = await fetch(window.citayaUrl(), {credentials: 'same-origin', cache: 'no-store', signal: controller.signal});
       if (response.redirected) { window.location.reload(); return; }
       if (!response.ok) throw new Error('queue_unavailable');
       const page = new DOMParser().parseFromString(await response.text(), 'text/html');
@@ -621,13 +621,16 @@ const remoteModal = (selector, trigger, loading, failed, onLoad) => {
   });
 };
 remoteModal('#delivery-modal', '[data-delivery-modal]', 'Cargando la solicitud…', 'No se pudo cargar la solicitud. Inténtalo nuevamente.', (dialog, content) => {
-  const title = dialog.querySelector('h2');
+  const title = dialog.querySelector('[data-case-heading]') || dialog.querySelector('h2');
   title.dataset.default ??= title.textContent;
   title.textContent = content?.querySelector('[data-case-title]')?.textContent || title.dataset.default;
 });
 remoteModal('#history-modal', '[data-history-modal]', 'Cargando el historial…', 'No se pudo cargar el historial. Inténtalo nuevamente.', (dialog, content) => {
   dialog.querySelector('[data-history-reference]').textContent = content?.querySelector('[data-case-title]')?.textContent || '';
 });
+
+// «Ver avance» en Empleados: el panel de avance de la persona, en un modal.
+remoteModal('#staff-progress-modal', '[data-staff-progress]', 'Cargando el avance…', 'No se pudo cargar el avance. Inténtalo nuevamente.', () => {});
 
 // Botones de copiar (documento, número) en el detalle de la solicitud, también en contenido cargado después.
 document.addEventListener('click', event => {
@@ -652,6 +655,12 @@ document.addEventListener('click', event => {
     if (!comment || !button) return;
     const current = comment.value.trim();
     if (force || current === '' || templateTexts(form).includes(current)) comment.value = button.dataset.templateText;
+    countChars(form);
+  };
+  const countChars = form => {
+    const counter = form.querySelector('[data-char-count]');
+    const length = form.querySelector('[data-case-comment]')?.value.length || 0;
+    if (counter) counter.textContent = length === 1 ? '1 carácter' : `${length.toLocaleString('es-CO')} caracteres`;
   };
   const selectDecision = (form, decision) => {
     const radio = form.querySelector(`input[name="decision"][value="${decision}"]`);
@@ -684,6 +693,9 @@ document.addEventListener('click', event => {
     }
     return {files, total, max};
   };
+  document.addEventListener('input', event => {
+    if (event.target.matches('[data-case-comment]')) countChars(event.target.closest('[data-case-respond]'));
+  });
   document.addEventListener('change', event => {
     const form = event.target.closest('[data-case-respond]');
     if (!form) return;
@@ -697,7 +709,7 @@ document.addEventListener('click', event => {
       const comment = form.querySelector('[data-case-comment]');
       const current = comment.value.trim();
       template.closest('details').open = false;
-      const apply = () => { comment.value = template.dataset.templateText; selectDecision(form, template.dataset.decision); comment.focus(); };
+      const apply = () => { comment.value = template.dataset.templateText; selectDecision(form, template.dataset.decision); countChars(form); comment.focus(); };
       if (current && !templateTexts(form).includes(current)) {
         window.CitaYa.confirm({title: '¿Reemplazar tu comentario?', text: 'El texto que escribiste se cambiará por la plantilla seleccionada.', label: 'Usar la plantilla'}).then(ok => { if (ok) apply(); });
       } else apply();
@@ -736,13 +748,16 @@ document.addEventListener('click', event => {
     const decision = form.querySelector('input[name="decision"]:checked');
     const {files, total, max} = listFiles(form);
     let problem = '';
+    const comment = form.querySelector('[data-case-comment]');
     if (!decision) problem = 'Selecciona el estado: Aprobado o No Registra.';
+    else if (comment.value.trim().length < 10) problem = 'Escribe un comentario para el paciente de al menos 10 caracteres.';
     else if (decision.value === 'approved' && !files.length) problem = 'Para «Aprobado» adjunta los documentos que recibirá el paciente.';
     else if (max && total > max) problem = 'Los adjuntos superan el límite del correo. Quita alguno.';
     if (problem) {
       event.preventDefault();
       window.CitaYa.toast({tone: 'error', title: 'Falta información para responder', text: problem});
       if (!decision) form.querySelector('[data-decision-menu]').open = true;
+      else if (comment.value.trim().length < 10) comment.focus();
       return;
     }
     form.querySelector('button[type="submit"]').disabled = true;
@@ -887,7 +902,8 @@ document.addEventListener('click', event => {
 (() => {
   const tab = document.querySelector('.rail-nav a[href="?page=reports"]');
   if (!tab) return;
-  const openReport = new URLSearchParams(location.search).get('page') === 'report' ? new URLSearchParams(location.search).get('id') : null;
+  const currentParams = window.citayaUrl().searchParams;
+  const openReport = currentParams.get('page') === 'report' ? currentParams.get('id') : null;
   let known = null;
   const toast = item => window.CitaYa.toast({
     tone: 'novelty',

@@ -273,7 +273,7 @@ if ($error !== null && uploadJson()) {
     header('Content-Type: application/json; charset=UTF-8');
     echo json_encode(['error' => $error]); exit;
 }
-if (in_array($page, ['delivery', 'case-history', 'report'], true) && ($_GET['fragment'] ?? '') === '1' && empty($_SESSION['admin_id'])) {
+if (in_array($page, ['delivery', 'case-history', 'report', 'staff-progress'], true) && ($_GET['fragment'] ?? '') === '1' && empty($_SESSION['admin_id'])) {
     http_response_code(401);
     header('Content-Type: text/plain; charset=UTF-8');
     exit('La sesión administrativa venció. Inicia sesión nuevamente.');
@@ -299,10 +299,13 @@ if ($page === 'notifications') {
 }
 // «Historial de enviadas» se unió a Solicitudes: su dirección abre la tarjeta Aprobadas.
 if ($page === 'history') { $page = 'deliveries'; $_GET['f'] = 'approved'; }
-if (in_array($page, ['history','analytics','templates','whatsapp','employees'], true)) requireAdmin();
+if (in_array($page, ['history','analytics','templates','whatsapp','employees','staff-progress'], true)) requireAdmin();
 $supportCount = !empty($_SESSION['admin_id']) ? (new App\SupportDesk($app))->unreadCount(currentStaff()) : 0;
 $staffList = $page === 'employees' ? (new App\Staff($app))->all((string)($_GET['q'] ?? '')) : null;
-$myProgress = $page === 'progress' ? ['progress' => (new App\Staff($app))->progress((int)$_SESSION['admin_id']), 'recent' => (new App\Staff($app))->recentResponses((int)$_SESSION['admin_id'])] : null;
+$myProgress = $page === 'progress' ? (new App\Staff($app))->report((int)$_SESSION['admin_id']) : null;
+// «Ver avance» de un empleado (solo administradores): modal en Empleados o página propia.
+$staffProgress = null;
+if ($page === 'staff-progress') { $staffProgress = (new App\Staff($app))->report((int)($_GET['id'] ?? 0)); if (!$staffProgress) http_response_code(404); }
 $reportList = $page === 'reports' ? (new App\SupportDesk($app))->tickets(currentStaff(), ($_GET['f'] ?? 'open') === 'closed' ? 'closed' : 'open') : null;
 $reportDetail = null;
 if ($page === 'report') { $reportDetail = (new App\SupportDesk($app))->ticket((int)($_GET['id'] ?? 0), currentStaff()); if (!$reportDetail) http_response_code(404); }
@@ -391,6 +394,13 @@ if ($page === 'case-history' && ($_GET['fragment'] ?? '') === '1') {
     header('Content-Type: text/html; charset=UTF-8');
     $historyModal = true;
     require dirname(__DIR__) . '/templates/case-history.php';
+    exit;
+}
+if ($page === 'staff-progress' && ($_GET['fragment'] ?? '') === '1') {
+    header('Content-Type: text/html; charset=UTF-8');
+    if (!$staffProgress) exit('<p class="muted">La cuenta no existe o fue eliminada.</p>');
+    $panel = $staffProgress;
+    require dirname(__DIR__) . '/templates/progress-panel.php';
     exit;
 }
 if ($page === 'delivery' && ($_GET['fragment'] ?? '') === '1') {

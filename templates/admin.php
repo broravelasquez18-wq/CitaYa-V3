@@ -7,7 +7,7 @@ $sections = [
     ['progress', 'Mi avance', 'gauge', $page === 'progress', false, 0, ''],
     ['admin', 'Repositorio', 'archive', $page === 'admin', false, 0, ''],
     ['analytics', 'Análisis mensual', 'chart', $page === 'analytics', true, 0, ''],
-    ['employees', 'Empleados', 'users', $page === 'employees', true, 0, ''],
+    ['employees', 'Empleados', 'users', in_array($page, ['employees', 'staff-progress'], true), true, 0, ''],
     ['templates', 'Plantillas', 'template', $page === 'templates', true, 0, ''],
 ];
 if ($isAdmin && (!empty($whatsappDisconnected) || $page === 'whatsapp')) $sections[] = ['whatsapp', 'WhatsApp del bot', 'chat', $page === 'whatsapp', true, 0, ''];
@@ -19,6 +19,7 @@ $titles = [
     'reports' => ['Reportes de error', 'Errores que los pacientes reportaron por WhatsApp y el bot no resolvió.'],
     'report' => ['Reporte de error', 'Conversación con el paciente por el número del bot.'],
     'progress' => ['Mi avance', 'Lo que has respondido hoy, este mes y este año.'],
+    'staff-progress' => ['Avance del empleado', 'Lo que respondió hoy, este mes y este año.'],
     'employees' => ['Empleados', 'Cuentas del personal, roles y avance.'],
     'analytics' => ['Análisis mensual', 'Actividad del sistema y atenciones por especialidad.'],
     'templates' => ['Plantillas de mensajes', 'Textos que recibe el paciente por WhatsApp y correo.'],
@@ -31,6 +32,14 @@ $pageActions = [
     'employees' => '<a class="button primary" href="#staff-create-drawer" data-open="staff-create-drawer">' . ui_icon('users', 18) . 'Agregar empleado</a>',
     'templates' => '<a class="button primary" href="#custom-template-new" data-open="custom-template-new">' . ui_icon('plus', 18) . 'Crear plantilla</a>',
 ][$page] ?? '';
+// En Solicitudes la acción del encabezado es el buscador, junto al título; las tarjetas lo conservan al filtrar.
+if ($page === 'deliveries' && $deliverySearch) {
+    $searchFilter = $deliverySearch['filter'] ?? 'pending';
+    $pageActions = '<form method="get" class="delivery-search head-search" role="search"><input type="hidden" name="page" value="deliveries"><input type="hidden" name="f" value="' . h($searchFilter) . '">'
+        . '<label class="visually-hidden" for="delivery-query">Nombre, radicado o número de documento</label><span class="input-icon">' . ui_icon('search', 18) . '<input id="delivery-query" type="search" name="q" maxlength="160" placeholder="Nombre, radicado (HC-…) o documento" value="' . h($deliverySearch['query']) . '"></span>'
+        . '<button class="button primary" type="submit">Buscar</button>'
+        . ($deliverySearch['query'] !== '' ? '<a class="button secondary" href="?page=deliveries&amp;f=' . h($searchFilter) . '">Limpiar</a>' : '') . '</form>';
+}
 ?>
 <div class="console">
 <aside class="rail" id="console-rail" aria-label="Secciones del acceso interno">
@@ -47,6 +56,7 @@ $pageActions = [
 <?php if (!empty($whatsappDisconnected) && $page !== 'whatsapp'): ?><dialog id="wa-down-modal" class="modal alert-modal" aria-labelledby="wa-down-title" aria-describedby="wa-down-text" data-auto-open data-once="wa-down"><div class="alert-modal-icon stop"><?= ui_icon('chat', 26) ?></div><h2 id="wa-down-title">El WhatsApp del bot está desconectado</h2><p id="wa-down-text">Los pacientes que escriban al bot no reciben respuesta hasta que lo vuelvas a vincular.</p><div class="alert-modal-actions"><button type="button" class="button secondary" data-close>Más tarde</button><?php if ($isAdmin): ?><a class="button primary" href="?page=whatsapp">Vincular ahora</a><?php endif ?></div></dialog><?php endif ?>
 <?php if ($page === 'employees'): require __DIR__ . '/employees.php'; ?>
 <?php elseif ($page === 'progress'): require __DIR__ . '/progress.php'; ?>
+<?php elseif ($page === 'staff-progress'): ?><a class="back-link" href="?page=employees"><?= ui_icon('arrow-left', 16) ?>Volver a Empleados</a><?php if ($staffProgress): $panel = $staffProgress; require __DIR__ . '/progress-panel.php'; else: ?><section class="card"><h2>Cuenta no encontrada</h2><p class="muted">La cuenta no existe o fue eliminada.</p></section><?php endif ?>
 <?php elseif ($page === 'reports'): require __DIR__ . '/reports.php'; ?>
 <?php elseif ($page === 'report'): require __DIR__ . '/report.php'; ?>
 <?php elseif ($page === 'analytics'): require __DIR__ . '/analytics.php'; ?>

@@ -90,6 +90,9 @@ try {
     $progress = $staff->progress($employee);
     check($progress['day']['requests'] === 1 && $progress['month']['requests'] === 1 && $progress['year']['requests'] === 1 && $staff->progress($admin)['day']['requests'] === 0, 'El avance cuenta las solicitudes respondidas por cada persona (día, mes y año)');
     check($staff->recentResponses($employee)[0]['resolution'] === 'approved', '«Mi avance» lista las últimas respuestas');
+    $report = $staff->report($employee);
+    check($report['member']['id'] == $employee && $report['mix'] === ['approved' => 1, 'not_registered' => 0, 'assigned' => 0] && $report['progress']['month']['requests'] === 1, '«Ver avance» reúne la cuenta, el avance y las respuestas del mes por tipo');
+    check($staff->resolutionCounts($admin, date('Y-m-01 00:00:00')) === ['approved' => 0, 'not_registered' => 0, 'assigned' => 0] && $staff->report(999999999) === null, 'Cada persona ve solo sus respuestas y una cuenta inexistente no tiene avance');
 
     // --- Menú y reporte que resuelve el bot (no le llegó) ---
     say($phone, 'hola');

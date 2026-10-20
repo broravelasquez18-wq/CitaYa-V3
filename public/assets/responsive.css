@@ -46,6 +46,7 @@
   .stat:nth-child(n+3){border-top:1px solid var(--line)}
   .case-layout{grid-template-columns:minmax(0,1fr)}
   .case-info{border-right:0;border-bottom:1px solid var(--line)}
+  .case-info{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
   .report-layout{grid-template-columns:minmax(0,1fr)}
   .analytics-heading{flex-direction:column;align-items:stretch}
   .analytics-filter{flex-wrap:wrap}
@@ -129,6 +130,11 @@
   .stat{padding:var(--s3) var(--s4)}
   .stat dd{font-size:var(--t-lg)}
   .delivery-search .button{flex:1}
+  .page-actions:has(.head-search){flex-basis:100%}
+  /* El campo ocupa su propia fila; Buscar y Limpiar se reparten la de abajo. */
+  .head-search{flex-wrap:wrap}
+  .head-search .input-icon{flex:1 1 100%}
+  .head-search .button{flex:1 1 0}
   .segmented{display:flex}
   .segmented a{flex:1;justify-content:center}
   .upload-heading{flex-direction:column}
@@ -138,21 +144,27 @@
   .load-data{grid-template-columns:minmax(0,1fr)}
   .load-data>div+div{border-left:0;border-top:1px solid var(--line)}
   .delivery-facts{grid-template-columns:minmax(0,1fr)}
-  .case-respond-head{flex-direction:column}
-  .case-tools{width:100%}
-  .case-tools .case-menu{flex:1}
+  .case-info{display:flex}
+  .case-respond-head{flex-wrap:wrap}
+  .case-tools{width:100%;flex-shrink:1}
+  .case-tools .case-menu{flex:1 1 auto}
+  .case-tools .case-menu>summary{justify-content:center}
   .case-menu-list{left:0;right:auto}
-  .case-actions{flex-direction:column-reverse}
-  .case-actions .button{width:100%}
-  .case-pair{grid-template-columns:minmax(0,1fr)}
+  .case-editor-foot{flex-wrap:wrap}
+  .case-actions .button{flex:0 0 auto}
+  .case-actions .button.primary{flex:1 1 auto}
   .chat-message{max-width:92%}
   .chat-form{flex-direction:column;align-items:stretch}
   .chat-actions{flex-direction:row}
   .chat-actions .button{flex:1}
   .report-item{flex-direction:column;align-items:flex-start}
   .report-meta{flex-direction:row;align-items:center;flex-wrap:wrap}
-  .case-info{padding:var(--s4) var(--s3)}
-  .case-main{padding:var(--s2) var(--s3) var(--s4)}
+  .case-info{padding:var(--s4)}
+  .staff-progress-head{flex-wrap:wrap;align-items:flex-start}
+  .staff-progress-head>div{flex-basis:calc(100% - 56px)}
+  .staff-progress-head .pill{margin-left:56px}
+  .case-body{padding:var(--s4)}
+  .case-actions{padding:var(--s3) var(--s4)}
   .case-history .history-actions{margin:0 calc(var(--s3) * -1);padding:var(--s3)}
 }
 
@@ -230,6 +242,9 @@
   body.ambient .footer{padding-top:var(--s4)}
 }
 @media(max-width:360px){
+  /* Los títulos de las tarjetas son una sola palabra: sin espacio para el ícono, se quita. */
+  .status-card-icon{display:none}
+  .status-card-title{padding-right:0}
   body.ambient .header-nav a{padding:0 10px;font-size:var(--t-xs)}
   .login-modules strong{font-size:var(--t-xs)}
 }

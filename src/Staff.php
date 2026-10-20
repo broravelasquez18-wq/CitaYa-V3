@@ -154,6 +154,24 @@ final class Staff
         return $result;
     }
 
+    /** Respuestas de esta persona desde una fecha, por tipo: aprobado, no registra e historia asignada. */
+    public function resolutionCounts(int $id, string $from): array
+    {
+        $counts = ['approved' => 0, 'not_registered' => 0, 'assigned' => 0];
+        foreach ($this->app->db->all('SELECT resolution,COUNT(*) n FROM requests WHERE resolved_by=? AND resolved_at>=? GROUP BY resolution', [$id, $from]) as $row) {
+            if (isset($counts[$row['resolution']])) $counts[$row['resolution']] = (int)$row['n'];
+        }
+        return $counts;
+    }
+
+    /** Avance completo de una persona para «Mi avance» y «Ver avance» en Empleados; null si la cuenta no existe. */
+    public function report(int $id): ?array
+    {
+        $member = $this->find($id);
+        if (!$member) return null;
+        return ['member' => $member, 'progress' => $this->progress($id), 'mix' => $this->resolutionCounts($id, date('Y-m-01 00:00:00')), 'recent' => $this->recentResponses($id)];
+    }
+
     /** Últimas solicitudes respondidas por esta persona (para «Mi avance»). */
     public function recentResponses(int $id, int $limit = 15): array
     {
