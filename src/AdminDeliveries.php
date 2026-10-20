@@ -43,21 +43,47 @@ final class AdminDeliveries
         return (int)$this->db->one('SELECT COUNT(*) n FROM requests r WHERE ' . $this->awaitingSql())['n'];
     }
 
-    public function search(string $query, int $page = 1, bool $history = false, bool $pendingOnly = false): array
+    /** Filtro de texto (radicado, nombre o documento) como [WHERE, parámetros]; comodines tratados como texto. */
+    private function queryWhere(string $query): array
+    {
+        if ($query === '') return ['', []];
+        $term = '%' . strtr($query, ['!'=>'!!','%'=>'!%','_'=>'!_']) . '%';
+        return [" WHERE (r.reference LIKE ? ESCAPE '!' OR r.claimed_name LIKE ? ESCAPE '!' OR p.full_name LIKE ? ESCAPE '!' OR r.claimed_document_number LIKE ? ESCAPE '!' OR p.document_number LIKE ? ESCAPE '!')", array_fill(0, 5, $term)];
+    }
+
+    /** Cerradas con envío real y constancia de validación (antes «Historial de enviadas»). */
+    private function deliveredSql(): string
+    {
+        return "(r.matched_at IS NOT NULL OR r.verified_at IS NOT NULL)
+            AND EXISTS (SELECT 1 FROM jobs delivered WHERE delivered.request_id=r.id AND delivered.kind IN ('history','response') AND delivered.status='sent' AND delivered.sent_at IS NOT NULL AND delivered.id>COALESCE(r.case_reopened_after_job_id,0))";
+    }
+
+    /** Respondidas «No Registra» y sin gestión pendiente. */
+    private function notRegisteredSql(): string
+    {
+        return "(r.resolution='not_registered' OR r.status='not_registered') AND NOT " . $this->awaitingSql();
+    }
+
+    /** Totales de las tarjetas de Solicitudes para la misma búsqueda: pendientes, aprobadas, no registra y todas. */
+    public function counts(string $query): array
+    {
+        [$where, $params] = $this->queryWhere(mb_substr(trim($query), 0, 160));
+        $and = $where === '' ? ' WHERE ' : $where . ' AND ';
+        $row = $this->db->one('SELECT COUNT(*) total,
+            COALESCE(SUM(' . $this->awaitingSql() . '),0) pending,
+            COALESCE(SUM(' . $this->notRegisteredSql() . '),0) not_registered
+            FROM requests r LEFT JOIN patients p ON p.id=r.patient_id' . $where, $params);
+        $approved = (int)$this->db->one('SELECT COUNT(*) n FROM requests r LEFT JOIN patients p ON p.id=r.patient_id' . $and . $this->deliveredSql(), $params)['n'];
+        return ['pending' => (int)$row['pending'], 'approved' => $approved, 'not_registered' => (int)$row['not_registered'], 'all' => (int)$row['total']];
+    }
+
+    public function search(string $query, int $page = 1, bool $history = false, bool $pendingOnly = false, bool $notRegistered = false): array
     {
         $query = mb_substr(trim($query), 0, 160);
-        $where = '';
-        $params = [];
-        if ($query !== '') {
-            $term = '%' . strtr($query, ['!'=>'!!','%'=>'!%','_'=>'!_']) . '%';
-            $where = " WHERE (r.reference LIKE ? ESCAPE '!' OR r.claimed_name LIKE ? ESCAPE '!' OR p.full_name LIKE ? ESCAPE '!' OR r.claimed_document_number LIKE ? ESCAPE '!' OR p.document_number LIKE ? ESCAPE '!')";
-            $params = array_fill(0, 5, $term);
-        }
-        if ($history) {
-            $where .= ($where === '' ? ' WHERE ' : ' AND ') . "(r.matched_at IS NOT NULL OR r.verified_at IS NOT NULL)
-                AND EXISTS (SELECT 1 FROM jobs delivered WHERE delivered.request_id=r.id AND delivered.kind IN ('history','response') AND delivered.status='sent' AND delivered.sent_at IS NOT NULL AND delivered.id>COALESCE(r.case_reopened_after_job_id,0))";
-        }
+        [$where, $params] = $this->queryWhere($query);
+        if ($history) $where .= ($where === '' ? ' WHERE ' : ' AND ') . $this->deliveredSql();
         if ($pendingOnly && !$history) $where .= ($where === '' ? ' WHERE ' : ' AND ') . $this->awaitingSql();
+        if ($notRegistered && !$history && !$pendingOnly) $where .= ($where === '' ? ' WHERE ' : ' AND ') . $this->notRegisteredSql();
         $from = ' FROM requests r LEFT JOIN patients p ON p.id=r.patient_id';
         $total = (int)$this->db->one('SELECT COUNT(*) n' . $from . $where, $params)['n'];
         $pages = max(1, (int)ceil($total / 20));
@@ -72,7 +98,7 @@ final class AdminDeliveries
             . $from . " LEFT JOIN encounters e ON e.id=r.encounter_id LEFT JOIN specialties s ON s.id=e.specialty_id
                 LEFT JOIN jobs j ON j.id=(SELECT MAX(last.id) FROM jobs last WHERE last.request_id=r.id AND last.kind IN ('history','response'))"
             . $where . ($history ? ' ORDER BY closed_at DESC,r.id DESC' : ($pendingOnly ? ' ORDER BY r.created_at ASC,r.id ASC' : ' ORDER BY awaiting DESC,case_pending DESC,r.id DESC')) . " LIMIT 20 OFFSET $offset", $params);
-        return compact('query','total','page','pages','rows','history','pendingOnly');
+        return compact('query','total','page','pages','rows','history','pendingOnly','notRegistered');
     }
 
     /**

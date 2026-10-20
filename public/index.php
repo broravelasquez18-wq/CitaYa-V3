@@ -297,6 +297,8 @@ if ($page === 'notifications') {
     echo json_encode(['items' => (new App\SupportDesk($app))->notifications(currentStaff())], JSON_UNESCAPED_UNICODE);
     exit;
 }
+// «Historial de enviadas» se unió a Solicitudes: su dirección abre la tarjeta Aprobadas.
+if ($page === 'history') { $page = 'deliveries'; $_GET['f'] = 'approved'; }
 if (in_array($page, ['history','analytics','templates','whatsapp','employees'], true)) requireAdmin();
 $supportCount = !empty($_SESSION['admin_id']) ? (new App\SupportDesk($app))->unreadCount(currentStaff()) : 0;
 $staffList = $page === 'employees' ? (new App\Staff($app))->all((string)($_GET['q'] ?? '')) : null;
@@ -338,7 +340,7 @@ if ($page === 'analytics') {
     try { $activity = $service->activity((string)($_GET['activity_date'] ?? '')); }
     catch (DomainException $exception) { $error = $exception->getMessage(); $activity = $service->activity(); }
 }
-$deliverySearch = null; $deliveryDetail = null; $caseHistory = null;
+$deliverySearch = null; $deliveryCounts = null; $deliveryDetail = null; $caseHistory = null;
 if (in_array($page, ['deliveries','delivery','case-history','history'], true)) {
     $adminDeliveries = new App\AdminDeliveries($app->db, (string)$app->config['app_key']);
     if ($page === 'case-history') {
@@ -348,7 +350,12 @@ if (in_array($page, ['deliveries','delivery','case-history','history'], true)) {
         $deliveryDetail = $adminDeliveries->detail((int)($_GET['id'] ?? 0));
         if (!$deliveryDetail) http_response_code(404);
     } else {
-        $deliverySearch = $adminDeliveries->search((string)($_GET['q'] ?? ''), (int)($_GET['p'] ?? 1), $page==='history', $page === 'deliveries' && ($_GET['f'] ?? 'pending') !== 'all');
+        // Tarjetas de Solicitudes: pendientes (por defecto), aprobadas (enviadas), no registra o todas.
+        $deliveryFilter = in_array($_GET['f'] ?? '', ['pending','approved','not_registered','all'], true) ? $_GET['f'] : 'pending';
+        $deliveryQuery = (string)($_GET['q'] ?? '');
+        $deliverySearch = $adminDeliveries->search($deliveryQuery, (int)($_GET['p'] ?? 1), $deliveryFilter === 'approved', $deliveryFilter === 'pending', $deliveryFilter === 'not_registered');
+        $deliverySearch['filter'] = $deliveryFilter;
+        $deliveryCounts = $adminDeliveries->counts($deliveryQuery);
     }
 }
 $specialties = $app->db->all('SELECT * FROM specialties WHERE active=1 ORDER BY name');

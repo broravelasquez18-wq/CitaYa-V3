@@ -56,6 +56,7 @@
   .demand-filter .segmented{display:flex;width:100%}
   .demand-filter .segmented a{flex:1}
   .kpi-row{grid-template-columns:minmax(0,1fr)}
+  .status-cards{grid-template-columns:repeat(2,minmax(0,1fr))}
   .kpi+.kpi{border-left:0;border-top:1px solid var(--line)}
 }
 
@@ -117,6 +118,13 @@
   .encounter{grid-template-columns:auto minmax(0,1fr)}
   .encounter .button{grid-column:1/-1;width:100%}
   .page-head h1{font-size:var(--t-lg)}
+  .status-cards{gap:var(--s2)}
+  /* En móvil el ícono sube a la esquina y el texto usa todo el ancho de la tarjeta. */
+  .status-card{padding:var(--s3);overflow-wrap:normal}
+  .status-card-title{padding-right:34px;letter-spacing:.03em}
+  .status-card-text{white-space:normal}
+  .status-card-icon{top:var(--s3);right:var(--s3);translate:none;width:28px;height:28px;border-radius:8px}
+  .queue-next .button{width:100%}
   .stats{margin-bottom:var(--s4)}
   .stat{padding:var(--s3) var(--s4)}
   .stat dd{font-size:var(--t-lg)}

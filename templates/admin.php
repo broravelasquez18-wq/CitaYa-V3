@@ -1,13 +1,11 @@
 <?php require_once __DIR__ . '/icons.php';
 $isAdmin = ($_SESSION['admin_role'] ?? 'admin') === 'admin';
-$fromHistory = ($_GET['from'] ?? '') === 'history';
 // Secciones del rail: [página, título, ícono, activo, solo administradores, contador].
 $sections = [
-    ['deliveries', 'Solicitudes', 'inbox', $page === 'deliveries' || ($page === 'delivery' && !$fromHistory) || $page === 'case-history', false, (int)($pendingCount ?? 0), 'pendientes'],
+    ['deliveries', 'Solicitudes', 'inbox', in_array($page, ['deliveries', 'delivery', 'case-history'], true), false, (int)($pendingCount ?? 0), 'pendientes'],
     ['reports', 'Reportes de error', 'flag', in_array($page, ['reports', 'report'], true), false, (int)($supportCount ?? 0), 'por atender'],
     ['progress', 'Mi avance', 'gauge', $page === 'progress', false, 0, ''],
     ['admin', 'Repositorio', 'archive', $page === 'admin', false, 0, ''],
-    ['history', 'Historial de enviadas', 'check-circle', $page === 'history' || ($page === 'delivery' && $fromHistory), true, 0, ''],
     ['analytics', 'Análisis mensual', 'chart', $page === 'analytics', true, 0, ''],
     ['employees', 'Empleados', 'users', $page === 'employees', true, 0, ''],
     ['templates', 'Plantillas', 'template', $page === 'templates', true, 0, ''],
@@ -18,7 +16,6 @@ $titles = [
     'deliveries' => ['Solicitudes', 'Busca al paciente, revisa el seguimiento y responde lo pendiente.'],
     'delivery' => ['Detalle de la solicitud', 'Datos del paciente, contacto y gestión del caso.'],
     'case-history' => ['Historial del caso', 'Radicación, respuestas y envíos en orden.'],
-    'history' => ['Historial de enviadas', 'Solicitudes aprobadas automáticamente y con envío aceptado por el servidor de correo.'],
     'reports' => ['Reportes de error', 'Errores que los pacientes reportaron por WhatsApp y el bot no resolvió.'],
     'report' => ['Reporte de error', 'Conversación con el paciente por el número del bot.'],
     'progress' => ['Mi avance', 'Lo que has respondido hoy, este mes y este año.'],

@@ -608,13 +608,22 @@ details[open]>summary::before{transform:rotate(90deg)}
 .bar-col{width:38%}
 
 /* Turnos en espera: la cifra que manda en Solicitudes. */
-.queue-board{display:flex;align-items:center;justify-content:space-between;gap:var(--s4);flex-wrap:wrap;padding:var(--s4) var(--s5);margin:0 0 var(--s4);background:var(--night);border-radius:var(--radius-lg)}
-.queue-board .call-ref{font-size:var(--t-2xl)}
-.queue-board .call-number{flex-direction:row;align-items:center;gap:var(--s3);margin:0}
-.queue-board .call-label{order:2;text-transform:none;letter-spacing:0;font-size:var(--t-base);color:var(--night-ink)}
-.queue-board.has-waiting .call-ref{color:var(--amber)}
-.queue-board .button.primary{background:#fff;color:var(--night)}
-.queue-board .button.primary:hover{background:var(--surface-2)}
+/* Tarjetas de estado de Solicitudes: cada una filtra la tabla y cuenta lo que coincide con la búsqueda. */
+.status-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--s3);margin:0 0 var(--s4)}
+.status-card{position:relative;display:flex;flex-direction:column;gap:2px;min-width:0;padding:var(--s3) var(--s4);padding-right:calc(var(--s4) + 44px);border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);text-decoration:none;transition:border-color .15s,background-color .15s,box-shadow .15s}
+.status-card:hover{border-color:var(--line-strong);background:var(--surface-2)}
+.status-card[aria-current=page]{border-color:var(--brand-hover);background:var(--brand-soft);box-shadow:0 0 0 1px var(--brand-hover)}
+.status-card-title{font-size:var(--t-xs);font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.status-card-count{font-size:var(--t-lg);font-weight:700;line-height:1.2;color:var(--ink);font-variant-numeric:tabular-nums}
+.status-card-text{font-size:var(--t-xs);color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.status-card-icon{position:absolute;right:var(--s4);top:50%;translate:0 -50%;display:grid;place-items:center;width:36px;height:36px;border-radius:10px;color:var(--ink-2)}
+.status-card.pending .status-card-icon{background:var(--amber-soft);color:var(--amber-ink)}
+.status-card.approved .status-card-icon{background:var(--ok-soft);color:var(--ok)}
+.status-card.not_registered .status-card-icon{background:var(--stop-soft);color:var(--stop)}
+.status-card.all .status-card-icon{background:var(--info-soft);color:var(--info)}
+.status-cards-note{margin:0 0 var(--s4);font-size:var(--t-sm)}
+.queue-next{display:flex;justify-content:flex-end;margin:0 0 var(--s4)}
+@media(prefers-reduced-motion:reduce){.status-card{transition:none}}
 
 /* Alertas en rojo con su ícono en rojo; radicados nunca partidos. */
 .danger.with-icon{display:inline-flex;align-items:center;gap:5px}

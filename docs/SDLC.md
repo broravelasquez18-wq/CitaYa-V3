@@ -1197,3 +1197,14 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
 - **Causa.** El bloqueo era `body.rail-open{overflow:hidden}`, pero quien se desplaza es `html`. Como la consola pone `overflow-x:clip` en `html`, el `overflow` del `body` no llega a la ventana y no bloqueaba nada.
 - **Arreglo.** Al abrir el menú, `app.js` pone la clase `rail-lock` en `html`. `responsive.css` aplica a `html` y `body` `overflow:hidden` y `overscroll-behavior:none`, y el fondo oscurecido lleva `touch-action:none`. El menú se sigue desplazando por dentro (`overscroll-behavior:contain`) sin arrastrar la página.
 - **Validación.** En local a 375 px, con la página desplazada 200 px: con el menú abierto, la rueda sobre el fondo, el encabezado y el menú deja la página en 200; en una pantalla baja (480 px) el menú se desplaza hasta su final y la página sigue en 200. Control con el bloqueo anterior: la misma rueda movía la página de 200 a 500. No se probó en un iPhone real.
+
+**Ajuste (2026-10-20, pedido del titular): Solicitudes e Historial de enviadas en un solo módulo, con tarjetas de estado.**
+- **Antes.** Dos secciones en el menú: «Solicitudes» (pestañas Pendientes / Todas) y «Historial de enviadas» (solo administradores).
+- **Ahora:**
+  - «Solicitudes» tiene cuatro tarjetas arriba, según la imagen del titular: **Pendientes** (por gestionar), **Aprobadas** (listas o enviadas: lo que antes era el historial), **No registra** (respondidas «No Registra» y sin gestión pendiente) y **Todas**.
+  - Cada tarjeta filtra la tabla (`?page=deliveries&f=pending|approved|not_registered|all`) y muestra cuántas solicitudes coinciden con la búsqueda actual; al buscar, los cuatro números se actualizan.
+  - Aprobadas usa la tabla del antiguo historial. «Reabrir caso» sigue siendo solo para administradores; los empleados ven la lista sin ese botón.
+  - «Historial de enviadas» sale del menú. La dirección antigua `?page=history` abre la tarjeta Aprobadas.
+  - El tablero «N solicitudes en espera» se quitó porque repetía el número de Pendientes; queda el botón «Atender la más antigua».
+  - Código: `AdminDeliveries::counts()` y el filtro «No registra» en `search()`; tarjetas en `deliveries.php`; ícono nuevo `file-x`.
+- **Validación.** `requests-admin` 49 en verde (3 nuevas: la tarjeta «No registra» lista la solicitud respondida, cada tarjeta cuenta lo mismo que su lista y, al buscar un radicado, solo cuenta lo que coincide). `support` 74 y `run` 158 en verde. En local, a 1280 px en oscuro y claro, y a 375 y 320 px: filtros, búsqueda, `?page=history` y sin desplazamiento horizontal. La base local tiene pocas solicitudes (ninguna aprobada), así que la tabla de Aprobadas con datos no se vio en local.

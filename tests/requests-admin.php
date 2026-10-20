@@ -93,6 +93,12 @@ try {
     $notice = $db->one("SELECT * FROM jobs WHERE request_id=? AND kind='notice'", [$mismatch]);
     check($notice && $notice['recipient'] === 'paciente@example.test' && !$notice['package_id'], 'Se encola el aviso por correo sin documentos');
     rejects(fn() => $app->markNotRegistered($mismatch, 1), 'No se responde dos veces', 'ya fue gestionada');
+    // Tarjetas de Solicitudes: cada una cuenta lo mismo que su lista, también al buscar.
+    $counts = $admin->counts('');
+    check($counts['not_registered'] === 1 && $admin->search('', 1, false, false, true)['rows'][0]['id'] == $mismatch, 'La tarjeta «No registra» lista la solicitud respondida «No Registra»');
+    check($counts['pending'] === $admin->search('', 1, false, true)['total'] && $counts['approved'] === $admin->search('', 1, true)['total'] && $counts['all'] === $admin->search('')['total'], 'Cada tarjeta cuenta lo mismo que su lista');
+    $byReference = $admin->counts($closed['reference']);
+    check($byReference === ['pending' => 0, 'approved' => 0, 'not_registered' => 1, 'all' => 1], 'Al buscar, las tarjetas cuentan solo lo que coincide');
     $worker = new App\MailWorker($app);
     while ($worker->tick());
     $eml = quoted_printable_decode(file_get_contents($config['storage_path'] . '/outbox/' . $notice['id'] . '.eml'));
