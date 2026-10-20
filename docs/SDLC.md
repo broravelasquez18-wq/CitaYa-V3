@@ -1187,3 +1187,13 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
   - En el encabezado quedan hamburguesa, marca, tema y salir. «Solicitar historia» pasa al pie del panel, junto al usuario.
   - Escritorio sin cambios.
 - **Validación.** En local, con una sesión de prueba creada en `storage/sessions` (ya borrada): a 375 px y 768 px el botón abre y cierra el panel (botón, fondo, Escape), el panel ocupa todo el alto y no hay desplazamiento horizontal; a 1280 px el rail lateral sigue igual y el botón no aparece. La animación de apertura no se pudo ver en movimiento porque el panel del navegador estaba oculto (se probó el estado final con transiciones desactivadas).
+
+**Corrección (2026-10-20, pedido del titular): el encabezado se desbordaba en móvil.**
+- **Causa.** En el login y el formulario del paciente, el enlace del encabezado («Acceso interno» / «Solicitar historia») tenía `white-space:nowrap` y no podía encogerse. En celulares de 320 px con la letra del sistema agrandada (125–150 %) empujaba el botón de tema fuera de la pantalla (hasta 38 px).
+- **Arreglo (`responsive.css`, ≤ 650 px).** Marca, hamburguesa, tema y salir no se encogen; la navegación sí, y su enlace puede pasar a dos líneas.
+- **Validación.** En local, login, formulario y consola a 320 y 360 px, con letra al 100, 125 y 150 %: el ancho del encabezado es igual al de la pantalla en todos los casos. A 375 px con letra normal el enlace sigue en una línea, como antes.
+
+**Corrección (2026-10-20, pedido del titular): con el menú de hamburguesa abierto, la página de atrás se seguía desplazando.**
+- **Causa.** El bloqueo era `body.rail-open{overflow:hidden}`, pero quien se desplaza es `html`. Como la consola pone `overflow-x:clip` en `html`, el `overflow` del `body` no llega a la ventana y no bloqueaba nada.
+- **Arreglo.** Al abrir el menú, `app.js` pone la clase `rail-lock` en `html`. `responsive.css` aplica a `html` y `body` `overflow:hidden` y `overscroll-behavior:none`, y el fondo oscurecido lleva `touch-action:none`. El menú se sigue desplazando por dentro (`overscroll-behavior:contain`) sin arrastrar la página.
+- **Validación.** En local a 375 px, con la página desplazada 200 px: con el menú abierto, la rueda sobre el fondo, el encabezado y el menú deja la página en 200; en una pantalla baja (480 px) el menú se desplaza hasta su final y la página sigue en 200. Control con el bloqueo anterior: la misma rueda movía la página de 200 a 500. No se probó en un iPhone real.

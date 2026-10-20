@@ -31,7 +31,9 @@
   .rail-nav a.selected::before{left:-12px}
   .rail-backdrop{position:fixed;inset:63px 0 0;z-index:18;background:rgba(6,16,28,.5);opacity:0;visibility:hidden;transition:opacity .2s,visibility 0s linear .2s}
   body.rail-open .rail-backdrop{opacity:1;visibility:visible;transition:opacity .2s}
-  body.rail-open{overflow:hidden}
+  /* Con el menú abierto la página de atrás no se desplaza: el desplazamiento vive en html (body no lo propaga por overflow-x:clip). */
+  html.rail-lock,html.rail-lock body{overflow:hidden;overscroll-behavior:none}
+  .rail-backdrop{touch-action:none}
   /* En el encabezado quedan hamburguesa, marca, tema y salir; «Solicitar historia» pasa al menú. */
   body.console-ambient .header-nav{display:none}
   body.console-ambient .header .theme-toggle{margin-left:auto}
@@ -86,7 +88,11 @@
   .header{min-height:56px;padding:0 var(--s4);gap:var(--s2)}
   body.staff .header{padding:0 var(--s4)}
   .brand-context{display:none}
-  .header-nav a{padding:0 var(--s2);font-size:var(--t-xs);min-height:44px}
+  /* El encabezado nunca se desborda: marca y botones no se encogen; los enlaces ceden espacio y pasan a dos líneas. */
+  .brand,.nav-toggle,.header .theme-toggle,.header-logout{flex-shrink:0}
+  .header-nav{min-width:0;flex-shrink:1;justify-content:flex-end}
+  .header-nav a{min-width:0;padding:0 var(--s2);font-size:var(--t-xs);min-height:44px;line-height:1.15;text-align:center;overflow-wrap:break-word}
+  body.ambient .header-nav a{white-space:normal;padding-block:2px}
   .header-logout button{min-height:44px;padding:0 var(--s2)}
   .header-logout span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
   .shell{padding:var(--s4) var(--s4) var(--s6)}

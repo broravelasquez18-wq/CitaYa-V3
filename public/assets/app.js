@@ -487,6 +487,7 @@ if (queueProgress && typeof queueProgress.showModal === 'function') {
   const mobile = matchMedia('(max-width:960px)');
   const set = open => {
     document.body.classList.toggle('rail-open', open);
+    document.documentElement.classList.toggle('rail-lock', open);
     toggle.setAttribute('aria-expanded', String(open));
     toggle.setAttribute('aria-label', open ? 'Cerrar el menú de secciones' : 'Abrir el menú de secciones');
   };
