@@ -44,6 +44,14 @@ expectRead($page===1 && str_contains($message,'parece escaneada'),'Una página 1
 [$page]=$pageOf(['','']);
 expectRead($page===null,'Un PDF sin texto en ninguna página no señala una página concreta');
 rejectRead(fn()=>$reader->extract([str_replace('10/07/2026','31/02/2026',$text)]),'Rechaza fechas inválidas');
+// Órdenes y fórmulas de Indigo: el encabezado pega «Pagina N/M», la fecha y el ingreso, y deja vacías las etiquetas.
+$order="Pagina 1/210/07/2026 1:00:00 p. m.ABC123\nNumero de Folio:1\nFecha Historia:Ingreso:\nTipo Documento:CCNumero: 001234\nFORMULA MEDICA\n";
+$orderNext="Pagina 2/210/07/2026 1:00:00 p. m.ABC123\nNumero de Folio:1\nFecha Historia:Ingreso:\nEspecialidad:MEDICINA INTERNA\n";
+expectRead($reader->extract([$text,$order,$orderNext])['page_count']===3,'Acepta la continuación de una orden que solo trae el encabezado con fecha e ingreso');
+[$page,$message]=$pageOf([$text,$order,str_replace('ABC123','OTHER456',$orderNext)]);
+expectRead($page===3 && str_contains($message,'OTHER456'),'En el encabezado de una orden detecta otro ingreso');
+[$page,$message]=$pageOf([$text,str_replace('10/07/2026','11/07/2026',$order)]);
+expectRead($page===2 && str_contains($message,'11/07/2026'),'En el encabezado de una orden detecta otra fecha aunque traiga el documento');
 $path=dirname(__DIR__).'/.runtime/parser-test-'.bin2hex(random_bytes(5)).'.pdf';
 try{file_put_contents($path,testPdf('000456','TEST123','NOTA'));$parsed=$reader->read($path);expectRead($parsed['document_number']==='000456' && $parsed['page_count']===1,'Extrae datos desde bytes de un PDF real de prueba');}finally{if(is_file($path))unlink($path);}
 echo "\nPASS: $checks comprobaciones del lector PDF.\n";

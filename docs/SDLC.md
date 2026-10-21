@@ -1378,3 +1378,13 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
   - sin carga HTTP no se guardan copias temporales.
   - `pdf-reader` 24, `requests-admin` 49, `whatsapp` 95, `support` 85 y `resend-ui` 19 en verde.
   - En el navegador local, con un lote ficticio (un PDF válido y uno dañado): los dos enlaces responden `application/pdf` en línea, una referencia ajena da 404 y el PDF se ve en el visor, en escritorio y en celular. La carga individual muestra «Archivos guardados». Los datos ficticios se borraron.
+
+**Corrección (2026-10-20, reportado por el titular, SCRUM-62): la continuación de una orden o fórmula ya no bloquea el PDF.**
+- **Síntoma.** Un PDF de 7 páginas (historia clínica más órdenes y fórmulas de Indigo) no cargaba: «Página 5: no trae los datos del paciente ni el ingreso y la fecha de esta atención».
+- **Causa.** En las órdenes y fórmulas, el texto del encabezado sale pegado en una línea: «Pagina 2/2» + fecha de la historia con hora + ingreso. Debajo quedan vacías las etiquetas «Fecha Historia:Ingreso:». La página 1 de la orden pasaba porque trae «Tipo Documento». La página 2 (continuación) solo tiene ese encabezado, y el lector no lo reconocía. Además, en esas páginas no se comprobaban la fecha ni el ingreso.
+- **Corrección.** `ClinicalPdfReader::orderStamp` reconoce ese encabezado, pero solo cuando las etiquetas vienen vacías. La fecha debe venir como dd/mm/aaaa para no confundirla con el «N/M» de la página. La fecha y el ingreso se suman a los de la página y pasan por las mismas comprobaciones: un ingreso o una fecha distintos se rechazan con su página.
+- **Validación.**
+  - `pdf-reader` 27 en verde, con 3 nuevas: acepta la continuación de una orden, detecta otro ingreso en el encabezado y detecta otra fecha aunque la página traiga el documento.
+  - `run` 163 y `whatsapp` 95 en verde.
+  - El PDF del titular ahora se lee completo: 7 páginas, ingreso y fecha de la página 1, 2 órdenes detectadas.
+  - El lector anterior y el nuevo se compararon sobre 66 PDF locales: solo cambia ese PDF.

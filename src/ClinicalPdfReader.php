@@ -67,9 +67,12 @@ final class ClinicalPdfReader
                 if (strtoupper($id) !== $number) throw new ClinicalPdfException('es de otro paciente (identificación ' . strtoupper($id) . '); el PDF empieza con ' . $type . ' ' . $number . '. Separa los PDF por paciente.', $page);
                 $found[] = $id;
             }
+            $stamp = self::orderStamp($norm);
             preg_match_all('/(?:^|\n|\d)Ingreso:\h*([A-Z0-9]{4,60})\b/i', $norm, $pageAdmissions);
+            if ($stamp) $pageAdmissions[1][] = $stamp[1];
             foreach ($pageAdmissions[1] as $value) if ($value !== $admission[1]) throw new ClinicalPdfException('es de otro ingreso (' . $value . '); el PDF empieza con el ingreso ' . $admission[1] . '. Carga cada atención en un PDF aparte.', $page);
             preg_match_all('/Fecha\s+historia:\s*(\d{1,2}\/\d{1,2}\/\d{4})/i', $norm, $pageDates);
+            if ($stamp) $pageDates[1][] = $stamp[0];
             foreach ($pageDates[1] as $value) if (self::parseDate($value)?->format('Y-m-d') !== $day->format('Y-m-d')) throw new ClinicalPdfException('tiene otra fecha de atención (' . $value . '); el PDF empieza con el ' . $day->format('d/m/Y') . '. Carga cada atención en un PDF aparte.', $page);
             if (!$found && (!in_array($admission[1], $pageAdmissions[1], true) || !in_array($day->format('Y-m-d'), array_map(fn($value) => self::parseDate($value)?->format('Y-m-d'), $pageDates[1]), true))) throw new ClinicalPdfException('no trae los datos del paciente ni el ingreso y la fecha de esta atención. Revisa que sea parte de esta historia o pásala por OCR si es escaneada.', $page);
         }
@@ -78,6 +81,18 @@ final class ClinicalPdfReader
             'attended_at'=>$day->format('Y-m-d') . sprintf(' %02d:%02d:%02d',$hour,$minute,$second),
             'admission'=>$admission[1],'folio'=>isset($folio[1]) ? mb_substr(self::clean($folio[1]),0,60) : null,
             'specialty'=>$specialtyName,'orders'=>MedicalOrders::detect($texts),'location'=>mb_substr(self::clean(explode("\n",$first)[0]),0,160), 'page_count'=>count($texts)];
+    }
+
+    /**
+     * Órdenes y fórmulas de Indigo: el texto del encabezado sale como «Pagina 2/226/08/2026 8:11:52 a. m.2A4F26BDB4»
+     * (página, fecha de la historia con hora e ingreso pegados) y las etiquetas «Fecha Historia:Ingreso:» quedan vacías.
+     * Devuelve [fecha, ingreso]. La fecha va con ceros (dd/mm/aaaa), así no se confunde con el «N/M» de la página.
+     */
+    private static function orderStamp(string $norm): ?array
+    {
+        if (!preg_match('/Fecha\s+historia:\s*Ingreso:/i', $norm)) return null;
+        if (!preg_match('/Pagina\h*\d+\/\d+\h*(\d{2}\/\d{2}\/\d{4})\h+\d{1,2}:\d{2}:\d{2}\h*[ap]\.?\h*m\.?\h*([A-Z0-9]{4,60})\h*$/im', $norm, $stamp)) return null;
+        return [$stamp[1], $stamp[2]];
     }
 
     private static function parseDate(string $value): ?\DateTimeImmutable
