@@ -29,11 +29,11 @@ final class BulkImport
         foreach($uploads as $upload) {
             if(($upload['error'] ?? UPLOAD_ERR_NO_FILE)!==UPLOAD_ERR_OK || !is_uploaded_file($upload['tmp_name'] ?? '')) throw new \DomainException('No se recibió el lote completo. Revisa los límites de tamaño y vuelve a seleccionar los archivos.');
         }
-        return $this->import(array_map(fn($file)=>['path'=>$file['tmp_name'],'name'=>$file['name']],$uploads));
+        return $this->import(array_map(fn($file)=>['path'=>$file['tmp_name'],'name'=>$file['name']],$uploads),true);
     }
 
     /** CLI/tests may supply local paths; HTTP uses receive to validate real uploads. */
-    public function import(array $sources): array
+    public function import(array $sources,bool $keepFailed=false): array
     {
         $limits=self::limits();
         if(!$sources || count($sources)>$limits['files']) throw new \DomainException('Selecciona entre 1 y '.$limits['files'].' PDF por lote.');
@@ -44,6 +44,9 @@ final class BulkImport
         }
         if($total>$limits['total_bytes']) throw new \DomainException('El lote supera el tamaño total permitido. Divídelo en lotes más pequeños.');
         $reader=new ClinicalPdfReader(); $groups=[]; $errors=[];
+        // Vista previa en el resultado: los PDF que no se guardan se copian por 24 h para poder abrirlos (UploadPreview).
+        $preview=new UploadPreview($this->app);
+        $kept=fn(array $source,string $name)=>$keepFailed?$preview->keep($source['path'],$name):['name'=>$name];
         foreach($sources as $source){
             $name=mb_substr(basename($source['name']),0,190);
             try {
@@ -52,9 +55,9 @@ final class BulkImport
                 if(!isset($groups[$key])) $groups[$key]=['patient'=>$metadata['full_name'],'document'=>$metadata['document_type'].' '.$metadata['document_number'],'date'=>substr($metadata['attended_at'],0,10),'admission'=>$metadata['admission'],'sources'=>[],'names'=>[]];
                 $groups[$key]['sources'][]=$source;
                 $groups[$key]['names'][]=$name;
-            } catch(ClinicalPdfException $e){$errors[]=['files'=>[$name],'status'=>'error','reason'=>$e->getMessage(),'page'=>$e->page];}
-            catch(\DomainException $e){$errors[]=['files'=>[$name],'status'=>'error','reason'=>$e->getMessage()];}
-            catch(\Throwable){$errors[]=['files'=>[$name],'status'=>'error','reason'=>'No se pudo analizar este PDF. Revisa que no esté dañado.'];}
+            } catch(ClinicalPdfException $e){$errors[]=['files'=>[$name],'previews'=>[$kept($source,$name)],'status'=>'error','reason'=>$e->getMessage(),'page'=>$e->page];}
+            catch(\DomainException $e){$errors[]=['files'=>[$name],'previews'=>[$kept($source,$name)],'status'=>'error','reason'=>$e->getMessage()];}
+            catch(\Throwable){$errors[]=['files'=>[$name],'previews'=>[$kept($source,$name)],'status'=>'error','reason'=>'No se pudo analizar este PDF. Revisa que no esté dañado.'];}
         }
         // Los PDF que no se pudieron leer no frenan al resto: se guardan las atenciones legibles y cada fallo se informa
         // con su motivo. Si el PDF fallido era un anexo de una atención guardada, hay que volver a subirlo junto con los
@@ -70,9 +73,10 @@ final class BulkImport
                 $id=$repository->importPackage($group['sources']);
                 $reused=$id<=$before;
                 $result+=['status'=>$reused?'reused':'saved','package_id'=>$id,'message'=>$reused?'Ya estaba registrada; no se duplicó.':'Historia completa registrada.','summary'=>$repository->summary($id)];
+                $result['previews']=$result['summary']['previews'];
                 $report[$reused?'reused':'saved']++;
-            } catch(\DomainException $e){$result+=['status'=>'error','message'=>$e->getMessage()];$report['failed']++;}
-            catch(\Throwable){$result+=['status'=>'error','message'=>'No se pudo guardar esta atención. Vuelve a intentarlo con todos sus PDF.'];$report['failed']++;}
+            } catch(\DomainException $e){$result+=['status'=>'error','message'=>$e->getMessage(),'previews'=>array_map($kept,$group['sources'],$group['names'])];$report['failed']++;}
+            catch(\Throwable){$result+=['status'=>'error','message'=>'No se pudo guardar esta atención. Vuelve a intentarlo con todos sus PDF.','previews'=>array_map($kept,$group['sources'],$group['names'])];$report['failed']++;}
             $report['results'][]=$result;
         }
         return $report;

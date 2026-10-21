@@ -1361,3 +1361,20 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
   - En el resultado de la carga masiva, cada PDF fallido muestra «Página N» junto al nombre del archivo y el motivo completo; se quitó el «No se cargó» repetido del mensaje.
   - La carga individual muestra el mismo mensaje con la página.
 - **Validación.** `pdf-reader` 24 en verde (7 nuevas: página de otro paciente con su documento, de otro ingreso, página escaneada dentro del PDF, anexo sin identificación, datos de la atención en la página 1, página 1 escaneada y PDF sin texto sin página concreta). `run` 159, `requests-admin` 49, `support` 85 y `whatsapp` 95 en verde. Revisado en el navegador con un informe de ejemplo.
+
+**Ajuste (2026-10-20, pedido del titular, SCRUM-61): el resultado de la carga de PDF deja ver cada PDF.**
+- **Antes.** El modal «Resultado de la carga de PDF» solo listaba los nombres de los archivos. Para revisar un PDF, sobre todo el que falló, había que buscarlo en el equipo.
+- **Ahora:**
+  - Cada archivo del resultado es un enlace con un ícono de ojo. Al tocarlo se abre un visor encima del resultado, con el PDF y el botón «Abrir en otra pestaña». Sin JavaScript, el enlace abre el PDF en otra pestaña.
+  - Carga masiva: en la columna «Archivos». Si el fallo tiene página, el visor abre en esa página (`#page=N`) y lo indica.
+  - Carga individual: nueva lista «Archivos guardados» con las páginas de cada PDF.
+  - Nueva `App\UploadPreview`. Cada archivo tiene una referencia: `f<id>` para un PDF guardado en `storage/histories` y `t<token>` para la copia temporal de uno que no se cargó, en `storage/upload-preview`. Las copias se borran a las 24 h. `Repository::summary` devuelve `previews` y `BulkImport::import(..., true)` (solo desde `receive`, es decir, por HTTP) guarda las copias de los fallidos.
+  - Ruta `?page=upload-preview&ref=…`, solo para el personal. Solo abre referencias del resultado que está en la sesión; cualquier otra responde 404. La respuesta permite mostrarse en un marco solo desde la propia aplicación (`X-Frame-Options: SAMEORIGIN`, `frame-ancestors 'self'`). No lleva `default-src`/`object-src`, porque bloquean el visor de PDF del navegador.
+  - `docker/entrypoint.sh` crea `storage/upload-preview`.
+- **Validación.** `run` 163 en verde, con 4 pruebas nuevas:
+  - el PDF que no se cargó se puede ver;
+  - el guardado se ve desde el archivo almacenado;
+  - solo se abren los PDF del resultado de la sesión;
+  - sin carga HTTP no se guardan copias temporales.
+  - `pdf-reader` 24, `requests-admin` 49, `whatsapp` 95, `support` 85 y `resend-ui` 19 en verde.
+  - En el navegador local, con un lote ficticio (un PDF válido y uno dañado): los dos enlaces responden `application/pdf` en línea, una referencia ajena da 404 y el PDF se ve en el visor, en escritorio y en celular. La carga individual muestra «Archivos guardados». Los datos ficticios se borraron.

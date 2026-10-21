@@ -6,7 +6,7 @@ cd /var/www/html
 php docker/configure.php
 
 # 2) Asegura el almacenamiento (montado como volumen, se recrea en cada arranque).
-mkdir -p storage/histories storage/outbox storage/sessions storage/wa-outbox storage/responses storage/support
+mkdir -p storage/histories storage/outbox storage/sessions storage/wa-outbox storage/responses storage/support storage/upload-preview
 chown -R www-data:www-data storage config/local.php
 chmod -R 775 storage
 

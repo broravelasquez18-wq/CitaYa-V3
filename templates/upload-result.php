@@ -20,6 +20,11 @@ unset($_SESSION['upload_result_pending']);
 <?= ui_sheet_head('upload-result', 'Resultado de la carga de PDF', 'Lo que el sistema leyó en los archivos y lo que hizo con cada atención.') ?>
 <div class="sheet-body upload-result-content" data-upload-result-content></div>
 </dialog>
+<dialog id="pdf-preview" class="modal modal-wide pdf-preview" aria-labelledby="pdf-preview-title">
+<?= ui_sheet_head('pdf-preview', 'Vista del PDF') ?>
+<div class="sheet-body flush"><iframe title="Vista del PDF" data-pdf-frame></iframe></div>
+<div class="pdf-preview-foot"><p class="muted" data-pdf-note></p><a class="button secondary" href="#" target="_blank" rel="noopener" data-pdf-open><?= ui_icon('link', 18) ?>Abrir en otra pestaña</a></div>
+</dialog>
 </div>
 <script src="assets/upload-result.js?v=<?= filemtime(dirname(__DIR__) . '/public/assets/upload-result.js') ?>" defer></script>
 <?php endif ?>

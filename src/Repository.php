@@ -17,10 +17,12 @@ final class Repository
             (SELECT COUNT(*) FROM clinical_files f WHERE f.package_id=k.id) files,(SELECT COALESCE(SUM(f.page_count),0) FROM clinical_files f WHERE f.package_id=k.id) pages
             FROM packages k JOIN encounters e ON e.id=k.encounter_id JOIN patients p ON p.id=e.patient_id JOIN specialties s ON s.id=e.specialty_id WHERE k.id=?', [$packageId]);
         $orders = array_map(fn($type) => MedicalOrders::label($type), array_column($this->app->db->all('SELECT DISTINCT o.order_type FROM clinical_orders o JOIN clinical_files f ON f.id=o.file_id WHERE f.package_id=? ORDER BY o.order_type', [$packageId]), 'order_type'));
+        // Archivos del paquete para la vista previa del resultado de la carga (ver UploadPreview).
+        $previews = array_map(fn($file) => ['ref' => 'f' . $file['id'], 'name' => $file['original_name'], 'pages' => (int)$file['page_count']], $this->app->db->all('SELECT id,original_name,page_count FROM clinical_files WHERE package_id=? ORDER BY sort_order,id', [$packageId]));
         return [
             'patient' => $row['full_name'], 'document' => $row['document_type'] . ' ' . $row['document_number'], 'admission' => $row['admission'],
             'date' => substr($row['attended_at'], 0, 10), 'specialty' => $row['specialty'], 'files' => (int)$row['files'], 'pages' => (int)$row['pages'],
-            'version' => (int)$row['version'], 'orders' => $orders, 'reused' => $this->lastReused, 'resolved' => $this->lastResolved,
+            'version' => (int)$row['version'], 'orders' => $orders, 'previews' => $previews, 'reused' => $this->lastReused, 'resolved' => $this->lastResolved,
         ];
     }
 

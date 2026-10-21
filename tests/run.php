@@ -316,6 +316,15 @@ try {
     check($badReport['saved']===1 && $badReport['failed']===1 && $badReport['unreadable']===1 && $badReport['blocked']===0,'Un PDF ilegible no frena el lote: se guarda lo legible');
     check($badReport['results'][0]['files']===['ilegible.pdf'] && $badReport['results'][0]['status']==='error' && str_contains($badReport['results'][0]['message'],'Adjunta un PDF válido') && str_contains($badReport['results'][0]['message'],'junto con los demás PDF'),'El PDF fallido sale primero, con su motivo y cómo volver a subirlo');
     check($db->one("SELECT id FROM patients WHERE document_number='7000000033'")!==null,'La atención legible del lote queda registrada');
+    // Vista previa del resultado: el guardado se abre desde storage/histories y el fallido desde su copia temporal.
+    $previewReport=$bulk->import([['path'=>$newBulkPath,'name'=>'nueva.pdf'],['path'=>$badBulkPath,'name'=>'ilegible.pdf']],true);
+    $uploadPreview=new App\UploadPreview($app);$previewSession=['bulk_report'=>$previewReport];
+    $failedRef=$previewReport['results'][0]['previews'][0]['ref']??'';$savedRef=$previewReport['results'][1]['previews'][0]['ref']??'';
+    $failedFile=$uploadPreview->resolve($failedRef,$previewSession);$savedFile=$uploadPreview->resolve($savedRef,$previewSession);
+    check(str_starts_with($failedRef,'t') && $failedFile && file_get_contents($failedFile['path'])==='not a PDF' && $failedFile['name']==='ilegible.pdf','El PDF que no se cargó se puede ver en el resultado');
+    check(str_starts_with($savedRef,'f') && $savedFile && hash_file('sha256',$savedFile['path'])===hash_file('sha256',$newBulkPath),'El PDF guardado se ve desde el archivo almacenado');
+    check($uploadPreview->resolve($savedRef,[])===null && $uploadPreview->resolve('f1',$previewSession)===null && $uploadPreview->resolve('t'.str_repeat('0',32),$previewSession)===null,'Solo se abren los PDF del resultado de la sesión');
+    check(!isset($bulk->import([['path'=>$badBulkPath,'name'=>'ilegible.pdf']])['results'][0]['previews'][0]['ref']),'Sin carga HTTP no se guardan copias temporales');
     rejects(fn()=>$bulk->import([]),'Carga masiva rechaza lote vacío');
     rejects(fn()=>$bulk->import(array_fill(0,21,$bulkSources[0])),'Carga masiva impone límite de archivos en servidor');
     rejects(fn()=>$bulk->receive(['complete'=>'0'],[]),'Carga masiva exige confirmar documentos completos');
@@ -381,6 +390,6 @@ try {
     // Only the randomly named database created by this test process is dropped.
     if (!preg_match('/^citaya_test_[a-f0-9]{10}$/',$databaseName)) throw new RuntimeException('Invalid test database name');
     $server->exec("DROP DATABASE `$databaseName`");
-    foreach (['histories','outbox'] as $dir) { foreach(glob($config['storage_path'].'/'.$dir.'/*') as $file) unlink($file); rmdir($config['storage_path'].'/'.$dir); }
+    foreach (['histories','outbox','upload-preview'] as $dir) { if (!is_dir($config['storage_path'].'/'.$dir)) continue; foreach(glob($config['storage_path'].'/'.$dir.'/*') as $file) unlink($file); rmdir($config['storage_path'].'/'.$dir); }
     rmdir($config['storage_path']);
 }

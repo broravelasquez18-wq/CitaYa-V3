@@ -291,7 +291,20 @@ if (in_array($page, ['delivery', 'case-history', 'report', 'staff-progress'], tr
     exit('La sesión administrativa venció. Inicia sesión nuevamente.');
 }
 // Empleado: Solicitudes, reportes de error y su avance. Administrador: además el resto del sistema y los empleados.
-if (in_array($page, ['deliveries','delivery','case-history','reports','report','report-file','progress','notifications','admin'], true)) requireStaff();
+if (in_array($page, ['deliveries','delivery','case-history','reports','report','report-file','upload-preview','progress','notifications','admin'], true)) requireStaff();
+if ($page === 'upload-preview') {
+    // Vista previa de un PDF del resultado de la última carga (solo los de esa carga y de esta sesión).
+    $file = (new App\UploadPreview($app))->resolve((string)($_GET['ref'] ?? ''), $_SESSION);
+    if (!$file) { http_response_code(404); header('Content-Type: text/plain; charset=UTF-8'); exit('Este PDF ya no está disponible. Vuelve a abrir el resultado de la carga.'); }
+    // Se muestra dentro del modal del resultado: se permite enmarcarlo solo desde la propia aplicación.
+    header('X-Frame-Options: SAMEORIGIN');
+    // Sin default-src/object-src: el visor de PDF del navegador se carga como complemento y esas directivas lo bloquean.
+    header("Content-Security-Policy: frame-ancestors 'self'");
+    header('Content-Type: application/pdf');
+    header('Content-Length: ' . filesize($file['path']));
+    header('Content-Disposition: inline; filename="' . str_replace('"', '', $file['name']) . '"; filename*=UTF-8\'\'' . rawurlencode($file['name']));
+    readfile($file['path']); exit;
+}
 if ($page === 'report-file') {
     // Foto o PDF del chat de un reporte; solo para quien puede ver ese reporte.
     $file = (new App\SupportDesk($app))->attachment((int)($_GET['id'] ?? 0), currentStaff());

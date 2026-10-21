@@ -10,6 +10,7 @@ $waiting = array_values(array_filter($s['resolved'], fn($r) => !$r['sent']));
 <div><dt>Atención</dt><dd><?= h($s['specialty']) ?><small><?= h(date('d/m/Y', strtotime($s['date']))) ?> · Ingreso <?= h($s['admission']) ?></small></dd></div>
 <div><dt>Documentos</dt><dd><?= (int)$s['files'] ?> PDF<?= $s['pages'] ? ' · ' . (int)$s['pages'] . ((int)$s['pages'] === 1 ? ' página' : ' páginas') : '' ?><small>Versión <?= (int)$s['version'] ?></small></dd></div>
 </dl>
+<?php if (!empty($s['previews'])): ?><div class="load-files"><p>Archivos guardados</p><ul><?php foreach ($s['previews'] as $preview): ?><li><?= ui_pdf_preview($preview) ?><small><?= (int)$preview['pages'] ?> <?= (int)$preview['pages'] === 1 ? 'página' : 'páginas' ?></small></li><?php endforeach ?></ul></div><?php endif ?>
 <ul class="load-actions">
 <li class="<?= $s['reused'] ? 'info' : 'done' ?>"><?= $s['reused'] ? 'Estos mismos archivos ya estaban registrados: no se duplicaron y la historia sigue disponible.' : ($s['version'] > 1 ? 'Se guardó como versión ' . (int)$s['version'] . ' y reemplaza a la anterior en las nuevas entregas.' : 'Historia guardada y disponible para las solicitudes de este paciente.') ?></li>
 <li class="<?= $s['orders'] ? 'done' : 'info' ?>"><?= $s['orders'] ? 'Órdenes detectadas: ' . h(implode(', ', $s['orders'])) . '. Si el paciente la pide por WhatsApp, recibirá una guía de cada una.' : 'No se detectaron órdenes médicas (fórmula, laboratorio, imágenes…).' ?></li>

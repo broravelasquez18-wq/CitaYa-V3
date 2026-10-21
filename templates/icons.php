@@ -93,3 +93,13 @@ if (!function_exists('ui_toast')) {
             . '<button type="button" class="toast-close" data-toast-close aria-label="Cerrar aviso">' . ui_icon('x', 16) . '</button></div>';
     }
 }
+if (!function_exists('ui_pdf_preview')) {
+    /** Nombre de un PDF del resultado de la carga; si se puede ver, botón que lo abre en el visor (upload-result.js). */
+    function ui_pdf_preview(array $preview, ?int $page = null): string
+    {
+        if (empty($preview['ref'])) return '<span class="pdf-name">' . h($preview['name']) . '</span>';
+        $url = '?page=upload-preview&ref=' . rawurlencode($preview['ref']) . ($page ? '#page=' . $page : '');
+        return '<a class="pdf-link" href="' . h($url) . '" target="_blank" rel="noopener" data-pdf-preview data-pdf-name="' . h($preview['name']) . '"'
+            . ($page ? ' data-pdf-page="' . $page . '"' : '') . ' aria-label="Ver ' . h($preview['name']) . '">' . ui_icon('eye', 16) . '<span>' . h($preview['name']) . '</span></a>';
+    }
+}
