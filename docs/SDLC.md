@@ -1403,3 +1403,22 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
   - `run` 163, `requests-admin` 49, `resend-ui` 19 y `support` 85 en verde.
   - En el navegador local, Solicitudes: escribir filtra sin recargar y conserva el foco. «Limpiar» restablece los 4 resultados sin recargar, y el término no aparece en la URL. El detalle de una fila reemplazada abre.
   - En el navegador local, Empleados: filtra filas, totales y diálogos. El diálogo de edición de la fila filtrada abre y su botón de contraseña funciona. «Ver todos» restablece la lista y la URL queda sin `q`.
+
+**Ajuste (2026-10-20, pedido del titular, SCRUM-64): tarjeta «Por WhatsApp» en Solicitudes y canal correcto en Aprobadas.**
+- **Antes.** Los envíos por WhatsApp solo se veían caso por caso, en «Historial del caso». En Aprobadas, la columna de atención decía siempre «Canal: Web».
+- **Ahora:**
+  - Quinta tarjeta, «Por WhatsApp» (`?page=deliveries&f=whatsapp`). Muestra las solicitudes con documentos enviados (o por enviar) al chat, de la más reciente a la más antigua. Cada fila trae:
+    - el tipo: «Automático» para la historia que el sistema envió solo, o «Respuesta "Aprobado"»;
+    - el número de WhatsApp;
+    - el estado del último envío: entregado a WhatsApp, en cola, enviando, no se pudo enviar, sin confirmar o cancelado;
+    - la fecha de entrega o de creación con los intentos, y el motivo si falló;
+    - los botones del historial del caso y del detalle.
+  - `AdminDeliveries::whatsappSql` y `search(..., $whatsapp)` unen el último mensaje de `whatsapp_outbox` de tipo `history` o `response`. `counts()` devuelve `whatsapp`. La búsqueda en vivo y la búsqueda por POST aceptan `f=whatsapp`.
+  - Cinco tarjetas en la cuadrícula: 5 columnas, 3 por debajo de 1180 px y 2 por debajo de 960 px, con la última a todo el ancho.
+  - En Aprobadas, «Canal: WhatsApp» si la solicitud tiene `whatsapp_phone`, que se guarda solo cuando llega por el bot o se vincula a WhatsApp. Si no, «Canal: Web».
+  - En Aprobadas, el enlace del ojo ya no lleva `&q=` con el término buscado. No se usaba y dejaba la búsqueda en la URL, contra el ajuste que la pasó a POST.
+- **Validación.**
+  - `requests-admin` 51 en verde, con 2 nuevas: la tarjeta lista las historias enviadas al chat y no las web, y cada fila trae el tipo, el estado y el número. Se actualizó la prueba de conteos con búsqueda.
+  - `run` 163, `resend-ui` 19, `whatsapp` 95 y `support` 85 en verde.
+  - En el navegador local, la tarjeta muestra el envío automático real de la base local («Automático», «Entregado a WhatsApp»). La búsqueda en vivo filtra dentro de la tarjeta y muestra su mensaje cuando no hay coincidencias. En celular no hay desbordamiento.
+  - El canal de Aprobadas se comprobó renderizando filas con y sin `whatsapp_phone`, porque la base local no tiene solicitudes aprobadas.

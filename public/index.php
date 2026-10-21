@@ -265,7 +265,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 requireStaff();
                 $searchTerm = isset($_POST['clear']) ? '' : mb_substr(trim((string)($_POST['q'] ?? '')), 0, 160);
                 if ($searchTerm === '') unset($_SESSION['search']['deliveries']); else $_SESSION['search']['deliveries'] = $searchTerm;
-                $searchFilter = in_array($_POST['f'] ?? '', ['pending','approved','not_registered','all'], true) ? $_POST['f'] : 'pending';
+                $searchFilter = in_array($_POST['f'] ?? '', ['pending','approved','not_registered','whatsapp','all'], true) ? $_POST['f'] : 'pending';
                 header('Location: ?page=deliveries&f=' . $searchFilter); exit;
             case 'withdraw':
                 requireAdmin();
@@ -378,10 +378,10 @@ if (in_array($page, ['deliveries','delivery','case-history','history'], true)) {
         $deliveryDetail = $adminDeliveries->detail((int)($_GET['id'] ?? 0));
         if (!$deliveryDetail) http_response_code(404);
     } else {
-        // Tarjetas de Solicitudes: pendientes (por defecto), aprobadas (enviadas), no registra o todas.
-        $deliveryFilter = in_array($_GET['f'] ?? '', ['pending','approved','not_registered','all'], true) ? $_GET['f'] : 'pending';
+        // Tarjetas de Solicitudes: pendientes (por defecto), aprobadas (enviadas), no registra, enviadas por WhatsApp o todas.
+        $deliveryFilter = in_array($_GET['f'] ?? '', ['pending','approved','not_registered','whatsapp','all'], true) ? $_GET['f'] : 'pending';
         $deliveryQuery = (string)($_SESSION['search']['deliveries'] ?? '');
-        $deliverySearch = $adminDeliveries->search($deliveryQuery, (int)($_GET['p'] ?? 1), $deliveryFilter === 'approved', $deliveryFilter === 'pending', $deliveryFilter === 'not_registered');
+        $deliverySearch = $adminDeliveries->search($deliveryQuery, (int)($_GET['p'] ?? 1), $deliveryFilter === 'approved', $deliveryFilter === 'pending', $deliveryFilter === 'not_registered', $deliveryFilter === 'whatsapp');
         $deliverySearch['filter'] = $deliveryFilter;
         $deliveryCounts = $adminDeliveries->counts($deliveryQuery);
     }

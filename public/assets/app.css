@@ -671,7 +671,7 @@ details[open]>summary::before{transform:rotate(90deg)}
 
 /* Turnos en espera: la cifra que manda en Solicitudes. */
 /* Tarjetas de estado de Solicitudes: cada una filtra la tabla y cuenta lo que coincide con la búsqueda. */
-.status-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--s3);margin:0 0 var(--s4)}
+.status-cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--s3);margin:0 0 var(--s4)}
 .status-card{position:relative;display:flex;flex-direction:column;gap:2px;min-width:0;padding:var(--s3) var(--s4);padding-right:calc(var(--s4) + 44px);border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);text-decoration:none;transition:border-color .15s,background-color .15s,box-shadow .15s}
 .status-card:hover{border-color:var(--line-strong);background:var(--surface-2)}
 .status-card[aria-current=page]{border-color:var(--brand-hover);background:var(--brand-soft);box-shadow:0 0 0 1px var(--brand-hover)}
@@ -682,6 +682,7 @@ details[open]>summary::before{transform:rotate(90deg)}
 .status-card.pending .status-card-icon{background:var(--amber-soft);color:var(--amber-ink)}
 .status-card.approved .status-card-icon{background:var(--ok-soft);color:var(--ok)}
 .status-card.not_registered .status-card-icon{background:var(--stop-soft);color:var(--stop)}
+.status-card.whatsapp .status-card-icon{background:var(--brand-soft);color:var(--brand)}
 .status-card.all .status-card-icon{background:var(--info-soft);color:var(--info)}
 .status-cards-note{margin:0 0 var(--s4);font-size:var(--t-sm)}
 .queue-next{display:flex;justify-content:flex-end;margin:0 0 var(--s4)}

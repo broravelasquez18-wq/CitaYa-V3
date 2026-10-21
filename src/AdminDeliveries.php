@@ -64,27 +64,38 @@ final class AdminDeliveries
         return "(r.resolution='not_registered' OR r.status='not_registered') AND NOT " . $this->awaitingSql();
     }
 
-    /** Totales de las tarjetas de Solicitudes para la misma búsqueda: pendientes, aprobadas, no registra y todas. */
+    /** Con documentos enviados (o por enviar) al WhatsApp del paciente: historia automática o respuesta «Aprobado». */
+    private function whatsappSql(): string
+    {
+        return "EXISTS (SELECT 1 FROM whatsapp_outbox wa WHERE wa.request_id=r.id AND wa.kind IN ('history','response'))";
+    }
+
+    /** Totales de las tarjetas de Solicitudes para la misma búsqueda: pendientes, aprobadas, no registra, por WhatsApp y todas. */
     public function counts(string $query): array
     {
         [$where, $params] = $this->queryWhere(mb_substr(trim($query), 0, 160));
         $and = $where === '' ? ' WHERE ' : $where . ' AND ';
         $row = $this->db->one('SELECT COUNT(*) total,
             COALESCE(SUM(' . $this->awaitingSql() . '),0) pending,
-            COALESCE(SUM(' . $this->notRegisteredSql() . '),0) not_registered
+            COALESCE(SUM(' . $this->notRegisteredSql() . '),0) not_registered,
+            COALESCE(SUM(' . $this->whatsappSql() . '),0) whatsapp
             FROM requests r LEFT JOIN patients p ON p.id=r.patient_id' . $where, $params);
         $approved = (int)$this->db->one('SELECT COUNT(*) n FROM requests r LEFT JOIN patients p ON p.id=r.patient_id' . $and . $this->deliveredSql(), $params)['n'];
-        return ['pending' => (int)$row['pending'], 'approved' => $approved, 'not_registered' => (int)$row['not_registered'], 'all' => (int)$row['total']];
+        return ['pending' => (int)$row['pending'], 'approved' => $approved, 'not_registered' => (int)$row['not_registered'], 'whatsapp' => (int)$row['whatsapp'], 'all' => (int)$row['total']];
     }
 
-    public function search(string $query, int $page = 1, bool $history = false, bool $pendingOnly = false, bool $notRegistered = false): array
+    public function search(string $query, int $page = 1, bool $history = false, bool $pendingOnly = false, bool $notRegistered = false, bool $whatsapp = false): array
     {
         $query = mb_substr(trim($query), 0, 160);
         [$where, $params] = $this->queryWhere($query);
         if ($history) $where .= ($where === '' ? ' WHERE ' : ' AND ') . $this->deliveredSql();
         if ($pendingOnly && !$history) $where .= ($where === '' ? ' WHERE ' : ' AND ') . $this->awaitingSql();
         if ($notRegistered && !$history && !$pendingOnly) $where .= ($where === '' ? ' WHERE ' : ' AND ') . $this->notRegisteredSql();
+        if ($whatsapp && !$history && !$pendingOnly && !$notRegistered) $where .= ($where === '' ? ' WHERE ' : ' AND ') . $this->whatsappSql();
         $from = ' FROM requests r LEFT JOIN patients p ON p.id=r.patient_id';
+        // «Enviadas por WhatsApp»: el último envío de documentos al chat, con su estado.
+        $waColumns = $whatsapp ? ',w.kind wa_kind,w.phone wa_phone,w.status wa_status,w.attempts wa_attempts,w.created_at wa_created_at,w.sent_at wa_sent_at,w.last_error wa_error' : '';
+        $waJoin = $whatsapp ? " LEFT JOIN whatsapp_outbox w ON w.id=(SELECT MAX(lw.id) FROM whatsapp_outbox lw WHERE lw.request_id=r.id AND lw.kind IN ('history','response'))" : '';
         $total = (int)$this->db->one('SELECT COUNT(*) n' . $from . $where, $params)['n'];
         $pages = max(1, (int)ceil($total / 20));
         $page = max(1, min($page, $pages));
@@ -94,11 +105,11 @@ final class AdminDeliveries
             j.id last_job_id,j.status delivery_status,j.sent_at,j.recipient,j.last_error,e.attended_at,s.name specialty,
             " . $this->pendingSql() . " case_pending," . $this->awaitingSql() . " awaiting,
             (SELECT MIN(done.sent_at) FROM jobs done WHERE done.request_id=r.id AND done.kind IN ('history','response') AND done.status='sent' AND done.id>COALESCE(r.case_reopened_after_job_id,0)) closed_at,
-            (SELECT COUNT(*) FROM jobs n WHERE n.request_id=r.id AND n.kind IN ('history','response')) deliveries"
-            . $from . " LEFT JOIN encounters e ON e.id=r.encounter_id LEFT JOIN specialties s ON s.id=e.specialty_id
+            (SELECT COUNT(*) FROM jobs n WHERE n.request_id=r.id AND n.kind IN ('history','response')) deliveries" . $waColumns
+            . $from . $waJoin . " LEFT JOIN encounters e ON e.id=r.encounter_id LEFT JOIN specialties s ON s.id=e.specialty_id
                 LEFT JOIN jobs j ON j.id=(SELECT MAX(last.id) FROM jobs last WHERE last.request_id=r.id AND last.kind IN ('history','response'))"
-            . $where . ($history ? ' ORDER BY closed_at DESC,r.id DESC' : ($pendingOnly ? ' ORDER BY r.created_at ASC,r.id ASC' : ' ORDER BY awaiting DESC,case_pending DESC,r.id DESC')) . " LIMIT 20 OFFSET $offset", $params);
-        return compact('query','total','page','pages','rows','history','pendingOnly','notRegistered');
+            . $where . ($whatsapp ? ' ORDER BY wa_created_at DESC,r.id DESC' : ($history ? ' ORDER BY closed_at DESC,r.id DESC' : ($pendingOnly ? ' ORDER BY r.created_at ASC,r.id ASC' : ' ORDER BY awaiting DESC,case_pending DESC,r.id DESC'))) . " LIMIT 20 OFFSET $offset", $params);
+        return compact('query','total','page','pages','rows','history','pendingOnly','notRegistered','whatsapp');
     }
 
     /**
