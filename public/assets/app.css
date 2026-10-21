@@ -1320,3 +1320,6 @@ body.console-ambient .theme-toggle:hover{border-color:var(--brand-hover);color:v
 .pdf-preview-foot{display:flex;align-items:center;justify-content:space-between;gap:var(--s3);padding:var(--s3) var(--s5);border-top:1px solid var(--line);flex-shrink:0}
 .pdf-preview-foot p{margin:0;font-size:var(--t-sm)}
 @media (max-width:640px){.modal.pdf-preview{width:100vw;height:100dvh;max-height:100dvh;border-radius:0}.pdf-preview-foot{flex-direction:column;align-items:stretch}.pdf-preview-foot .button{justify-content:center}}
+/* Búsqueda en vivo: con JavaScript el resultado aparece al escribir y el botón «Buscar» sobra */
+form.is-live [data-live-submit]{display:none}
+form.is-live[aria-busy=true] .input-icon svg,form.is-live[aria-busy=true] input[type=search]{opacity:.7}

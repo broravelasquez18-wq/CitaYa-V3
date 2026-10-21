@@ -1388,3 +1388,18 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
   - `run` 163 y `whatsapp` 95 en verde.
   - El PDF del titular ahora se lee completo: 7 páginas, ingreso y fecha de la página 1, 2 órdenes detectadas.
   - El lector anterior y el nuevo se compararon sobre 66 PDF locales: solo cambia ese PDF.
+
+**Ajuste (2026-10-20, pedido del titular, SCRUM-63): las búsquedas muestran el resultado al escribir.**
+- **Antes.** En Solicitudes y en Empleados había que pulsar «Buscar», y la página se recargaba.
+- **Ahora:**
+  - Los formularios con `data-live-search="<zonas>"` se envían solos 0,3 s después de dejar de escribir (`app.js`). Se pide el mismo formulario y solo se reemplazan las zonas indicadas, sin recargar ni perder el foco.
+  - Solicitudes sigue yendo por POST con el término en la sesión, así que no queda en la URL. Reemplaza `#deliveries`: tarjetas con sus conteos, resultado y paginación.
+  - Empleados va por GET, como antes. Reemplaza `#staff-totals`, `#staff-results` y `#staff-dialogs`; los diálogos de edición dependen de la lista filtrada.
+  - Con JavaScript se oculta el botón «Buscar». «Limpiar» y «Ver todos» (`data-live-clear`) restablecen la lista en vivo y solo aparecen cuando hay un término. Pulsar Enter también busca en vivo.
+  - Se cancela la petición anterior si se sigue escribiendo. Si la sesión venció o la respuesta no trae las zonas, se recarga la página. Si hay un error de red, se envía el formulario normal.
+  - El botón para mostrar u ocultar la contraseña pasó a un manejador delegado, para que siga funcionando en los diálogos reemplazados.
+  - Sin JavaScript todo funciona como antes.
+- **Validación.**
+  - `run` 163, `requests-admin` 49, `resend-ui` 19 y `support` 85 en verde.
+  - En el navegador local, Solicitudes: escribir filtra sin recargar y conserva el foco. «Limpiar» restablece los 4 resultados sin recargar, y el término no aparece en la URL. El detalle de una fila reemplazada abre.
+  - En el navegador local, Empleados: filtra filas, totales y diálogos. El diálogo de edición de la fila filtrada abre y su botón de contraseña funciona. «Ver todos» restablece la lista y la URL queda sin `q`.

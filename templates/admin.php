@@ -36,10 +36,10 @@ $pageActions = [
 if ($page === 'deliveries' && $deliverySearch) {
     $searchFilter = $deliverySearch['filter'] ?? 'pending';
     // Va por POST para que el nombre o la cédula buscados no queden en la URL ni en el historial del navegador.
-    $pageActions = '<form method="post" class="delivery-search head-search" role="search">' . csrf() . '<input type="hidden" name="action" value="delivery-search"><input type="hidden" name="f" value="' . h($searchFilter) . '">'
+    $pageActions = '<form method="post" class="delivery-search head-search" role="search" data-live-search="#deliveries">' . csrf() . '<input type="hidden" name="action" value="delivery-search"><input type="hidden" name="f" value="' . h($searchFilter) . '">'
         . '<label class="visually-hidden" for="delivery-query">Nombre, radicado o número de documento</label><span class="input-icon">' . ui_icon('search', 18) . '<input id="delivery-query" type="search" name="q" maxlength="160" placeholder="Nombre, radicado (HC-…) o documento" value="' . h($deliverySearch['query']) . '"></span>'
-        . '<button class="button primary" type="submit">Buscar</button>'
-        . ($deliverySearch['query'] !== '' ? '<button class="button secondary" type="submit" name="clear" value="1">Limpiar</button>' : '') . '</form>';
+        . '<button class="button primary" type="submit" data-live-submit>Buscar</button>'
+        . ($deliverySearch['query'] !== '' ? '<button class="button secondary" type="submit" name="clear" value="1" data-live-clear>Limpiar</button>' : '') . '</form>';
 }
 ?>
 <div class="console">

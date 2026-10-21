@@ -24,10 +24,11 @@ $posted = static fn(string $field, string $fallback, bool $use): string => $use 
 <div class="alert-modal-actions"><a class="button primary" href="#" data-close>Ya la copié</a></div>
 </dialog>
 <?php endif ?>
-<dl class="stats"><div class="stat"><dt>Solicitudes respondidas hoy</dt><dd><?= $totals['day']['requests'] ?></dd></div><div class="stat"><dt>En el mes</dt><dd><?= $totals['month']['requests'] ?></dd></div><div class="stat"><dt>En el año</dt><dd><?= $totals['year']['requests'] ?></dd></div><div class="stat"><dt>Reportes resueltos en el mes</dt><dd><?= $totals['month']['reports'] ?></dd></div></dl>
+<dl class="stats" id="staff-totals"><div class="stat"><dt>Solicitudes respondidas hoy</dt><dd><?= $totals['day']['requests'] ?></dd></div><div class="stat"><dt>En el mes</dt><dd><?= $totals['month']['requests'] ?></dd></div><div class="stat"><dt>En el año</dt><dd><?= $totals['year']['requests'] ?></dd></div><div class="stat"><dt>Reportes resueltos en el mes</dt><dd><?= $totals['month']['reports'] ?></dd></div></dl>
 
 <section class="card"><div class="section-head"><div><h2>Personal y avance</h2><p class="muted">Solicitudes respondidas (Aprobado o No Registra) y reportes de error resueltos por cada persona.</p></div></div>
-<form method="get" class="delivery-search"><input type="hidden" name="page" value="employees"><label>Buscar por cédula, nombre o correo<input type="search" name="q" value="<?= h($search) ?>" maxlength="80"></label><button class="button primary"><?= ui_icon('search', 18) ?>Buscar</button><?php if ($search !== ''): ?><a class="button secondary" href="?page=employees">Ver todos</a><?php endif ?></form>
+<form method="get" class="delivery-search" role="search" data-live-search="#staff-totals,#staff-results,#staff-dialogs"><input type="hidden" name="page" value="employees"><label>Buscar por cédula, nombre o correo<input type="search" name="q" value="<?= h($search) ?>" maxlength="80"></label><button class="button primary" data-live-submit><?= ui_icon('search', 18) ?>Buscar</button><?php if ($search !== ''): ?><a class="button secondary" href="?page=employees" data-live-clear>Ver todos</a><?php endif ?></form>
+<div id="staff-results">
 <?php if (!$staffList): ?><div class="empty-state"><?= ui_icon('users', 28) ?><p><?= $search !== '' ? 'No hay cuentas que coincidan con la búsqueda.' : 'Todavía no hay cuentas.' ?></p></div>
 <?php else: ?><div class="table-wrap"><table class="responsive-table staff-table" role="table"><thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">Cédula</th><th scope="col" role="columnheader">Persona</th><th scope="col" role="columnheader">Rol</th><th scope="col" role="columnheader">Hoy</th><th scope="col" role="columnheader">Mes</th><th scope="col" role="columnheader">Año</th><th scope="col" role="columnheader">Reportes (mes)</th><th scope="col" role="columnheader">Acciones</th></tr></thead><tbody role="rowgroup">
 <?php foreach ($staffList as $member): $self = (int)$member['id'] === (int)$_SESSION['admin_id']; $id = (int)$member['id']; ?>
@@ -40,8 +41,9 @@ $posted = static fn(string $field, string $fallback, bool $use): string => $use 
 <td role="cell" data-label="Reportes (mes)" class="num"><?= $member['progress']['month']['reports'] ?></td>
 <td role="cell" data-label="Acciones"><div class="row-actions"><a class="button secondary small" href="?page=staff-progress&amp;id=<?= $id ?>" data-staff-progress aria-haspopup="dialog" aria-controls="staff-progress-modal" aria-label="Ver el avance de <?= h($member['name']) ?>"><?= ui_icon('gauge', 16) ?>Ver avance</a><a class="button secondary small" href="#staff-edit-<?= $id ?>" data-open="staff-edit-<?= $id ?>" aria-label="Editar la cuenta de <?= h($member['name']) ?>"><?= ui_icon('user', 16) ?>Editar</a></div></td></tr>
 <?php endforeach ?>
-</tbody></table></div><?php endif ?></section>
+</tbody></table></div><?php endif ?></div></section>
 
+<div id="staff-dialogs">
 <?php foreach ($staffList as $member): $self = (int)$member['id'] === (int)$_SESSION['admin_id']; $id = (int)$member['id']; $reopen = $failedEdit === $id; ?>
 <dialog <?= ui_dialog_attrs('staff-edit-' . $id, 'modal', $reopen) ?>>
 <?= ui_sheet_head('staff-edit-' . $id, 'Editar cuenta', $member['name']) ?>
@@ -64,6 +66,7 @@ $posted = static fn(string $field, string $fallback, bool $use): string => $use 
 </div></div>
 </dialog>
 <?php endforeach ?>
+</div>
 
 <dialog <?= ui_dialog_attrs('staff-create-drawer', 'drawer', ui_reopen('staff-create')) ?>>
 <?= ui_sheet_head('staff-create-drawer', 'Agregar empleado', 'La cédula identifica a cada persona y no se puede repetir. Se genera una contraseña aleatoria que verás una sola vez.') ?>

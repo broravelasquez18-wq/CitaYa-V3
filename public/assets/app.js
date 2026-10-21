@@ -548,16 +548,18 @@ document.addEventListener('input', event => {
 });
 
 // Mostrar u ocultar la contraseña (inicio de sesión y edición de cuentas).
-document.querySelectorAll('[data-toggle-password]').forEach(button => {
-  const input = document.getElementById(button.getAttribute('aria-controls'));
-  button.hidden = false;
-  button.addEventListener('click', () => {
-    const show = input.type === 'password';
-    input.type = show ? 'text' : 'password';
-    button.setAttribute('aria-pressed', String(show));
-    button.setAttribute('aria-label', show ? 'Ocultar contraseña' : 'Mostrar contraseña');
-    input.focus();
-  });
+// Delegado: también sirve para los diálogos que la búsqueda en vivo reemplaza (Empleados).
+const showPasswordToggles = root => root.querySelectorAll('[data-toggle-password]').forEach(button => { button.hidden = false; });
+showPasswordToggles(document);
+document.addEventListener('click', event => {
+  const button = event.target.closest('[data-toggle-password]');
+  const input = button && document.getElementById(button.getAttribute('aria-controls'));
+  if (!input) return;
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  button.setAttribute('aria-pressed', String(show));
+  button.setAttribute('aria-label', show ? 'Ocultar contraseña' : 'Mostrar contraseña');
+  input.focus();
 });
 const resendButton = document.querySelector('[data-resend-wait]');
 if (resendButton) {
@@ -948,4 +950,54 @@ document.addEventListener('click', event => {
   const current = nav?.querySelector('a.selected');
   if (!current || nav.scrollWidth <= nav.clientWidth) return;
   nav.scrollLeft = current.offsetLeft - (nav.clientWidth - current.offsetWidth) / 2;
+})();
+
+// Búsqueda en vivo: los formularios con data-live-search muestran el resultado mientras se escribe, sin pulsar «Buscar».
+// Se envía el mismo formulario (Solicitudes sigue yendo por POST, sin el término en la URL) y solo se reemplazan las zonas
+// indicadas en data-live-search. Sin JavaScript, el botón «Buscar» funciona como siempre.
+(() => {
+  document.querySelectorAll('form[data-live-search]').forEach(form => {
+    const input = form.querySelector('input[type="search"]');
+    if (!input || !window.fetch || !window.DOMParser) return;
+    const targets = form.dataset.liveSearch.split(',').map(selector => selector.trim());
+    form.classList.add('is-live');
+    let timer = 0, controller = null, last = input.value.trim();
+    const run = async clear => {
+      clearTimeout(timer);
+      const term = clear ? '' : input.value.trim();
+      if (!clear && term === last) return;
+      last = term;
+      controller?.abort();
+      controller = new AbortController();
+      const data = new FormData(form);
+      data.set(input.name, term);
+      const post = form.method.toLowerCase() === 'post';
+      if (!post && term === '') data.delete(input.name);
+      const url = post ? (form.getAttribute('action') || location.href) : '?' + new URLSearchParams(data);
+      form.setAttribute('aria-busy', 'true');
+      try {
+        const response = await fetch(url, post ? {method: 'POST', body: data, signal: controller.signal} : {signal: controller.signal});
+        const page = new DOMParser().parseFromString(await response.text(), 'text/html');
+        const fresh = targets.map(selector => page.querySelector(selector));
+        // Sesión vencida u otra página: se recarga para que el servidor muestre lo que corresponda.
+        if (!response.ok || fresh.some(node => !node)) { location.reload(); return; }
+        targets.forEach((selector, index) => { document.querySelector(selector)?.replaceWith(fresh[index]); showPasswordToggles(fresh[index]); });
+        // «Limpiar» / «Ver todos» solo aparece cuando hay un término buscado.
+        form.querySelectorAll('[data-live-clear]').forEach(node => node.remove());
+        const pageForm = page.querySelector('form[data-live-search="' + form.dataset.liveSearch + '"]');
+        pageForm?.querySelectorAll('[data-live-clear]').forEach(node => form.append(node));
+        if (clear) input.value = '';
+        history.replaceState(history.state, '', response.url);
+      } catch (error) {
+        if (error.name !== 'AbortError') form.submit();
+      } finally { form.removeAttribute('aria-busy'); }
+    };
+    input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => run(false), 300); });
+    form.addEventListener('submit', event => { event.preventDefault(); run(!!event.submitter?.matches('[data-live-clear]')); });
+    form.addEventListener('click', event => {
+      if (!event.target.closest('a[data-live-clear]')) return;
+      event.preventDefault();
+      run(true);
+    });
+  });
 })();
