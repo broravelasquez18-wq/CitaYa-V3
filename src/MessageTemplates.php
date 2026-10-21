@@ -189,7 +189,7 @@ final class MessageTemplates
     public static function sample(): array
     {
         return ['radicado' => 'HC-261006-A1B2C3D4E5', 'nombre' => 'Paciente Demo', 'horas' => '24', 'vigencia' => '6',
-            'enlace' => 'https://portal.ejemplo/?page=home', 'correo' => 'paciente@correo.com', 'documentos' => '2',
+            'enlace' => 'https://portal.ejemplo', 'correo' => 'paciente@correo.com', 'documentos' => '2',
             'documento' => 'CC 1000000000', 'fecha' => '15/09/2026', 'especialidad' => 'Medicina general', 'reporte' => 'RE-261019-A1B2C3'];
     }
 }

@@ -532,18 +532,6 @@ body.overlay-open,body.queue-progress-open{overflow:hidden}
 .upload-flow li:last-child::before{background:var(--brand);border-color:var(--brand);color:#fff}
 .upload-flow strong{display:block;font-size:var(--t-sm);margin-bottom:2px}
 .upload-flow span{display:block;color:var(--muted);font-size:var(--t-xs);line-height:1.45}
-.upload-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s3);margin-bottom:var(--s5)}
-.upload-options[hidden],.upload-panel[hidden]{display:none}
-.upload-option{display:flex;gap:var(--s3);align-items:center;width:100%;padding:var(--s4);text-align:left;border:1.5px solid var(--line-strong);border-radius:var(--radius);background:var(--surface);color:var(--ink);transition:border-color .15s,background-color .15s}
-.upload-option:hover{border-color:var(--brand)}
-.upload-option[aria-selected=true]{border-color:var(--brand);background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--brand)}
-.upload-option-icon{display:grid;place-items:center;flex-shrink:0;width:44px;height:44px;border-radius:var(--radius);background:var(--surface-2);color:var(--ink-2)}
-.upload-option[aria-selected=true] .upload-option-icon{background:var(--brand);color:#fff}
-.upload-option-copy{flex:1;min-width:0}
-.upload-option-copy strong{display:block;font-size:var(--t-base);margin-bottom:2px}
-.upload-option-copy>span{display:block;color:var(--muted);font-size:var(--t-sm);line-height:1.45}
-.upload-choice-mark{flex-shrink:0;width:20px;height:20px;border-radius:50%;border:1.5px solid var(--line-strong);background:var(--surface)}
-.upload-option[aria-selected=true] .upload-choice-mark{border:6px solid var(--brand)}
 .upload-panel{border-top:1px solid var(--line);padding-top:var(--s5)}
 .upload-panel h3{margin-bottom:var(--s1)}
 .upload-panel-description{max-width:78ch;margin:0 0 var(--s4)}
@@ -819,6 +807,18 @@ form.sheet-body,.sheet-body>form{display:flex;flex-direction:column}
 .notice.warn{background:var(--amber-soft);border-color:#efd08c;color:var(--amber-ink)}
 .notice.warn>.icon{color:var(--amber-ink)}
 .bulk-files .bulk-page{margin-top:var(--s1)}
+/* Datos que faltan en un PDF del resultado: se escriben ahí mismo para cargarlo. */
+.bulk-complete{margin:var(--s3) 0 0;padding:var(--s3);border:1px solid #efd08c;border-radius:var(--radius);background:var(--amber-soft)}
+.bulk-complete-title{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s1) var(--s2);margin:0 0 var(--s2);font-size:var(--t-sm);font-weight:800;color:var(--ink)}
+.bulk-complete-title small{flex-basis:100%;margin:0;font-weight:500;color:var(--muted)}
+.bulk-complete-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:var(--s2) var(--s3)}
+.bulk-complete-grid label{margin:0;font-size:var(--t-xs);font-weight:700;color:var(--ink-2)}
+.bulk-complete-grid input,.bulk-complete-grid select{margin-top:4px;min-height:40px;font-size:var(--t-sm)}
+.bulk-complete-doc{grid-column:1/-1}
+.bulk-complete-doc span{display:flex;gap:var(--s2)}
+.bulk-complete-doc select{flex:0 0 88px}
+.bulk-complete-doc input{flex:1;min-width:0}
+.bulk-complete-hint{margin:var(--s2) 0;font-size:var(--t-xs);color:var(--muted)}
 .result-launch{display:flex;align-items:center;justify-content:space-between;gap:var(--s3);flex-wrap:wrap;margin-top:var(--s5)}
 .result-launch p{margin:0}
 .history-modal .sheet-body{padding-bottom:0}
@@ -1085,7 +1085,10 @@ body.ambient.is-typing .login-glow *,body.ambient.is-typing .login-modules li::a
 .theme-icon-light{display:none}
 html[data-theme=light] .theme-icon-light{display:inline-flex}
 html[data-theme=light] .theme-icon-dark{display:none}
-body.ambient{transition:background-color .35s ease,color .35s ease}
+/* Cambio de tema: sin transiciones (repintar todo el texto y el fondo cuadro a cuadro era lo que lo ponía lento).
+   app.js apaga las transiciones durante el cambio y, si el navegador puede, hace un fundido entre dos capturas. */
+html.theme-switching *,html.theme-switching *::before,html.theme-switching *::after{transition:none!important}
+::view-transition-old(root),::view-transition-new(root){animation-duration:.22s}
 
 html[data-theme=light] body.ambient{--login-bg:#eef6f8;--login-panel:#fff;--login-line:#d3e3e8;--login-ink:#203648;--login-muted:#5c7380;--login-accent:#00737c;
   background-image:radial-gradient(900px 520px at 85% 35%,rgba(0,172,196,.12),transparent 70%),radial-gradient(700px 480px at 10% 80%,rgba(0,143,152,.1),transparent 70%),linear-gradient(rgba(32,54,72,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(32,54,72,.05) 1px,transparent 1px)}
@@ -1249,7 +1252,6 @@ html[data-theme=light] body.request-page .request-hero h1{color:var(--ink)}
    El oscuro es el predeterminado (como el login); el claro con html[data-theme=light]. Se redefinen los tokens,
    así los componentes (que solo usan variables) cambian solos. El vidrio es translucidez sin backdrop-filter:
    un desenfoque sobre el fondo animado se recalcularía en cada cuadro. */
-body.console-ambient{transition:background-color .35s ease,color .35s ease}
 html:has(body.console-ambient),body.console-ambient{overflow-x:clip}
 body.console-ambient .shell,body.console-ambient .footer{position:relative;z-index:1}
 html:not([data-theme=light]) body.console-ambient{
@@ -1306,7 +1308,6 @@ body.console-ambient .card{border-radius:14px}
 /* Botón de tema en el encabezado de la consola. */
 body.console-ambient .theme-toggle{border-color:var(--line-strong);background:transparent;color:var(--ink-2)}
 body.console-ambient .theme-toggle:hover{border-color:var(--brand-hover);color:var(--brand-hover)}
-@media(prefers-reduced-motion:reduce){body.console-ambient{transition:none}}
 /* Vista previa de los PDF en el resultado de la carga */
 .pdf-link{display:inline-flex;align-items:flex-start;gap:6px;color:var(--info);font-weight:600;text-decoration:none;overflow-wrap:anywhere;text-align:left}
 .pdf-link svg{flex-shrink:0;margin-top:2px}

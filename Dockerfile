@@ -2,8 +2,9 @@
 FROM php:8.2-apache
 
 # Extensiones: pdo_mysql (MariaDB/MySQL) y mbstring (lectura de PDF y normalización).
+# poppler-utils + tesseract-ocr-spa: OCR de las primeras páginas escaneadas de una historia (App\PdfOcr).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libonig-dev unzip poppler-utils \
+        libonig-dev unzip poppler-utils tesseract-ocr tesseract-ocr-spa \
     && docker-php-ext-install -j"$(nproc)" pdo_mysql mbstring \
     && rm -rf /var/lib/apt/lists/*
 

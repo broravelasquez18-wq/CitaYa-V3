@@ -207,34 +207,6 @@ window.addEventListener('pageshow', event => {
   if (event.persisted) document.querySelectorAll('[aria-busy="true"]').forEach(button => { button.disabled = false; button.removeAttribute('aria-busy'); });
 });
 
-const uploadCenter = document.querySelector('[data-upload-center]');
-if (uploadCenter) {
-  const choices = Array.from(uploadCenter.querySelectorAll('[data-upload-choice]'));
-  const selectUpload = mode => {
-    choices.forEach(choice => {
-      const selected = choice.dataset.uploadChoice === mode;
-      choice.setAttribute('aria-selected', String(selected));
-      choice.tabIndex = selected ? 0 : -1;
-    });
-    uploadCenter.querySelectorAll('[data-upload-panel]').forEach(panel => {
-      panel.hidden = panel.dataset.uploadPanel !== mode;
-      panel.setAttribute('role', 'tabpanel');
-      panel.setAttribute('aria-labelledby', `upload-tab-${panel.dataset.uploadPanel}`);
-    });
-  };
-  choices.forEach((choice, index) => {
-    choice.addEventListener('click', () => selectUpload(choice.dataset.uploadChoice));
-    choice.addEventListener('keydown', event => {
-      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-      event.preventDefault();
-      const next = event.key === 'Home' ? 0 : event.key === 'End' ? choices.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + choices.length) % choices.length;
-      selectUpload(choices[next].dataset.uploadChoice);
-      choices[next].focus();
-    });
-  });
-  selectUpload(uploadCenter.dataset.uploadMode === 'bulk' ? 'bulk' : 'single');
-  uploadCenter.querySelector('[data-upload-options]').hidden = false;
-}
 const bulkForm = document.querySelector('[data-bulk-upload]');
 if (bulkForm) {
   const input = bulkForm.elements['bulk_pdfs[]'];
@@ -478,8 +450,8 @@ if (queueProgress && typeof queueProgress.showModal === 'function') {
   if (document.querySelector('[data-toasts] .toast.error')) setTimeout(validateAll, 0);
 })();
 
-// Menú de secciones de la consola en móvil: la hamburguesa abre el rail como panel lateral.
-// Se cierra con Escape, con un clic en el fondo o al elegir una sección; el foco vuelve al botón.
+// Menú de secciones de la consola. En escritorio, la hamburguesa oculta o muestra el rail y se recuerda la elección.
+// En móvil abre el rail como panel lateral: se cierra con Escape, con un clic en el fondo o al elegir una sección.
 (() => {
   const toggle = document.querySelector('[data-rail-toggle]');
   const rail = document.getElementById('console-rail');
@@ -491,20 +463,40 @@ if (queueProgress && typeof queueProgress.showModal === 'function') {
     toggle.setAttribute('aria-expanded', String(open));
     toggle.setAttribute('aria-label', open ? 'Cerrar el menú de secciones' : 'Abrir el menú de secciones');
   };
+  const root = document.documentElement;
+  const syncDesktop = () => {
+    if (mobile.matches) return;
+    const collapsed = root.classList.contains('rail-collapsed');
+    toggle.setAttribute('aria-expanded', String(!collapsed));
+    toggle.setAttribute('aria-label', collapsed ? 'Mostrar el menú de secciones' : 'Ocultar el menú de secciones');
+  };
+  // Una vuelta del ícono en cada clic; se reinicia si se pulsa de nuevo antes de terminar.
+  const spin = () => { toggle.classList.remove('is-spinning'); toggle.offsetWidth; toggle.classList.add('is-spinning'); };
+  toggle.addEventListener('animationend', () => toggle.classList.remove('is-spinning'));
   toggle.addEventListener('click', () => {
+    spin();
+    if (!mobile.matches) {
+      const collapsed = root.classList.toggle('rail-collapsed');
+      try { localStorage.setItem('citaya-rail', collapsed ? 'collapsed' : 'open'); } catch {}
+      syncDesktop();
+      return;
+    }
     const open = !document.body.classList.contains('rail-open');
     set(open);
     if (open) (rail.querySelector('a.selected') || rail.querySelector('a'))?.focus();
   });
   document.addEventListener('click', event => {
-    if (event.target.closest('[data-rail-close]') || event.target.closest('#console-rail a')) set(false);
+    if (event.target.closest('[data-rail-close]')) { spin(); set(false); }
+    else if (event.target.closest('#console-rail a')) set(false);
   });
   document.addEventListener('keydown', event => {
     if (event.key !== 'Escape' || !document.body.classList.contains('rail-open')) return;
+    spin();
     set(false);
     toggle.focus();
   });
-  mobile.addEventListener('change', () => { if (!mobile.matches) set(false); });
+  mobile.addEventListener('change', () => { if (mobile.matches) set(false); else { set(false); syncDesktop(); } });
+  syncDesktop();
 })();
 
 // Cambio de tema claro u oscuro (inicio de sesión, formulario y consola interna); la elección queda guardada en este navegador.
@@ -519,10 +511,19 @@ document.querySelectorAll('[data-theme-toggle]').forEach(button => {
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', light ? '#ffffff' : '#16273a');
   };
   button.hidden = false;
-  button.addEventListener('click', () => {
+  // Cambio instantáneo: se apagan las transiciones mientras se aplica (si no, cada botón, tarjeta y el texto de toda
+  // la página se animan a la vez y el fondo se repinta cuadro a cuadro). Con View Transitions, un fundido entre capturas.
+  const apply = () => {
+    root.classList.add('theme-switching');
     root.dataset.theme = root.dataset.theme === 'light' ? 'dark' : 'light';
     try { localStorage.setItem('citaya-theme', root.dataset.theme); } catch {}
     sync();
+    root.offsetHeight;
+    requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('theme-switching')));
+  };
+  button.addEventListener('click', () => {
+    const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (document.startViewTransition && !calm) document.startViewTransition(apply); else apply();
   });
   sync();
 });

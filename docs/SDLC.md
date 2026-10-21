@@ -1422,3 +1422,148 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
   - `run` 163, `resend-ui` 19, `whatsapp` 95 y `support` 85 en verde.
   - En el navegador local, la tarjeta muestra el envío automático real de la base local («Automático», «Entregado a WhatsApp»). La búsqueda en vivo filtra dentro de la tarjeta y muestra su mensaje cuando no hay coincidencias. En celular no hay desbordamiento.
   - El canal de Aprobadas se comprobó renderizando filas con y sin `whatsapp_phone`, porque la base local no tiene solicitudes aprobadas.
+
+**Ajuste (2026-10-21, pedido del titular): OCR y datos de las primeras páginas, y datos faltantes escritos a mano en el resultado de la carga.**
+- **Pedido.**
+  - Que el sistema use OCR y las primeras páginas para completar lo que falte, en vez de mostrar errores como «no trae el número de documento» o «no está el ingreso ni la fecha».
+  - Si aun así falta algún dato, que el resultado de la carga diga cuál es y deje escribirlo a mano.
+- **Lector (`ClinicalPdfReader`):**
+  - Los datos del paciente y de la atención (documento, nombre, ingreso, fecha, especialidad) se toman de la primera de las páginas 1 a 3 que los traiga (`LEAD_PAGES`), no solo de la página 1.
+  - Las páginas sin texto (escaneadas) y los anexos sin identificación se aceptan como parte de la atención. Una página que muestre **otro** paciente, ingreso o fecha se sigue rechazando, con su número de página.
+  - OCR (`App\PdfOcr`: `pdftoppm` + Tesseract en español) solo en las páginas 1 a 3 que no tengan texto. Lo leído con OCR completa datos, pero no rechaza el PDF por «otro paciente/ingreso», porque el OCR puede leer mal un número.
+  - Configurable con `ocr_enabled`, `ocr_pdftoppm`, `ocr_tesseract` y `ocr_timeout`; sin las herramientas, se omite.
+  - El `Dockerfile` instala `tesseract-ocr` y `tesseract-ocr-spa`.
+  - En local no hay `pdftoppm` (el titular prefirió no instalar poppler), así que el OCR no corre en local. Se comprobó aparte que el texto que Tesseract 5.4 devuelve de una página de prueba lo lee bien el lector.
+  - Si aun así faltan datos, `ClinicalPdfMissingData` dice cuáles y entrega lo que sí se leyó. Un PDF sin texto en ninguna página también puede completarse a mano.
+- **Datos escritos a mano:**
+  - En el resultado de la carga masiva, la fila del PDF dice qué dato falta, muestra lo leído y trae un formulario solo con los campos que faltan (documento con su tipo, nombre, ingreso, fecha con calendario, especialidad con sugerencias).
+  - «Cargar con estos datos» (`pdf-complete` → `BulkImport::complete`) usa la copia temporal de 24 h de la vista previa. Lo escrito se valida (`ClinicalPdfReader::manual`) y solo completa lo que el PDF no trae: nunca reemplaza lo leído.
+  - Si la atención ya existe (mismo documento e ingreso), el PDF se agrega a sus archivos, en vez de crear una versión con un solo archivo. Los PDF ya registrados se releen con los datos de su atención.
+  - Si lo escrito no coincide con los demás PDF de la atención, se rechaza.
+  - Queda en el registro de eventos quién escribió qué campos (`pdf_manual_data`).
+  - La fila pasa a «Guardada · Cargado con datos escritos a mano (…)» y los contadores se actualizan.
+- **Validación.**
+  - `pdf-reader` 34 en verde. Varias pruebas cambiaron de regla a propósito (anexos sin identificación y páginas escaneadas ahora se aceptan). Pruebas nuevas: datos desde la página 2, OCR que no rechaza por un número mal leído, todos los datos que faltan en un PDF sin texto, normalización de lo escrito, que lo escrito no reemplaza lo leído, fecha futura, tipo de documento desconocido.
+  - `run` 170 en verde (7 nuevas): el resultado dice qué falta y lo leído; rechazo de ingreso inválido, de formulario vacío y de un PDF fuera del resultado; carga con el dato escrito sin reemplazar lo leído; registro de quién lo escribió; anexo completado que se suma a su atención.
+  - `requests-admin` 51, `support` 85, `whatsapp` 95 y `resend-ui` 19 en verde.
+  - En el navegador, de punta a punta en local: un PDF de prueba sin ingreso mostró el formulario; al escribirlo, la fila pasó a «Guardada». Revisado a 1440 y 375 px. Quedó en la base local la historia ficticia de prueba (CC 7099000123, ingreso DEMO0001).
+
+**Ajuste (2026-10-21, pedido del titular): se quita la elección entre «Una atención» y «Varias atenciones» al cargar PDF.**
+- **Antes.** «Cargar historias» obligaba a elegir entre cargar los PDF de una atención o hacer una carga masiva, con dos formularios distintos.
+- **Decisión del titular.** El sistema debe validarlo solo, sin que la persona elija.
+- **Ahora:**
+  - El centro de carga tiene un solo formulario (el de la carga masiva): uno o varios PDF, de una o varias atenciones, mezclados. El sistema los agrupa por paciente e ingreso, guarda cada atención y muestra el resultado, con los datos faltantes para escribir a mano.
+  - Botón «Cargar PDF».
+  - Los pasos descritos se actualizaron (OCR en las primeras páginas; agrupa y verifica).
+  - Se eliminaron `templates/single-upload.php`, las pestañas y su JS y CSS.
+  - La acción `upload` del servidor se conserva por compatibilidad (la usa `tests/upload.php`), pero ya no hay formulario que la use.
+- **Validación.** `run` 170, `pdf-reader` 34, `requests-admin` 51, `support` 85, `whatsapp` 95 y `resend-ui` 19 en verde. En local, «Cargar historias» abre un solo formulario sin pestañas, con «Cargar PDF».
+
+**Corrección (2026-10-21, pedido del titular): cambiar entre modo claro y oscuro era lento.**
+- **Causa.**
+  - `body.ambient` y `body.console-ambient` tenían una transición de 0,35 s en el color de fondo y del texto. El texto de toda la página hereda ese color, así que durante la transición el navegador repintaba cada cuadro todo el texto y el fondo a pantalla completa (degradados y cuadrícula), además de las sombras del vidrio.
+  - A la vez arrancaban las transiciones propias de botones, tarjetas y menús (5 en el Repositorio).
+  - El recálculo de estilos solo toma 8–21 ms; lo lento era el repintado repetido.
+- **Arreglo.**
+  - Se quitaron esas transiciones del `body`.
+  - Al cambiar de tema, `app.js` pone `theme-switching` en `html`, que apaga las transiciones de todos los elementos mientras se aplica. El cambio es instantáneo.
+  - Si el navegador tiene View Transitions y la persona no pidió reducir el movimiento, hay un fundido de 0,22 s entre la captura anterior y la nueva: se mezclan dos imágenes en vez de repintar la página cuadro a cuadro.
+- **Validación.**
+  - En local, en el Repositorio: el cambio de tema pasó de disparar 5 transiciones (más la del texto y el fondo de toda la página) a ninguna.
+  - El fundido no se pudo ver en movimiento porque el panel del navegador estaba oculto; queda por confirmar a la vista en un equipo normal.
+  - `resend-ui` 19 en verde.
+
+**Ajuste (2026-10-21, pedido del titular): «Análisis mensual» pasa a llamarse «Dashboard» y se reestructura su HTML.**
+- **Antes.** `templates/analytics.php` era un solo archivo de unas 130 líneas, muchas muy largas: cálculos de la gráfica mezclados con el marcado, la dona y la leyenda repetidas en dos secciones, y campos ocultos de filtros copiados en cada formulario.
+- **Ahora:**
+  - `analytics.php` solo indica qué secciones van y en qué orden.
+  - Cada sección vive en `templates/dashboard/`:
+    - `helpers.php`: formatos, variación frente al mes anterior, dona, leyenda y campos de filtros.
+    - `overview.php`: resumen y crecimiento.
+    - `demand.php`: especialidades.
+    - `channels.php`: canales.
+    - `activity.php`: antes `templates/activity-totals.php`.
+  - Los cálculos van arriba de cada archivo, separados del marcado; el encabezado de cada sección es un `<header>`, y las líneas largas se partieron entre elementos de bloque. No se envolvió en un contenedor nuevo, para no romper el espacio entre tarjetas (`.console-main>section+section`).
+  - Nombre visible «Dashboard» en el menú, el título de la página y el login. La dirección interna sigue siendo `page=analytics`.
+- **Validación.**
+  - Antes y después se extrajo del HTML de la página (por HTTP, con una sesión local) el texto visible, las clases, los ids, los aria y los atributos de datos y de las gráficas, en cuatro variantes: mes actual, período por día, por año y un mes sin datos. Las cuatro salieron idénticas.
+  - `analytics` (32 comprobaciones, las mismas que antes), `run` 170 y `resend-ui` 19 en verde.
+  - En el navegador, el título y el menú dicen «Dashboard» y no hay errores en la consola.
+
+**Ajuste (2026-10-21, pedido del titular): el menú lateral se puede ocultar y volver a mostrar en escritorio.**
+- **Antes.** La hamburguesa solo aparecía en pantallas de 960 px o menos, donde abre el menú como panel. En escritorio el menú lateral estaba siempre visible.
+- **Ahora:**
+  - La hamburguesa se ve también en escritorio. Oculta o muestra el menú lateral completo y el contenido usa el ancho liberado (hasta su máximo de 1.320 px).
+  - La elección se guarda en el navegador (`citaya-rail`) y `theme.js` la aplica en `<head>` antes de pintar (clase `rail-collapsed` en `html`), así que se mantiene al cambiar de página o recargar, sin parpadeo.
+  - El botón dice «Ocultar» o «Mostrar el menú de secciones», con `aria-expanded` acorde.
+  - En pantallas de 960 px o menos sigue el panel lateral de siempre; la preferencia de escritorio no lo afecta.
+- **Validación.**
+  - En local a 1440 px: al ocultar, el menú no se ve y el contenido pasa de 1.192 a 1.320 px; la elección se mantiene en otra página y se vuelve a mostrar.
+  - A 375 px, con la preferencia «oculto» guardada, el panel abre y cierra normalmente.
+  - `resend-ui` 19 en verde.
+
+**Ajuste (2026-10-21, pedido del titular): el ícono de la hamburguesa da una vuelta al abrir y cerrar el menú.**
+- Al pulsar el botón (y en el celular también al cerrar con Escape o tocando el fondo), el ícono gira 360° en 0,45 s (`nav-toggle-spin`).
+- El giro se dispara con una clase que se agrega en el clic y se quita al terminar, no con el estado abierto o cerrado: así no gira al cargar cada página, cuando el script ajusta ese estado. Si se pulsa otra vez antes de terminar, el giro se reinicia.
+- Con «reducir movimiento» no gira.
+- **Validación.** En local a 1440 px: sin animación al cargar y con una vuelta al ocultar y al mostrar. `resend-ui` 19 en verde.
+
+**Corrección (2026-10-21, pedido del titular): al ocultar el menú lateral, el contenido no se adaptaba.**
+- **Causa.** `.console-main` tiene un ancho máximo de 1.320 px y va pegado a la izquierda. Al ocultar el menú en una pantalla ancha (unos 1.900 px) quedaba un espacio vacío a la derecha.
+- **Arreglo.** Con el menú oculto (`html.rail-collapsed`, escritorio), `.console-main` no tiene ancho máximo y usa toda la pantalla. Con el menú visible no cambia: sigue el tope de 1.320 px.
+- **Validación.** En local a 1920 px con el menú oculto, el contenido va de 0 a 1.920 px y la tarjeta de Solicitudes de 32 a 1.888 px, con el buscador hasta el borde derecho. Con el menú visible, igual que antes (248 a 1.568 px).
+
+**Ajuste (2026-10-21, pedido del titular): transición suave al ocultar y mostrar el menú lateral en escritorio.**
+- **Antes.** El menú desaparecía de golpe (`display:none`) y el contenido saltaba a su nuevo ancho.
+- **Ahora (`responsive.css`, solo a más de 960 px):**
+  - La columna del menú pasa de 248 px a 0 (`grid-template-columns`), mientras el menú se desliza a la izquierda (`translateX(-100%)`) con la misma duración (0,28 s) y curva. Así su borde derecho sigue siempre al de la columna y nunca tapa el contenido.
+  - El menú se desvanece; al terminar queda `visibility:hidden`, sin foco ni clics.
+  - El contenido pasa con suavidad de su tope de 1.320 px a todo el ancho.
+  - Al cargar la página no hay transición, porque la clase ya viene puesta antes de pintar. Con «reducir movimiento» no hay transición. El celular no cambia.
+- **Validación.** En local a 1920 px, llevando las transiciones a mano al medio y al final (el panel del navegador estaba oculto, así que no se vieron en movimiento):
+  - a mitad de camino, el borde derecho del menú coincide con el borde izquierdo del contenido (7/7 px al ocultar, 241/241 px al mostrar);
+  - al final, oculto: contenido 0–1.920 px y menú oculto; visible: menú 0–248 px y contenido 248–1.568 px;
+  - al cargar, 0 transiciones;
+  - `resend-ui` 19 en verde.
+
+**Ajuste (2026-10-21, pedido del titular): que el resto de la página también se vea adaptarse con suavidad al ocultar o mostrar el menú.**
+- **Causa.** El contenido ya se adaptaba durante la transición, pero con la curva `--ease-out` (`cubic-bezier(.16,1,.3,1)`) recorría cerca del 60 % del camino en los primeros 40 ms (2 o 3 cuadros), y a la vista parecía un salto.
+- **Arreglo.** Una curva pareja (`cubic-bezier(.45,0,.2,1)`) y 0,34 s, compartida en `--rail-move` por la columna del menú, el deslizamiento del menú y el ancho del contenido.
+- **Validación.** En local a 1920 px, llevando la transición a mano a 40, 90, 150, 220 y 340 ms:
+  - la tarjeta de Solicitudes se adapta poco a poco (280→273→226→115→55→32 px de borde izquierdo) y el buscador avanza con ella;
+  - el contenido va siempre a 32 px del borde del menú, sin quedar tapado.
+  - `resend-ui` 19 en verde.
+
+**Ajuste (2026-10-21, pedido del titular): el mensaje al paciente cuando su solicitud queda radicada sin coincidencia.**
+- **Antes.** Si la búsqueda automática no encontraba al paciente, la página de la solicitud decía «Sin coincidencias» (con una lupa) y «No pudimos relacionar los datos ingresados con un paciente del repositorio. Revisa el tipo y número de documento…». Parecía que algo había fallado, aunque la solicitud sí quedó radicada y pasa a Pendientes para que el personal la gestione.
+- **Ahora (solo en la página del paciente y solo para solicitudes del formulario actual, `direct_search`):**
+  - **Etiqueta:** «Solicitud radicada», con un ícono de visto.
+  - **Mensaje:** «Tu solicitud quedó radicada. Una persona de nuestro equipo la revisará y te responderá en un máximo de 24 horas al correo … y por WhatsApp. Guarda tu número de radicado.» Las horas salen de `whatsapp_estimated_hours`, y lo del WhatsApp solo aparece si la solicitud tiene uno.
+  - **Nota:** «No tienes que hacer nada más. Si notas que escribiste mal el número de documento o el nombre del paciente, puedes hacer otra solicitud con los datos correctos.»
+  - La consola del personal sigue mostrando «Sin coincidencias». Las solicitudes antiguas (sin `direct_search`) conservan el mensaje anterior.
+- **Validación.** En local, con la solicitud HC-261021-D24041A74C de la captura del titular, se ve la etiqueta, el mensaje y la nota nuevos. `requests-admin` 51, `resend-ui` 19 y `run` 170 en verde.
+
+**Ajuste (2026-10-21, pedido del titular): una solicitud por documento cada 24 horas desde el formulario.**
+- **Pedido.** Si ya hay una solicitud hecha en las últimas 24 horas, no se puede hacer otra; pasadas las 24 horas, sí.
+- **Ahora (`Application::assertNoRecentRequest`, llamado en el formulario antes de `createRequest`):**
+  - Si el mismo documento (tipo y número) tiene una solicitud creada hace menos de `request_cooldown_hours` (24 h por defecto), venga del formulario o del bot, el formulario la rechaza con: «Ya hay una solicitud de historia clínica para este documento hecha en las últimas 24 horas. Revisa el correo o el WhatsApp donde recibiste el radicado. Podrás hacer otra solicitud a partir del DD/MM/AAAA a las H:MM a. m./p. m.»
+  - El aviso no muestra el radicado anterior: cualquiera que escriba un número de documento lo vería. Quien hizo la solicitud ya lo recibió por correo o WhatsApp.
+  - El bot de WhatsApp no cambia; el pedido era para el formulario.
+  - Se mantiene el límite de 5 intentos por documento por hora.
+- **Validación.**
+  - `requests-admin` 55 en verde (4 nuevas: rechazo dentro de 24 h, sin mostrar el radicado; otro documento sí puede; pasadas 24 h se puede de nuevo).
+  - `run` 170, `resend-ui` 19, `support` 85 y `whatsapp` 95 en verde.
+  - En local, por HTTP con el formulario real y el documento de la solicitud HC-261021-D24041A74C: se mostró el aviso y no se creó ninguna solicitud (5 antes y 5 después).
+
+**Ajuste (2026-10-21, pedido del titular): los mensajes envían el enlace limpio del formulario.**
+- **Antes.**
+  - Las plantillas «No registra» (general y los 4 motivos) enviaban `https://citaya-v3.broa18.online/?page=home`.
+  - El enlace personal del bot enviaba `…/?page=home&wa=<código>`.
+  - El `?page=home` se veía técnico en WhatsApp y en el correo.
+- **Ahora:**
+  - `WhatsApp::portalUrl()` devuelve la dirección base (`https://citaya-v3.broa18.online`), que ya abre el formulario. El enlace del bot es `…/?wa=<código>`: el código se mantiene porque vincula el formulario con ese chat, y `index.php` lo lee en cualquier página.
+  - La vista previa de Plantillas usa también el enlace limpio de ejemplo.
+  - Las plantillas guardadas no cambian: `{enlace}` se reemplaza al enviar. n8n toma la URL del sistema (`link.create`), así que no hay que tocar el flujo.
+- **Validación.**
+  - `requests-admin` 55, `whatsapp` 95, `support` 85, `n8n-api` 30, `run` 170 y la prueba del bot en n8n en verde. Las dos pruebas que esperaban `?page=home` ahora comprueban el enlace limpio y que ya no aparece `page=home`.
+  - En local, la dirección limpia abre el formulario y `/?wa=<código>` se reconoce (un código inválido muestra el aviso de enlace vencido).

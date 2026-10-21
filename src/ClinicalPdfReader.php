@@ -7,7 +7,18 @@ use Smalot\PdfParser\Parser;
 /** Structured extraction for the text-based CEDIM / Indigo formats supplied. */
 final class ClinicalPdfReader
 {
-    public function read(string $path): array
+    /** Páginas iniciales donde se buscan los datos del paciente y de la atención (y que se pasan por OCR si son escaneadas). */
+    public const LEAD_PAGES = 3;
+
+    /** Datos que se buscan en las primeras páginas y que una persona puede completar a mano si faltan. */
+    public const FIELDS = ['document' => 'el tipo y número de documento', 'full_name' => 'el nombre del paciente', 'admission' => 'el número de ingreso',
+        'attended_at' => 'la fecha de atención', 'specialty' => 'la especialidad'];
+    public const DOCUMENT_TYPES = ['CC', 'CE', 'TI', 'RC', 'PA', 'PPT'];
+
+    public function __construct(private readonly ?PdfOcr $ocr = null) {}
+
+    /** $manual: datos escritos a mano (ver manual()); solo completan los que el PDF no trae. */
+    public function read(string $path, array $manual = []): array
     {
         if (!is_file($path) || filesize($path) > 12 * 1024 * 1024 || (new \finfo(FILEINFO_MIME_TYPE))->file($path) !== 'application/pdf') {
             throw new \DomainException('Adjunta un PDF válido de hasta 12 MB.');
@@ -17,55 +28,88 @@ final class ClinicalPdfReader
         if (!$pages || count($pages) > 150) throw new \DomainException('El PDF debe tener entre 1 y 150 páginas.');
         $texts = [];
         foreach ($pages as $page) $texts[] = $page->getText();
-        return $this->extract($texts);
+        // Las primeras páginas escaneadas (sin texto) se leen con OCR para obtener los datos del paciente y de la atención.
+        $ocrPages = [];
+        if ($this->ocr) {
+            foreach (array_slice(array_keys($texts), 0, self::LEAD_PAGES) as $index) {
+                if (trim($texts[$index]) !== '') continue;
+                $text = $this->ocr->page($path, $index + 1);
+                if (trim($text) !== '') { $texts[$index] = $text; $ocrPages[] = $index; }
+            }
+        }
+        return $this->extract($texts, $ocrPages, $manual);
     }
 
-    public function extract(array $texts): array
+    /**
+     * $ocrPages: índices de páginas leídas con OCR. Solo sirven para encontrar datos que falten: no se usan para
+     * rechazar el PDF por «otro paciente» u «otro ingreso», porque el OCR puede leer mal un número.
+     */
+    public function extract(array $texts, array $ocrPages = [], array $manual = []): array
     {
-        if (!$texts || trim(implode('', $texts)) === '') throw new ClinicalPdfException('El PDF no tiene texto legible en ninguna página. Los documentos escaneados necesitan OCR antes de cargarse.');
-        $first = $texts[0];
-        // Los datos del paciente y de la atención se leen de la página 1.
-        if (trim($first) === '') throw new ClinicalPdfException('no tiene texto legible (parece escaneada) y es la que debe traer los datos del paciente. Pásala por OCR antes de cargarla.', 1);
+        $texts = array_values($texts);
+        if (!$texts) throw new ClinicalPdfException('El PDF no tiene páginas.');
+        $noText = trim(implode('', $texts)) === '';
+        $lead = array_slice($texts, 0, self::LEAD_PAGES, true);
+        $leadLabel = count($lead) === 1 ? 'en la página 1' : 'en las primeras páginas (1 a ' . count($lead) . ')';
+        // Cada dato se toma de la primera de las páginas iniciales que lo traiga.
+        $find = static function (string $pattern, bool $normalize = true) use ($lead): ?array {
+            foreach ($lead as $index => $text) if (preg_match($pattern, $normalize ? self::normalize($text) : $text, $match)) return [$match, $index + 1];
+            return null;
+        };
+        $manual = self::manual($manual);
+        $missing = []; $found = [];
+        // Documento: del PDF; si falta, el escrito a mano.
+        $identity = $find('/Tipo\s+documento:\s*(CC|CE|TI|RC|PA|PPT)\s*Numero:\s*([A-Z0-9]+)/i');
+        if ($identity) { [[, $type, $number], $identityPage] = $identity; $type = strtoupper($type); $number = strtoupper($number); $found['document'] = $type . ' ' . $number; }
+        elseif (isset($manual['document_type'], $manual['document_number'])) { $type = $manual['document_type']; $number = $manual['document_number']; $identityPage = 1; }
+        else { $missing[] = 'document'; $identityPage = 1; }
+        if ($names = $find('/Identificaci[oó]n:\s*[A-Z0-9]+\s*Nombres:\s*(.*?)\s*Apellidos:\s*([^\r\n]+)/iu', false)) {
+            $name = self::clean($names[0][1] . ' ' . $names[0][2]);
+        } elseif ($names = $find('/Apellidos:\s*([^\r\n]+)\s*Nombres:\s*(.*?)\s*Edad:/iu', false)) {
+            $name = self::clean($names[0][2] . ' ' . $names[0][1]);
+        } else { $name = $manual['full_name'] ?? null; }
+        if ($name === null) $missing[] = 'full_name';
+        elseif ($names) { if (mb_strlen($name) < 3 || mb_strlen($name) > 160) throw new ClinicalPdfException('El nombre detectado no es válido.', $names[1]); $found['full_name'] = $name; }
+        $admissionFound = $find('/(?:^|\n|\d)Ingreso:\h*([A-Z0-9]{4,60})\b/i');
+        if ($admissionFound) { $admission = $admissionFound[0]; $found['admission'] = $admission[1]; }
+        elseif (isset($manual['admission'])) $admission = [0 => '', 1 => $manual['admission']];
+        else $missing[] = 'admission';
+        // Solo fechas rotuladas de la atención, nunca la de nacimiento ni la de impresión.
+        $dateFound = $find('/Fecha\s+ingreso:[^\r\n]*?(\d{1,2}\/\d{1,2}\/\d{4})(?:\s+(\d{1,2}:\d{2}:\d{2})\s*([ap])?\.?\s*m?\.?)?/i')
+            ?? $find('/Fecha\s+historia:\s*(\d{1,2}\/\d{1,2}\/\d{4})(?:\s+(\d{1,2}:\d{2}:\d{2})\s*([ap])?\.?\s*m?\.?)?/i');
+        if ($dateFound) {
+            [$date, $datePage] = $dateFound;
+            $day = self::parseDate($date[1]);
+            if (!$day || $day->format('Y-m-d') > date('Y-m-d')) throw new ClinicalPdfException('La fecha de atención detectada (' . $date[1] . ') no es válida.', $datePage);
+            $time = $date[2] ?? '00:00:00';
+            [$hour,$minute,$second] = array_map('intval', explode(':', $time));
+            if (!empty($date[3])) $hour = $hour % 12 + (strtolower($date[3]) === 'p' ? 12 : 0);
+            if ($hour > 23 || $minute > 59 || $second > 59) throw new ClinicalPdfException('La hora detectada no es válida.', $datePage);
+            $found['attended_at'] = $day->format('d/m/Y');
+        } elseif (isset($manual['attended_at'])) { $day = $manual['attended_at']; $hour = $minute = $second = 0; }
+        else $missing[] = 'attended_at';
+        $specialty = $find('/Especialidad:\s*([^\r\n]+)/iu', false);
+        if ($specialty) {
+            $specialtyName = self::clean($specialty[0][1]);
+            if (mb_strlen($specialtyName) > 120) throw new ClinicalPdfException('La especialidad detectada no es válida.', $specialty[1]);
+            $found['specialty'] = $specialtyName;
+        } elseif (isset($manual['specialty'])) $specialtyName = $manual['specialty'];
+        else $missing[] = 'specialty';
+        if ($missing) throw new ClinicalPdfMissingData($missing, $found, $noText ? 'porque el PDF no tiene texto legible' . ($this->ocr ? ' ni con OCR' : ' (es escaneado)') : $leadLabel);
+        $first = $texts[$identityPage - 1];
         $normalized = self::normalize($first);
-        if (!preg_match('/Tipo\s+documento:\s*(CC|CE|TI|RC|PA|PPT)\s*Numero:\s*([A-Z0-9]+)/i', $normalized, $identity)) {
-            throw new ClinicalPdfException('No se pudo identificar el tipo y número de documento del paciente dentro del PDF.', 1);
-        }
-        $type = strtoupper($identity[1]); $number = strtoupper($identity[2]);
-        if (preg_match('/Identificaci[oó]n:\s*[A-Z0-9]+\s*Nombres:\s*(.*?)\s*Apellidos:\s*([^\r\n]+)/iu', $first, $names)) {
-            $name = self::clean($names[1] . ' ' . $names[2]);
-        } elseif (preg_match('/Apellidos:\s*([^\r\n]+)\s*Nombres:\s*(.*?)\s*Edad:/iu', $first, $names)) {
-            $name = self::clean($names[2] . ' ' . $names[1]);
-        } else { throw new ClinicalPdfException('No se pudo leer el nombre del paciente.', 1); }
-        if (mb_strlen($name) < 3 || mb_strlen($name) > 160) throw new ClinicalPdfException('El nombre detectado no es válido.', 1);
-        if (!preg_match('/(?:^|\n|\d)Ingreso:\h*([A-Z0-9]{4,60})\b/i', $normalized, $admission)) {
-            throw new ClinicalPdfException('No se pudo identificar el número de ingreso de la atención.', 1);
-        }
-        // Only labelled attention dates are considered, never birth or print dates.
-        if (!preg_match('/Fecha\s+ingreso:[^\r\n]*?(\d{1,2}\/\d{1,2}\/\d{4})(?:\s+(\d{1,2}:\d{2}:\d{2})\s*([ap])?\.?\s*m?\.?)?/i', $normalized, $date)) {
-            if (!preg_match('/Fecha\s+historia:\s*(\d{1,2}\/\d{1,2}\/\d{4})(?:\s+(\d{1,2}:\d{2}:\d{2})\s*([ap])?\.?\s*m?\.?)?/i', $normalized, $date)) throw new ClinicalPdfException('No se pudo leer la fecha de atención.', 1);
-        }
-        $day = self::parseDate($date[1]);
-        if (!$day || $day->format('Y-m-d') > date('Y-m-d')) throw new ClinicalPdfException('La fecha de atención detectada no es válida.', 1);
-        $time = $date[2] ?? '00:00:00';
-        [$hour,$minute,$second] = array_map('intval', explode(':', $time));
-        if (!empty($date[3])) $hour = $hour % 12 + (strtolower($date[3]) === 'p' ? 12 : 0);
-        if ($hour > 23 || $minute > 59 || $second > 59) throw new ClinicalPdfException('La hora detectada no es válida.', 1);
-        if (!preg_match('/Especialidad:\s*([^\r\n]+)/iu', $first, $specialty)) throw new ClinicalPdfException('No se pudo leer la especialidad del profesional de la atención.', 1);
-        $specialtyName = self::clean($specialty[1]);
-        if (mb_strlen($specialtyName) > 120) throw new ClinicalPdfException('La especialidad detectada no es válida.', 1);
         foreach ($texts as $index => $text) {
             $page = $index + 1;
-            $norm = self::normalize($text); $found = [];
-            if (trim($text) === '') throw new ClinicalPdfException('no tiene texto legible (parece escaneada), así que no se puede comprobar que sea de esta atención. Pásala por OCR o sepárala del PDF.', $page);
+            // Páginas sin texto (anexos escaneados) o leídas con OCR: se toman como parte de la atención de las primeras páginas.
+            if (trim($text) === '' || in_array($index, $ocrPages, true)) continue;
+            $norm = self::normalize($text);
             preg_match_all('/Tipo\s+documento:\s*(CC|CE|TI|RC|PA|PPT)\s*Numero:\s*([A-Z0-9]+)/i', $norm, $pageTypes, PREG_SET_ORDER);
             foreach ($pageTypes as $item) {
                 if (strtoupper($item[1]) !== $type || strtoupper($item[2]) !== $number) throw new ClinicalPdfException('es de otro paciente (' . strtoupper($item[1]) . ' ' . strtoupper($item[2]) . '); el PDF empieza con ' . $type . ' ' . $number . '. Separa los PDF por paciente.', $page);
-                $found[] = $item[2];
             }
             preg_match_all('/Identificacion:\s*([A-Z0-9]+)\s*Nombres:/i', $norm, $pageIds);
             foreach ($pageIds[1] as $id) {
                 if (strtoupper($id) !== $number) throw new ClinicalPdfException('es de otro paciente (identificación ' . strtoupper($id) . '); el PDF empieza con ' . $type . ' ' . $number . '. Separa los PDF por paciente.', $page);
-                $found[] = $id;
             }
             $stamp = self::orderStamp($norm);
             preg_match_all('/(?:^|\n|\d)Ingreso:\h*([A-Z0-9]{4,60})\b/i', $norm, $pageAdmissions);
@@ -74,13 +118,13 @@ final class ClinicalPdfReader
             preg_match_all('/Fecha\s+historia:\s*(\d{1,2}\/\d{1,2}\/\d{4})/i', $norm, $pageDates);
             if ($stamp) $pageDates[1][] = $stamp[0];
             foreach ($pageDates[1] as $value) if (self::parseDate($value)?->format('Y-m-d') !== $day->format('Y-m-d')) throw new ClinicalPdfException('tiene otra fecha de atención (' . $value . '); el PDF empieza con el ' . $day->format('d/m/Y') . '. Carga cada atención en un PDF aparte.', $page);
-            if (!$found && (!in_array($admission[1], $pageAdmissions[1], true) || !in_array($day->format('Y-m-d'), array_map(fn($value) => self::parseDate($value)?->format('Y-m-d'), $pageDates[1]), true))) throw new ClinicalPdfException('no trae los datos del paciente ni el ingreso y la fecha de esta atención. Revisa que sea parte de esta historia o pásala por OCR si es escaneada.', $page);
+            // Un anexo sin datos del paciente ni de la atención se toma como parte de la atención de las primeras páginas.
         }
         preg_match('/Numero\s+de\s+folio:\s*([^\r\n]+)/i', $normalized, $folio);
         return ['document_type'=>$type,'document_number'=>$number,'full_name'=>$name,
             'attended_at'=>$day->format('Y-m-d') . sprintf(' %02d:%02d:%02d',$hour,$minute,$second),
             'admission'=>$admission[1],'folio'=>isset($folio[1]) ? mb_substr(self::clean($folio[1]),0,60) : null,
-            'specialty'=>$specialtyName,'orders'=>MedicalOrders::detect($texts),'location'=>mb_substr(self::clean(explode("\n",$first)[0]),0,160), 'page_count'=>count($texts)];
+            'specialty'=>$specialtyName,'orders'=>MedicalOrders::detect($texts),'location'=>mb_substr(self::clean(explode("\n",$first)[0]),0,160), 'page_count'=>count($texts), 'ocr_pages'=>array_map(fn($index) => $index + 1, $ocrPages)];
     }
 
     /**
@@ -93,6 +137,44 @@ final class ClinicalPdfReader
         if (!preg_match('/Fecha\s+historia:\s*Ingreso:/i', $norm)) return null;
         if (!preg_match('/Pagina\h*\d+\/\d+\h*(\d{2}\/\d{2}\/\d{4})\h+\d{1,2}:\d{2}:\d{2}\h*[ap]\.?\h*m\.?\h*([A-Z0-9]{4,60})\h*$/im', $norm, $stamp)) return null;
         return [$stamp[1], $stamp[2]];
+    }
+
+    /**
+     * Valida los datos escritos a mano: document_type, document_number, full_name, admission, attended_at (AAAA-MM-DD
+     * o DD/MM/AAAA) y specialty. Lo vacío se ignora; lo inválido se rechaza con un mensaje para la persona.
+     */
+    public static function manual(array $input): array
+    {
+        $value = fn(string $key): string => trim((string)($input[$key] ?? ''));
+        $data = [];
+        if ($value('document_number') !== '' || $value('document_type') !== '') {
+            $type = strtoupper($value('document_type')); $number = strtoupper(preg_replace('/[\s.\-]/', '', $value('document_number')));
+            if (!in_array($type, self::DOCUMENT_TYPES, true)) throw new \DomainException('Elige el tipo de documento.');
+            if (!preg_match('/^[A-Z0-9]{3,20}$/', $number)) throw new \DomainException('El número de documento debe tener entre 3 y 20 letras o números, sin espacios.');
+            $data['document_type'] = $type; $data['document_number'] = $number;
+        }
+        if ($value('full_name') !== '') {
+            $name = self::clean($value('full_name'));
+            if (mb_strlen($name) < 3 || mb_strlen($name) > 160 || !preg_match('/^[\p{L}][\p{L}\s\'.-]+$/u', $name)) throw new \DomainException('Escribe el nombre completo del paciente, solo con letras.');
+            $data['full_name'] = mb_strtoupper($name);
+        }
+        if ($value('admission') !== '') {
+            $admission = strtoupper(preg_replace('/\s/', '', $value('admission')));
+            if (!preg_match('/^[A-Z0-9]{4,60}$/', $admission)) throw new \DomainException('El número de ingreso debe tener entre 4 y 60 letras o números.');
+            $data['admission'] = $admission;
+        }
+        if ($value('attended_at') !== '') {
+            $raw = $value('attended_at');
+            $day = preg_match('/^\d{4}-\d{2}-\d{2}$/', $raw) ? \DateTimeImmutable::createFromFormat('!Y-m-d', $raw) : self::parseDate($raw);
+            if (!$day || $day->format('Y-m-d') > date('Y-m-d') || $day->format('Y') < '1950') throw new \DomainException('Escribe una fecha de atención válida que no sea futura.');
+            $data['attended_at'] = $day;
+        }
+        if ($value('specialty') !== '') {
+            $specialty = self::clean($value('specialty'));
+            if (mb_strlen($specialty) < 3 || mb_strlen($specialty) > 120) throw new \DomainException('Escribe la especialidad (entre 3 y 120 caracteres).');
+            $data['specialty'] = mb_strtoupper($specialty);
+        }
+        return $data;
     }
 
     private static function parseDate(string $value): ?\DateTimeImmutable

@@ -1,9 +1,27 @@
 /* CitaYa v2 · adaptación. Escritorio primero; la consola pasa de rail lateral a menú de hamburguesa y las tablas a tarjetas. */
-.nav-toggle{display:none;align-items:center;justify-content:center;flex-shrink:0;width:44px;height:44px;margin-right:calc(var(--s2) * -1);padding:0;border:0;border-radius:var(--radius);background:transparent;color:var(--ink)}
+.nav-toggle{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:44px;height:44px;margin-right:calc(var(--s2) * -1);padding:0;border:0;border-radius:var(--radius);background:transparent;color:var(--ink)}
 .nav-toggle:hover{background:var(--surface-2)}
+/* Al abrir o cerrar el menú, el ícono da una vuelta (solo al pulsar, no al cargar la página). */
+.nav-toggle.is-spinning .icon{animation:nav-toggle-spin .45s var(--ease-out)}
+@keyframes nav-toggle-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.nav-toggle.is-spinning .icon{animation:none}}
 .rail-backdrop,.rail-portal{display:none}
+/* En escritorio la hamburguesa oculta o muestra el menú lateral; la preferencia la aplica theme.js antes de pintar. */
+/* Transición suave: la columna del menú se encoge de 248 px a 0 mientras el menú se desliza a la izquierda, con la
+   misma duración y una curva pareja (sin arranque brusco, para que se vea adaptarse el contenido). Así el borde del menú
+   sigue al de la columna y no tapa el contenido. Sin el menú, el contenido usa todo el ancho (sin el tope de 1.320 px).
+   Al cargar la página no hay transición: la clase ya viene puesta. */
+@media(min-width:961px){
+  .console{--rail-move:.34s cubic-bezier(.45,0,.2,1);transition:grid-template-columns var(--rail-move)}
+  .rail{width:248px;transition:transform var(--rail-move),opacity .22s ease,visibility 0s}
+  .console-main{transition:max-width var(--rail-move)}
+  html.rail-collapsed .console{grid-template-columns:0px minmax(0,1fr);background:none}
+  html.rail-collapsed .rail{transform:translateX(-100%);opacity:0;visibility:hidden;pointer-events:none;transition:transform var(--rail-move),opacity .22s ease .1s,visibility 0s linear .34s}
+  html.rail-collapsed .console-main{max-width:100%}
+}
+@media(min-width:961px) and (prefers-reduced-motion:reduce){.console,.rail,.console-main{transition:none!important}}
 @media(prefers-reduced-motion:reduce){.rail,.rail-backdrop{transition:none!important}}
-.shell,.card,.patient-layout>*,.grid>*,.upload-option-copy,.console-main{min-width:0}
+.shell,.card,.patient-layout>*,.grid>*,.console-main{min-width:0}
 .card,.alert,.encounter,.notice{overflow-wrap:anywhere}
 .button{white-space:normal;text-align:center}
 
@@ -141,7 +159,6 @@
   .segmented a{flex:1;justify-content:center}
   .upload-heading{flex-direction:column}
   .upload-flow{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
-  .upload-options{grid-template-columns:minmax(0,1fr)}
   .upload-panel .button{width:100%}
   .load-data{grid-template-columns:minmax(0,1fr)}
   .load-data>div+div{border-left:0;border-top:1px solid var(--line)}

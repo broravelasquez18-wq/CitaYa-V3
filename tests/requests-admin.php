@@ -54,6 +54,16 @@ try {
     $web = $app->createRequest(['email' => 'web@example.test', 'approximate_date' => date('Y-m-d', strtotime('-3 days'))] + $form, 'ip-web', true);
     $mismatch = viaWhatsApp(['full_name' => 'Ana Pérez Otra'] + $form, '573004445566', 'w2');
     check($app->request($wrongDate)['status'] === 'no_matches' && $admin->pendingCount() === 3, 'Las solicitudes sin historia aparecen como pendientes');
+    // Una solicitud por documento cada 24 horas desde el formulario; no revela el radicado anterior.
+    rejects(fn() => $app->assertNoRecentRequest($form), 'Rechaza otra solicitud del mismo documento en menos de 24 horas', 'Podrás hacer otra solicitud a partir del');
+    try { $app->assertNoRecentRequest($form); } catch (DomainException $e) { check(!str_contains($e->getMessage(), $app->request($web)['reference']), 'El aviso no muestra el radicado de la solicitud anterior'); }
+    $app->assertNoRecentRequest(['document_number' => '1099999999'] + $form);
+    check(true, 'Otro documento sí puede solicitar');
+    $cooldownIds = array_column($db->all('SELECT id FROM requests WHERE claimed_document_number=?', [$form['document_number']]), 'id');
+    $db->run('UPDATE requests SET created_at=DATE_SUB(created_at, INTERVAL 25 HOUR) WHERE id IN (' . implode(',', array_map('intval', $cooldownIds)) . ')');
+    $app->assertNoRecentRequest($form);
+    check(true, 'Pasadas las 24 horas se puede volver a solicitar');
+    $db->run('UPDATE requests SET created_at=DATE_ADD(created_at, INTERVAL 25 HOUR) WHERE id IN (' . implode(',', array_map('intval', $cooldownIds)) . ')');
     $pending = $admin->search('', 1, false, true);
     check(array_column($pending['rows'], 'id') === [$wrongDate, $web, $mismatch], 'Pendientes ordenadas de la más antigua a la más reciente');
     // La página le sugiere su consulta: el aviso de «no encontrada» espera a que decida.
@@ -89,7 +99,7 @@ try {
     $app->markNotRegistered($mismatch, 1);
     $closed = $app->request($mismatch);
     check($closed['status'] === 'not_registered' && $closed['resolution'] === 'not_registered', '«No registra» cierra la solicitud');
-    check(str_contains(waText($mismatch, 'not_registered'), $closed['reference']) && str_contains(waText($mismatch, 'not_registered'), 'Revisa tus datos') && str_contains(waText($mismatch, 'not_registered'), 'https://portal.example.test/?page=home'), 'El WhatsApp «No registra» incluye radicado, instrucción y enlace');
+    check(str_contains(waText($mismatch, 'not_registered'), $closed['reference']) && str_contains(waText($mismatch, 'not_registered'), 'Revisa tus datos') && str_contains(waText($mismatch, 'not_registered'), 'https://portal.example.test') && !str_contains(waText($mismatch, 'not_registered'), '?page=home'), 'El WhatsApp «No registra» incluye radicado, instrucción y enlace');
     $notice = $db->one("SELECT * FROM jobs WHERE request_id=? AND kind='notice'", [$mismatch]);
     check($notice && $notice['recipient'] === 'paciente@example.test' && !$notice['package_id'], 'Se encola el aviso por correo sin documentos');
     rejects(fn() => $app->markNotRegistered($mismatch, 1), 'No se responde dos veces', 'ya fue gestionada');

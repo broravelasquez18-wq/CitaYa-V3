@@ -72,6 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // PRG plus a consumed form token protects against double submission.
                 // WhatsApp escrito en la web (opcional): se valida y queda vinculado a la solicitud, sin confirmación desde el chat.
                 $webPhone = !$whatsappLink && trim((string)($_POST['whatsapp'] ?? '')) !== '' ? App\WhatsApp::normalizePhone((string)$_POST['whatsapp']) : null;
+                $app->assertNoRecentRequest($_POST);
                 $id = $app->createRequest($_POST, $ip, true, $whatsappLink, $webPhone);
                 $_SESSION['request_access'] = $id;
                 $_SESSION['request_id'] = $id;
@@ -250,6 +251,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $app->event(null, 'histories_uploaded', 'single:staff_' . (int)$_SESSION['admin_id']);
                 $_SESSION['upload_result_pending'] = 'single';
                 $_SESSION['flash'] = 'Historia completa registrada y disponible para solicitudes.'; go('admin');
+            case 'pdf-complete':
+                // Datos escritos a mano para un PDF del resultado al que le faltaban: se carga y su fila pasa a «Guardada».
+                requireStaff(); set_time_limit(180);
+                $ref = (string)($_POST['ref'] ?? '');
+                $_SESSION['upload_mode'] = 'bulk'; $_SESSION['upload_result_pending'] = 'bulk';
+                $completed = (new App\BulkImport($app))->complete($ref, $_POST, $_SESSION, (int)$_SESSION['admin_id']);
+                foreach ($_SESSION['bulk_report']['results'] as $i => $result) if (($result['previews'][0]['ref'] ?? '') === $ref && !empty($result['missing'])) $_SESSION['bulk_report']['results'][$i] = $completed;
+                $_SESSION['bulk_report']['failed'] = max(0, (int)$_SESSION['bulk_report']['failed'] - 1);
+                $_SESSION['bulk_report']['unreadable'] = max(0, (int)($_SESSION['bulk_report']['unreadable'] ?? 0) - 1);
+                $_SESSION['bulk_report']['saved']++;
+                $_SESSION['flash'] = 'PDF cargado con los datos que escribiste.';
+                $_SESSION['csrf'] = bin2hex(random_bytes(32));
+                go('admin');
             case 'bulk-upload':
                 requireStaff(); $_SESSION['upload_mode']='bulk'; $uploads=[];
                 foreach (($_FILES['bulk_pdfs']['name'] ?? []) as $i=>$name) $uploads[]=['name'=>$name,'tmp_name'=>$_FILES['bulk_pdfs']['tmp_name'][$i],'error'=>$_FILES['bulk_pdfs']['error'][$i]];

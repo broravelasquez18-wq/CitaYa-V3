@@ -76,6 +76,23 @@ final class Application
     }
 
     /** $whatsappPhone: número escrito en el formulario web; se usa directamente, sin confirmación desde el chat. */
+    /**
+     * Una solicitud por documento cada `request_cooldown_hours` (24 h) desde el formulario: si ya hay una más reciente
+     * (del formulario o del bot), se rechaza y se dice desde cuándo se puede volver a pedir. No revela el radicado
+     * anterior: cualquiera que escriba un número de documento lo vería; quien la hizo lo recibió por correo o WhatsApp.
+     */
+    public function assertNoRecentRequest(array $data): void
+    {
+        [$type, $number] = $this->identity($data);
+        $hours = max(1, (int)($this->config['request_cooldown_hours'] ?? 24));
+        $recent = $this->db->one('SELECT created_at FROM requests WHERE claimed_document_type=? AND claimed_document_number=? AND created_at>? ORDER BY created_at DESC LIMIT 1',
+            [$type, $number, date('Y-m-d H:i:s', time() - $hours * 3600)]);
+        if (!$recent) return;
+        $next = strtotime($recent['created_at']) + $hours * 3600;
+        $hour = date('g:i', $next) . ' ' . (date('A', $next) === 'AM' ? 'a. m.' : 'p. m.');
+        throw new \DomainException('Ya hay una solicitud de historia clínica para este documento hecha en las últimas ' . $hours . ' horas. Revisa el correo o el WhatsApp donde recibiste el radicado. Podrás hacer otra solicitud a partir del ' . date('d/m/Y', $next) . ' a las ' . $hour);
+    }
+
     public function createRequest(array $data, string $ip, bool $directSearch = false, ?int $whatsappLinkId = null, ?string $whatsappPhone = null): int
     {
         [$type, $number] = $this->identity($data);

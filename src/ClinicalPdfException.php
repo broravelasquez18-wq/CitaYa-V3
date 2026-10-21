@@ -3,7 +3,7 @@ declare(strict_types=1);
 namespace App;
 
 /** PDF de historia que no se pudo leer: el motivo y, cuando se conoce, la página donde está el problema. */
-final class ClinicalPdfException extends \DomainException
+class ClinicalPdfException extends \DomainException
 {
     public function __construct(string $reason, public readonly ?int $page = null)
     {

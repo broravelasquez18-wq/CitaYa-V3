@@ -6,7 +6,7 @@ $sections = [
     ['reports', 'Reportes de error', 'flag', in_array($page, ['reports', 'report'], true), false, (int)($supportCount ?? 0), 'por atender'],
     ['progress', 'Mi avance', 'gauge', $page === 'progress', false, 0, ''],
     ['admin', 'Repositorio', 'archive', $page === 'admin', false, 0, ''],
-    ['analytics', 'Análisis mensual', 'chart', $page === 'analytics', true, 0, ''],
+    ['analytics', 'Dashboard', 'chart', $page === 'analytics', true, 0, ''],
     ['employees', 'Empleados', 'users', in_array($page, ['employees', 'staff-progress'], true), true, 0, ''],
     ['templates', 'Plantillas', 'template', $page === 'templates', true, 0, ''],
 ];
@@ -21,7 +21,7 @@ $titles = [
     'progress' => ['Mi avance', 'Lo que has respondido hoy, este mes y este año.'],
     'staff-progress' => ['Avance del empleado', 'Lo que respondió hoy, este mes y este año.'],
     'employees' => ['Empleados', 'Cuentas del personal, roles y avance.'],
-    'analytics' => ['Análisis mensual', 'Actividad del sistema y atenciones por especialidad.'],
+    'analytics' => ['Dashboard', 'Resumen del mes, demanda por especialidad, canales y totales de solicitudes y envíos.'],
     'templates' => ['Plantillas de mensajes', 'Textos que recibe el paciente por WhatsApp y correo.'],
     'whatsapp' => ['WhatsApp del bot', 'Vinculación del número que atiende a los pacientes.'],
 ];

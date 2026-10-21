@@ -7,7 +7,7 @@ $modules = [
     ['mail', 'Envía por correo', 'Historia completa con anexos'],
     ['chat', 'Avisa por WhatsApp', 'Radicado · Estado · Entrega'],
     ['inbox', 'Organiza lo pendiente', 'Aprobado o No Registra'],
-    ['chart', 'Mide la gestión', 'Avance · Análisis mensual'],
+    ['chart', 'Mide la gestión', 'Avance · Dashboard'],
 ];
 ?>
 <div class="login-shell">

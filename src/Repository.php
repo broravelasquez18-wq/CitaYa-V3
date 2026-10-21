@@ -37,9 +37,9 @@ final class Repository
     public function importPackage(array $sources): int
     {
         if (!$sources || count($sources) > 15) throw new \DomainException('Adjunta entre 1 y 15 archivos PDF de una misma atención.');
-        $reader = new ClinicalPdfReader(); $files = []; $metadata = null; $hashes = [];
+        $reader = new ClinicalPdfReader(PdfOcr::fromConfig($this->app->config)); $files = []; $metadata = null; $hashes = [];
         foreach ($sources as $source) {
-            $current = $reader->read($source['path']);
+            $current = $reader->read($source['path'], $source['manual'] ?? []);
             $hash = hash_file('sha256', $source['path']);
             if (isset($hashes[$hash])) continue;
             $hashes[$hash] = true;

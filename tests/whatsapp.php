@@ -48,7 +48,7 @@ try {
     check($bot->receive(inbound('wamid.2', '573001112233', 'Necesito mi historia clínica')) === 0, 'Un reintento del webhook no duplica la respuesta');
     $beforeDoc = (int)$db->one("SELECT COUNT(*) n FROM whatsapp_outbox WHERE kind='text'")['n'];
     $bot->receive(inbound('wamid.2b', '573001112233', '1.012.345.678'));
-    check(str_contains(lastText(), 'https://portal.example.test/?page=home&wa=') && !$db->one("SELECT phone FROM whatsapp_sessions WHERE phone='573001112233'"), 'Primera vez del documento: recibe el enlace del formulario');
+    check(str_contains(lastText(), 'https://portal.example.test/?wa=') && !str_contains(lastText(), 'page=home') && !$db->one("SELECT phone FROM whatsapp_sessions WHERE phone='573001112233'"), 'Primera vez del documento: recibe el enlace del formulario');
     check((int)$db->one("SELECT COUNT(*) n FROM whatsapp_outbox WHERE kind='text'")['n'] === $beforeDoc + 1 && !str_contains(lastText(), 'No tenemos solicitudes'), 'Primera vez: solo llega el mensaje del formulario con su enlace');
     $token = linkToken();
     check($db->one('SELECT COUNT(*) n FROM whatsapp_links')['n'] == 1 && !$db->one('SELECT id FROM whatsapp_links WHERE token_hash=?', [$token]), 'El enlace se guarda solo como hash');

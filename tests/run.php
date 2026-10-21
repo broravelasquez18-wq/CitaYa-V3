@@ -325,6 +325,27 @@ try {
     check(str_starts_with($savedRef,'f') && $savedFile && hash_file('sha256',$savedFile['path'])===hash_file('sha256',$newBulkPath),'El PDF guardado se ve desde el archivo almacenado');
     check($uploadPreview->resolve($savedRef,[])===null && $uploadPreview->resolve('f1',$previewSession)===null && $uploadPreview->resolve('t'.str_repeat('0',32),$previewSession)===null,'Solo se abren los PDF del resultado de la sesión');
     check(!isset($bulk->import([['path'=>$badBulkPath,'name'=>'ilegible.pdf']])['results'][0]['previews'][0]['ref']),'Sin carga HTTP no se guardan copias temporales');
+    // Datos que faltan escritos a mano desde el resultado de la carga.
+    $completeAdmin=(int)$db->insert('admins',['email'=>'complete-admin@example.test','name'=>'Admin completa datos','password_hash'=>password_hash('synthetic-password',PASSWORD_DEFAULT)]);
+    $noAdmissionPath=$config['storage_path'].'/histories/bulk-no-admission.pdf';
+    file_put_contents($noAdmissionPath,str_replace('Ingreso:','Remision',testPdf('7000000055','BULKD001','SIN INGRESO')));
+    $missingReport=$bulk->import([['path'=>$noAdmissionPath,'name'=>'sin-ingreso.pdf']],true);
+    $missingRow=$missingReport['results'][0];
+    check($missingRow['missing']===['admission'] && $missingRow['found']['document']==='CC 7000000055' && str_contains($missingRow['message'],'No se encontró el número de ingreso') && !empty($missingRow['previews'][0]['ref']),'El resultado dice qué dato falta y lo que sí se leyó');
+    $missingSession=['bulk_report'=>$missingReport];
+    rejects(fn()=>$bulk->complete($missingRow['previews'][0]['ref'],['admission'=>'!!'],$missingSession,$completeAdmin),'Rechaza un ingreso escrito con caracteres no válidos','ingreso');
+    rejects(fn()=>$bulk->complete($missingRow['previews'][0]['ref'],[],$missingSession,$completeAdmin),'Pide escribir los datos que faltan','Escribe los datos');
+    rejects(fn()=>$bulk->complete('t'.str_repeat('a',32),['admission'=>'BULKD001'],$missingSession,$completeAdmin),'Solo completa PDF que están en el resultado de la sesión','ya no está disponible');
+    $completed=$bulk->complete($missingRow['previews'][0]['ref'],['admission'=>'bulkd001','document_number'=>'999','document_type'=>'CC'],$missingSession,$completeAdmin);
+    $completedPackage=$db->one('SELECT e.admission,pa.document_number FROM packages pk JOIN encounters e ON e.id=pk.encounter_id JOIN patients pa ON pa.id=e.patient_id WHERE pk.id=?',[$completed['package_id']]);
+    check($completed['status']==='saved' && $completedPackage['admission']==='BULKD001' && $completedPackage['document_number']==='7000000055','Carga el PDF con el dato escrito a mano y no reemplaza lo leído del PDF');
+    check(str_contains((string)$db->one("SELECT result FROM events WHERE action='pdf_manual_data' ORDER BY id DESC LIMIT 1")['result'],'admin_'.$completeAdmin.':admission'),'Registra quién escribió el dato y cuál');
+    // Un anexo con el dato faltante se agrega a la atención ya registrada, no la reemplaza.
+    $annexPath=$config['storage_path'].'/histories/bulk-annex-no-admission.pdf';
+    file_put_contents($annexPath,str_replace('Ingreso:','Remision',testPdf('7000000055','BULKD001','ANEXO INGR')));
+    $annexReport=$bulk->import([['path'=>$annexPath,'name'=>'anexo.pdf']],true);
+    $annexDone=$bulk->complete($annexReport['results'][0]['previews'][0]['ref'],['admission'=>'BULKD001'],['bulk_report'=>$annexReport],$completeAdmin);
+    check(str_contains($annexDone['message'],'Se agregó a la atención') && (int)$db->one('SELECT COUNT(*) n FROM clinical_files WHERE package_id=?',[$annexDone['package_id']])['n']===2,'Un anexo completado a mano se suma a los PDF de su atención');
     rejects(fn()=>$bulk->import([]),'Carga masiva rechaza lote vacío');
     rejects(fn()=>$bulk->import(array_fill(0,21,$bulkSources[0])),'Carga masiva impone límite de archivos en servidor');
     rejects(fn()=>$bulk->receive(['complete'=>'0'],[]),'Carga masiva exige confirmar documentos completos');

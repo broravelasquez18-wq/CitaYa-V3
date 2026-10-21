@@ -196,7 +196,8 @@ final class WhatsApp
     /** Enlace público al formulario (sin token: para nuevas solicitudes desde un aviso). */
     public function portalUrl(): string
     {
-        return rtrim($this->app->config['public_url'], '/') . '/?page=home';
+        // Enlace limpio al formulario: la dirección base ya abre «Solicitar historia» (sin ?page=home).
+        return rtrim($this->app->config['public_url'], '/');
     }
 
     /** Crea un enlace personal y de un solo uso al formulario, vinculado al chat. El token solo se guarda como hash. */
@@ -207,7 +208,7 @@ final class WhatsApp
             'token_hash' => hash('sha256', $token), 'phone' => $phone, 'created_at' => $this->app->now(),
             'expires_at' => date('Y-m-d H:i:s', time() + (int)$this->app->config['whatsapp_link_seconds']),
         ]);
-        return ['url' => rtrim($this->app->config['public_url'], '/') . '/?page=home&wa=' . $token,
+        return ['url' => rtrim($this->app->config['public_url'], '/') . '/?wa=' . $token,
             'hours' => max(1, intdiv((int)$this->app->config['whatsapp_link_seconds'], 3600)), 'key' => hash('sha256', $token)];
     }
 

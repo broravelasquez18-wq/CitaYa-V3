@@ -24,6 +24,13 @@ return [
     'session_seconds' => 900,
     'max_mail_bytes' => 20 * 1024 * 1024,
     'max_upload_bytes' => 12 * 1024 * 1024,
+    // Desde el formulario, una solicitud por documento en este número de horas.
+    'request_cooldown_hours' => 24,
+    // OCR de las primeras páginas escaneadas de un PDF (poppler + Tesseract con español). Sin las herramientas, se omite.
+    'ocr_enabled' => true,
+    'ocr_pdftoppm' => 'pdftoppm',
+    'ocr_tesseract' => 'tesseract',
+    'ocr_timeout' => 60,
     // Adjuntos de una respuesta de la persona encargada (en total): deben caber en un correo (max_mail_bytes).
     'max_response_bytes' => 14 * 1024 * 1024,
     'mail_attempts' => 3,
