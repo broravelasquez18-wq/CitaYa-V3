@@ -1602,4 +1602,4 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
 - `requests-admin` 64 en verde (9 nuevas): se ofrece después de la primera; exige fecha o «No recuerdo la fecha»; un error no gasta el cupo; conserva paciente, correo y WhatsApp aunque el formulario traiga otros; usa la nueva fecha y especialidad; con 2 ya no se ofrece; la tercera se rechaza; el formulario sigue con 1; desde una solicitud del bot llega al mismo WhatsApp.
 - `run` 170, `whatsapp` 95, `n8n-api` 30, `support` 85 y `resend-ui` 19 en verde.
 - En local, en el navegador: se envió el formulario con un documento de prueba (quedó radicada), se abrió el modal, se marcó «No recuerdo la fecha» (la fecha se desactivó) y se radicó la segunda con un radicado nuevo y el aviso «Radicamos tu segunda solicitud…». Después el botón ya no aparece.
-- Pendiente: commit, despliegue en el VPS y prueba en producción.
+- Desplegado el 2026-10-24 (commit `f7d5adb`, autodeploy de Dokploy). Pendiente: probarlo con una solicitud real en producción.
