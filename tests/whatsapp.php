@@ -233,7 +233,9 @@ try {
     $chat = $db->one('SELECT * FROM requests WHERE id>? ORDER BY id DESC LIMIT 1', [$before]);
     check($chat && $chat['status'] === 'queued' && $chat['whatsapp_phone'] === $owner && $chat['contact_email'] === 'paciente@example.test' && $chat['claimed_name'] === 'Ana María Pérez' && (int)$chat['specialty_id'] === $specialty, 'Se radica la solicitud con los datos guardados y queda vinculada al chat');
     check((bool)$db->one("SELECT id FROM whatsapp_outbox WHERE request_id=? AND kind='history' AND phone=?", [$chat['id'], $owner]) && (bool)$db->one("SELECT id FROM jobs WHERE request_id=? AND kind='history' AND recipient='paciente@example.test'", [$chat['id']]), 'Historia encontrada: sale por el chat y al correo guardado');
-    check(!$db->one('SELECT phone FROM whatsapp_sessions WHERE phone=?', [$owner]), 'Al radicar termina la conversación');
+    check(str_contains(lastTo($owner), '¿Necesitas otra historia clínica de *Ana María Pérez*?') && $db->one('SELECT state FROM whatsapp_sessions WHERE phone=?', [$owner])['state'] === 'intake_another', 'Al radicar ofrece otra historia del mismo paciente');
+    check(str_contains($say($owner, 'quizás'), 'Responde *1*'), 'A la oferta de otra historia solo se responde 1 o 2');
+    check(str_contains($say($owner, '2'), 'Listo') && !$db->one('SELECT phone FROM whatsapp_sessions WHERE phone=?', [$owner]), 'Si no necesita otra, termina la conversación');
 
     // Fecha desconocida: el bot ofrece la atención más reciente.
     $say($owner, 'historia'); $say($owner, '1012345678'); $say($owner, '1'); $say($owner, '0');
@@ -242,10 +244,12 @@ try {
     $say($owner, '1');
     $suggested = $db->one('SELECT * FROM requests ORDER BY id DESC LIMIT 1');
     check($suggested['status'] === 'queued' && (bool)$db->one("SELECT id FROM whatsapp_outbox WHERE request_id=? AND kind='history'", [$suggested['id']]), 'Al aceptar la sugerencia se envía esa historia');
+    $say($owner, 'menu');
     $say($owner, 'historia'); $say($owner, '1012345678'); $say($owner, '1'); $say($owner, '0'); $say($owner, '0');
     $say($owner, '2');
     $rejected = $db->one('SELECT * FROM requests ORDER BY id DESC LIMIT 1');
     check($rejected['status'] === 'no_matches' && (bool)$db->one("SELECT id FROM whatsapp_outbox WHERE request_id=? AND kind='notice'", [$rejected['id']]), 'Si no es esa atención, queda pendiente y recibe el radicado');
+    $say($owner, 'menu');
 
     // Datos incorrectos o cancelar.
     $say($owner, 'historia'); $say($owner, '1012345678');
@@ -275,10 +279,31 @@ try {
     check(App\WhatsAppIntake::parseDate('31 de febrero de 2026') === false && App\WhatsAppIntake::parseDate('10 de jupiter 2026') === false && App\WhatsAppIntake::parseDate('1 de enero de ' . (date('Y') + 1)) === false, 'Rechaza fechas escritas inexistentes, meses inventados o futuras');
     $lastYear = (int)date('Y') - 1;
     check(App\WhatsAppIntake::parseDate('10 de julio') === (date('m-d') >= '07-10' ? date('Y') : (string)$lastYear) . '-07-10', 'Sin año toma la fecha ya pasada más reciente');
+    // Las solicitudes anteriores ya tienen respuesta: el límite de 2 esperando respuesta no aplica aquí.
+    $db->run("UPDATE requests SET status='sent' WHERE claimed_document_number='1012345678' AND status IN ('no_matches','unavailable','not_eligible')");
     $say($owner, 'historia'); $say($owner, '1012345678'); $say($owner, '1');
     $attended = strtotime('-3 days');
     $months = [1 => 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
     check(str_contains($say($owner, date('j', $attended) . ' de ' . $months[(int)date('n', $attended)] . ' del ' . date('Y', $attended)), '*1.* Ortopedia'), 'En el chat, una fecha escrita con el mes pasa a la pregunta de especialidad');
+    $say($owner, 'menu');
+
+    // Otra historia del mismo paciente por el chat, con el límite de 2 solicitudes esperando respuesta.
+    $db->run('DELETE FROM rate_limits');
+    $db->run("UPDATE requests SET status='sent' WHERE claimed_document_number='1012345678' AND status IN ('no_matches','unavailable','not_eligible')");
+    $pendingOwner = fn() => (int)$db->one("SELECT COUNT(*) n FROM requests WHERE claimed_document_number='1012345678' AND status IN ('no_matches','unavailable','not_eligible')")['n'];
+    $say($owner, 'historia'); $say($owner, '1012345678'); $say($owner, '1'); $say($owner, date('d/m/Y', strtotime('-60 days')));
+    check(str_contains($say($owner, '1'), '¿Te la enviamos?'), 'Sin atención ese día ofrece la más reciente');
+    check(str_contains($say($owner, '2'), '¿Necesitas otra historia clínica'), 'Tras rechazar la sugerencia (queda pendiente) ofrece otra historia');
+    check(str_contains($say($owner, '1'), '¿Qué fecha fue la atención?'), 'Al aceptar, pide solo la fecha: no vuelve a pedir documento ni datos');
+    $say($owner, date('d/m/Y', strtotime('-61 days'))); $say($owner, '1');
+    $say($owner, '2');
+    check($pendingOwner() === 2 && !$db->one('SELECT phone FROM whatsapp_sessions WHERE phone=?', [$owner]) && !str_contains(lastTo($owner), '¿Necesitas otra historia'), 'Con dos solicitudes esperando respuesta ya no ofrece otra');
+    $say($owner, 'historia'); $say($owner, '1012345678');
+    $blocked = $say($owner, '1');
+    check(str_contains($blocked, 'esperando respuesta') && !$db->one('SELECT phone FROM whatsapp_sessions WHERE phone=?', [$owner]) && $pendingOwner() === 2, 'Con dos esperando respuesta, HISTORIA no radica otra y explica hasta cuándo');
+    $db->run("UPDATE requests SET status='not_registered' WHERE claimed_document_number='1012345678' AND status='no_matches' ORDER BY id LIMIT 1");
+    $say($owner, 'historia'); $say($owner, '1012345678');
+    check(str_contains($say($owner, '1'), '¿Qué fecha fue la atención?'), 'Cuando el personal responde una, el bot vuelve a permitir otra');
     $say($owner, 'menu');
 
     // --- Especialidad escrita con palabras en lugar del número ---

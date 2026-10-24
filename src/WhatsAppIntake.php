@@ -9,6 +9,8 @@ namespace App;
  * vez, envía el enlace del formulario (allí quedan guardados). Si ya existen, le pide confirmarlos —desde un WhatsApp que
  * aún no conoce al paciente, primero debe escribir el nombre completo, una sola vez— y luego pregunta fecha y especialidad.
  * La solicitud se radica con la misma búsqueda directa del formulario y queda vinculada a este chat.
+ * Al terminar, el bot ofrece pedir otra historia del mismo paciente (solo fecha y especialidad). Como en la web, el
+ * documento puede tener como máximo Application::REQUESTS_PER_WINDOW solicitudes esperando respuesta.
  * El paso de la conversación se guarda en whatsapp_sessions con estados intake_*.
  */
 final class WhatsAppIntake
@@ -40,6 +42,7 @@ final class WhatsAppIntake
             'intake_specialty' => $this->specialty($phone, $messageId, $text, $profile, $data),
             'intake_select' => $this->select($phone, $messageId, $text, $data),
             'intake_suggest' => $this->suggestion($phone, $messageId, $words, $data),
+            'intake_another' => $this->another($phone, $messageId, $words, $profile),
             default => $this->restart($phone, $messageId),
         };
         return true;
@@ -108,8 +111,47 @@ final class WhatsAppIntake
             $this->sendFormLink($phone, $messageId);
             return;
         }
+        $this->askDate($phone, $messageId, $profile);
+    }
+
+    /** Pide la fecha si el documento aún puede tener otra solicitud esperando respuesta; si no, explica hasta cuándo. */
+    private function askDate(string $phone, string $messageId, array $profile): void
+    {
+        $limit = $this->limitMessage($profile);
+        if ($limit !== null) { $this->endSession($phone); $this->reply($phone, $limit, $messageId, 'limit'); return; }
         $this->saveSession($phone, 'intake_date', ['profile_id' => (int)$profile['id']]);
         $this->reply($phone, "¿Qué fecha fue la atención? Ej.: *10 de julio de 2026*.\n\nSi no la recuerdas, responde *0*.", $messageId, 'date');
+    }
+
+    /** Mensaje de la regla de solicitudes sin respuesta, o null si el documento todavía puede pedir otra. */
+    private function limitMessage(array $profile): ?string
+    {
+        try { $this->app->assertNoRecentRequest(['document_type' => $profile['document_type'], 'document_number' => $profile['document_number']], Application::REQUESTS_PER_WINDOW); }
+        catch (\DomainException $error) { return $error->getMessage(); }
+        return null;
+    }
+
+    /** Al terminar una solicitud: ofrece otra historia del mismo paciente si queda cupo. */
+    private function offerAnother(string $phone, string $messageId, array $profile): void
+    {
+        if ($this->limitMessage($profile) !== null) { $this->endSession($phone); return; }
+        $this->saveSession($phone, 'intake_another', ['profile_id' => (int)$profile['id']]);
+        $this->reply($phone, "¿Necesitas otra historia clínica de *{$profile['full_name']}*?\n\n*1.* Sí\n*2.* No", $messageId, 'another');
+    }
+
+    /** Ofrece otra historia con el perfil guardado en la conversación (una sesión anterior a este cambio no lo trae). */
+    private function offerFor(string $phone, string $messageId, array $data): void
+    {
+        $profile = isset($data['profile_id']) ? $this->app->db->one('SELECT * FROM patient_profiles WHERE id=?', [$data['profile_id']]) : null;
+        if ($profile) $this->offerAnother($phone, $messageId, $profile);
+    }
+
+    private function another(string $phone, string $messageId, array $words, array $profile): void
+    {
+        $answer = self::yesNo($words);
+        if ($answer === null) { $this->reply($phone, 'Responde *1* (sí) o *2* (no).', $messageId, 'another-retry'); return; }
+        if (!$answer) { $this->endSession($phone); $this->reply($phone, 'Listo. Si necesitas algo más, escribe *MENU*.', $messageId, 'another-no'); return; }
+        $this->askDate($phone, $messageId, $profile);
     }
 
     private function date(string $phone, string $messageId, string $text, array $words, array $profile): void
@@ -134,6 +176,7 @@ final class WhatsAppIntake
         if ($choice === null) { $this->reply($phone, 'No reconocimos esa especialidad. Responde con el número de la lista, o *0* si no la recuerdas.', $messageId, 'specialty-retry'); return; }
         $this->endSession($phone);
         try {
+            $this->app->assertNoRecentRequest(['document_type' => $profile['document_type'], 'document_number' => $profile['document_number']], Application::REQUESTS_PER_WINDOW);
             $id = $this->app->createRequest(['document_type' => $profile['document_type'], 'document_number' => $profile['document_number'],
                 'full_name' => $profile['full_name'], 'email' => $profile['email'], 'approximate_date' => $data['date'] ?? '',
                 'date_unknown' => $data['date'] === null ? '1' : '', 'specialty_id' => $choice === 0 ? 0 : $data['ids'][$choice - 1]], 'whatsapp:' . $phone, true, null, $phone);
@@ -142,7 +185,7 @@ final class WhatsAppIntake
             return;
         }
         $this->app->event($id, 'whatsapp_intake', 'created');
-        $this->afterSearch($phone, $messageId, $id);
+        $this->afterSearch($phone, $messageId, $id, $profile);
     }
 
     /**
@@ -187,12 +230,12 @@ final class WhatsAppIntake
      * Resultado de la búsqueda: si la historia o el radicado ya quedaron en cola, ese mensaje es la respuesta.
      * Varias atenciones o una sugerencia se resuelven aquí mismo en lugar de la página.
      */
-    private function afterSearch(string $phone, string $messageId, int $id): void
+    private function afterSearch(string $phone, string $messageId, int $id, array $profile): void
     {
         $request = $this->app->request($id);
         if ($request['status'] === 'awaiting_selection') {
             $matches = $this->app->search($id);
-            $this->saveSession($phone, 'intake_select', ['request_id' => $id, 'ids' => array_map(fn($m) => (int)$m['id'], $matches)]);
+            $this->saveSession($phone, 'intake_select', ['request_id' => $id, 'profile_id' => (int)$profile['id'], 'ids' => array_map(fn($m) => (int)$m['id'], $matches)]);
             $lines = [];
             foreach ($matches as $index => $match) $lines[] = '*' . ($index + 1) . '.* ' . date('d/m/Y', strtotime($match['attended_at'])) . ' · ' . $match['specialty'];
             $this->reply($phone, "Radicado *{$request['reference']}*. ¿Cuál atención necesitas?\n\n" . implode("\n", $lines), $messageId, 'select');
@@ -200,10 +243,13 @@ final class WhatsAppIntake
         }
         $suggestion = $request['status'] === 'no_matches' && !$this->noticeQueued($id) ? $this->app->recentSuggestion($id) : null;
         if ($suggestion) {
-            $this->saveSession($phone, 'intake_suggest', ['request_id' => $id, 'encounter_id' => (int)$suggestion['id']]);
+            $this->saveSession($phone, 'intake_suggest', ['request_id' => $id, 'profile_id' => (int)$profile['id'], 'encounter_id' => (int)$suggestion['id']]);
             $intro = $request['approximate_date'] === null ? 'La atención más reciente' : 'No hay atención en esa fecha. La más reciente';
             $this->reply($phone, "$intro es del *" . date('d/m/Y', strtotime($suggestion['attended_at'])) . '* (' . $suggestion['specialty'] . "). ¿Te la enviamos?\n\n*1.* Sí\n*2.* No", $messageId, 'suggest');
+            return;
         }
+        // Historia en camino o radicado enviado: la solicitud terminó.
+        $this->offerAnother($phone, $messageId, $profile);
     }
 
     private function select(string $phone, string $messageId, string $text, array $data): void
@@ -212,7 +258,8 @@ final class WhatsAppIntake
         if (!isset($data['ids'][$choice - 1])) { $this->reply($phone, 'Responde con el número de la atención.', $messageId, 'select-retry'); return; }
         $this->endSession($phone);
         try { $this->app->confirm((int)$data['request_id'], $data['ids'][$choice - 1]); }
-        catch (\DomainException) { $this->reply($phone, 'Esa atención ya no está disponible. Escribe *HISTORIA* para empezar de nuevo.', $messageId, 'select-fail'); }
+        catch (\DomainException) { $this->reply($phone, 'Esa atención ya no está disponible. Escribe *HISTORIA* para empezar de nuevo.', $messageId, 'select-fail'); return; }
+        $this->offerFor($phone, $messageId, $data);
     }
 
     private function suggestion(string $phone, string $messageId, array $words, array $data): void
@@ -222,12 +269,13 @@ final class WhatsAppIntake
         $this->endSession($phone);
         $id = (int)$data['request_id'];
         if ($answer) {
-            try { $this->app->selectSuggestion($id, (int)$data['encounter_id']); return; }
+            try { $this->app->selectSuggestion($id, (int)$data['encounter_id']); $this->offerFor($phone, $messageId, $data); return; }
             catch (\DomainException) {}
         }
         // Sin historia elegida: queda para gestión y recibe el radicado.
         $this->app->event($id, 'whatsapp_intake', $answer ? 'suggestion_unavailable' : 'suggestion_rejected');
         $this->app->whatsapp()->queueNotFound($id);
+        $this->offerFor($phone, $messageId, $data);
     }
 
     private function restart(string $phone, string $messageId): void

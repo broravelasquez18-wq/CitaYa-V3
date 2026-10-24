@@ -1634,3 +1634,27 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
   - `requests-admin` 67 en verde, con 3 nuevas: con una respondida se vuelve a ofrecer el botón; el formulario sigue bloqueado mientras quede una sin respuesta; con todas respondidas se permite.
   - `run` 170, `whatsapp` 95, `n8n-api` 30, `support` 85 y `resend-ui` 19 en verde.
   - En local: con la solicitud sin respuesta se rechaza; tras marcarla «No registra», el formulario radicó otra del mismo documento.
+
+## Bot de WhatsApp: pedir otra historia clínica del mismo paciente (RF-33, SCRUM-73)
+
+**Alcance.** Pedido del titular (2026-10-24): el paciente puede pedir una segunda historia clínica por el bot, como con el botón de la web (RF-32). Decisiones del titular:
+- al terminar una solicitud, el bot pregunta si necesita otra historia del mismo paciente y solo pide fecha y especialidad;
+- mismo límite que la web: como máximo 2 solicitudes del documento esperando respuesta.
+
+**Requisito RF-33.**
+- Después de la historia enviada, del radicado, de elegir una atención o de responder a la sugerencia, el bot pregunta «¿Necesitas otra historia clínica de *[nombre]*? 1 Sí / 2 No», siempre que quede cupo.
+- Con 1, pasa directo a la fecha y la especialidad, sin pedir el documento ni confirmar los datos. Con 2, responde «Listo. Si necesitas algo más, escribe *MENU*.» y termina.
+- Con 2 solicitudes esperando respuesta no hace la pregunta. Si el paciente escribe HISTORIA, al confirmar los datos el bot explica que debe esperar la respuesta o hasta qué fecha y hora.
+
+**Diseño.**
+- `WhatsAppIntake`: nuevo estado `intake_another` con el perfil del paciente.
+  - `offerAnother` hace la pregunta al terminar (`afterSearch`, `select`, `suggestion`). Las sesiones `intake_select` e `intake_suggest` guardan ahora el `profile_id`.
+  - `askDate` comprueba el cupo antes de pedir la fecha, tanto con HISTORIA como con la otra historia.
+  - Antes de `createRequest` se vuelve a llamar a `assertNoRecentRequest(..., REQUESTS_PER_WINDOW)`, por si cambió el cupo durante la conversación.
+- Antes el bot no tenía límite. Ahora cuenta las solicitudes del documento esperando respuesta, sean de la web o del chat.
+- Sin cambios en n8n: la conversación la lleva CitaYa (`conversation.handle`).
+- El diagrama de flujo (sección 5) quedó actualizado.
+
+**Validación.**
+- `whatsapp` 103 en verde, con 8 nuevas: ofrece otra al radicar; solo acepta 1 o 2; con 2 termina; ofrece otra tras rechazar la sugerencia; con 1 pide solo la fecha; con 2 esperando respuesta no ofrece otra; HISTORIA no radica y explica hasta cuándo; cuando el personal responde una, vuelve a permitir.
+- `run` 170, `requests-admin` 67, `n8n-api` 30, `support` 85, `resend-ui` 19 y las pruebas de los flujos de n8n en verde.
