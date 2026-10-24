@@ -55,7 +55,7 @@ try {
     $mismatch = viaWhatsApp(['full_name' => 'Ana Pérez Otra'] + $form, '573004445566', 'w2');
     check($app->request($wrongDate)['status'] === 'no_matches' && $admin->pendingCount() === 3, 'Las solicitudes sin historia aparecen como pendientes');
     // Una solicitud por documento cada 24 horas desde el formulario; no revela el radicado anterior.
-    rejects(fn() => $app->assertNoRecentRequest($form), 'Rechaza otra solicitud del mismo documento en menos de 24 horas', 'Podrás hacer otra solicitud a partir del');
+    rejects(fn() => $app->assertNoRecentRequest($form), 'Rechaza otra solicitud del mismo documento mientras la anterior espera respuesta', 'Podrás hacer otra solicitud cuando te respondamos');
     try { $app->assertNoRecentRequest($form); } catch (DomainException $e) { check(!str_contains($e->getMessage(), $app->request($web)['reference']), 'El aviso no muestra el radicado de la solicitud anterior'); }
     $app->assertNoRecentRequest(['document_number' => '1099999999'] + $form);
     check(true, 'Otro documento sí puede solicitar');
@@ -209,9 +209,16 @@ try {
     check($second !== $first && $two['claimed_document_number'] === $one['claimed_document_number'] && $two['claimed_name'] === $one['claimed_name']
         && $two['contact_email'] === 'luis@example.test' && $two['whatsapp_phone'] === '573007776655', 'La otra historia conserva paciente, correo y WhatsApp aunque el formulario traiga otros');
     check($two['approximate_date'] === null && (int)$two['specialty_id'] === $specialty && (int)$two['direct_search'] === 1, 'La otra historia usa la nueva fecha y especialidad');
-    check(!$app->canRequestAnother($second) && !$app->canRequestAnother($first), 'Con dos solicitudes en 24 horas ya no se ofrece otra');
-    rejects(fn() => $app->requestAnother($second, ['date_unknown' => '1', 'specialty_id' => 0], 'ip-two3'), 'La tercera solicitud en 24 horas se rechaza', 'las 2 solicitudes');
+    check(!$app->canRequestAnother($second) && !$app->canRequestAnother($first), 'Con dos solicitudes sin respuesta ya no se ofrece otra');
+    rejects(fn() => $app->requestAnother($second, ['date_unknown' => '1', 'specialty_id' => 0], 'ip-two3'), 'Una tercera solicitud sin respuesta se rechaza', 'Ya tienes 2 solicitudes');
     rejects(fn() => $app->assertNoRecentRequest($twoForm), 'El formulario sigue permitiendo una sola solicitud nueva en 24 horas', 'Podrás hacer otra solicitud');
+    // Con respuesta del personal (historia enviada o «No registra») sí se puede volver a pedir.
+    $db->run("UPDATE requests SET status='sent' WHERE id=?", [$first]);
+    check($app->canRequestAnother($second), 'Si una ya tiene respuesta, se vuelve a ofrecer otra');
+    rejects(fn() => $app->assertNoRecentRequest($twoForm), 'El formulario sigue bloqueado mientras quede una sin respuesta', 'esperando respuesta');
+    $db->run("UPDATE requests SET status='not_registered' WHERE id=?", [$second]);
+    $app->assertNoRecentRequest($twoForm);
+    check(true, 'Con todas respondidas, el formulario permite una solicitud nueva del mismo documento');
     $bot1 = viaWhatsApp(['document_number' => '1077777777'] + $form, '573006667788', 'two-w');
     $botSecond = $app->requestAnother($bot1, ['date_unknown' => '1', 'specialty_id' => 0], 'ip-two4');
     check($app->request($bot1)['whatsapp_phone'] === '573006667788' && $app->request($botSecond)['whatsapp_phone'] === '573006667788', 'Desde una solicitud del bot, la otra historia también llega a ese WhatsApp');

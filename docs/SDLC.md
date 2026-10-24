@@ -1621,3 +1621,16 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
   - Al usarlo aparece el aviso «Formulario listo para una solicitud nueva. La solicitud anterior sigue radicada.».
   - `requirePatient()`: si un botón de la página de la solicitud llega sin la solicitud en la sesión, avisa «Esta página ya no está conectada a tu solicitud, así que no hicimos ningún cambio. Tu radicado sigue vigente…» en vez de volver en silencio. Decisión del titular: si la sesión vence, solo se avisa; la segunda historia no se habilita por el formulario.
 - **Validación.** En local: los dos botones se distinguen, el aviso del formulario nuevo aparece y un `POST another` sin la solicitud en la sesión muestra el aviso. `requests-admin` 64, `resend-ui` 19 y `run` 170 en verde.
+
+**Ajuste (2026-10-24, pedido del titular): la regla de 24 horas solo bloquea mientras falte la respuesta.**
+- **Antes.** Cualquier solicitud del documento en las últimas 24 horas bloqueaba el formulario, aunque el personal ya le hubiera respondido.
+- **Ahora:**
+  - `assertNoRecentRequest` y `canRequestAnother` cuentan solo las solicitudes del documento en las últimas 24 h que siguen esperando respuesta del personal (`Application::PENDING_STATUSES`: `no_matches`, `unavailable`, `not_eligible`, igual que la bandeja de Pendientes).
+  - Si a la anterior ya se le envió la historia (`queued`, `sent`…) o el «No registra», se puede volver a pedir enseguida, por el formulario o con el botón.
+  - Formulario: máximo 1 sin respuesta. Botón «Solicitar otra historia del mismo paciente»: máximo 2 sin respuesta a la vez.
+  - Mensaje: «Ya hay una solicitud de historia clínica de este documento esperando respuesta. Te responderemos al correo o al WhatsApp donde recibiste el radicado. Podrás hacer otra solicitud cuando te respondamos o a partir del DD/MM/AAAA a las H:MM.»
+  - La página de estado dice «Puedes tener hasta 2 solicitudes esperando respuesta a la vez».
+- **Validación.**
+  - `requests-admin` 67 en verde, con 3 nuevas: con una respondida se vuelve a ofrecer el botón; el formulario sigue bloqueado mientras quede una sin respuesta; con todas respondidas se permite.
+  - `run` 170, `whatsapp` 95, `n8n-api` 30, `support` 85 y `resend-ui` 19 en verde.
+  - En local: con la solicitud sin respuesta se rechaza; tras marcarla «No registra», el formulario radicó otra del mismo documento.
