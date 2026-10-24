@@ -204,7 +204,7 @@ td .pill{margin:0 4px 4px 0}
 .call-mini span{font-size:var(--t-xs);font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
 .call-mini strong{font-size:var(--t-lg);font-weight:700;color:var(--ink)}
 .status-view .lead{margin-top:var(--s1)}
-.suggestion,.resend{margin-top:var(--s5);padding-top:var(--s5);border-top:1px solid var(--line)}
+.suggestion,.resend,.another{margin-top:var(--s5);padding-top:var(--s5);border-top:1px solid var(--line)}
 .suggestion h3{margin-top:var(--s3)}
 .capacity{display:inline-flex;align-items:center;gap:var(--s3);padding:6px var(--s3);border:1px solid var(--line-strong);border-radius:var(--radius);font-size:var(--t-sm);color:var(--ink-2);margin:0}
 .capacity strong{font-family:var(--mono);font-size:var(--t-md)}
@@ -1325,3 +1325,4 @@ body.console-ambient .theme-toggle:hover{border-color:var(--brand-hover);color:v
 /* Búsqueda en vivo: con JavaScript el resultado aparece al escribir y el botón «Buscar» sobra */
 form.is-live [data-live-submit]{display:none}
 form.is-live[aria-busy=true] .input-icon svg,form.is-live[aria-busy=true] input[type=search]{opacity:.7}
+[data-another-form] .toggle-card{margin-bottom:var(--s4)}

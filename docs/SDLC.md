@@ -1567,3 +1567,39 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
 - **Validación.**
   - `requests-admin` 55, `whatsapp` 95, `support` 85, `n8n-api` 30, `run` 170 y la prueba del bot en n8n en verde. Las dos pruebas que esperaban `?page=home` ahora comprueban el enlace limpio y que ya no aparece `page=home`.
   - En local, la dirección limpia abre el formulario y `/?wa=<código>` se reconoce (un código inválido muestra el aviso de enlace vencido).
+
+## Portal del paciente: solicitar otra historia clínica (RF-32, SCRUM-72)
+
+**Alcance.**
+- Después de enviar el formulario, el paciente puede pedir una segunda historia clínica del mismo paciente sin volver a escribir sus datos.
+- Pedido del titular (2026-10-24). Decisiones del titular:
+  - máximo 2 solicitudes por documento en 24 horas: la primera más una adicional desde el botón;
+  - documento, nombre, correo y WhatsApp quedan fijos; solo se piden la fecha y la especialidad;
+  - el botón aparece siempre tras enviar, en cualquier estado, mientras quede cupo.
+
+**Requisito RF-32.**
+- La página de estado muestra «¿Necesitas otra historia clínica?» con el botón «Solicitar otra historia clínica».
+- El botón abre un modal con la fecha aproximada, «No recuerdo la fecha» y la especialidad.
+- La segunda solicitud sigue la misma búsqueda directa que la primera: historia encontrada, consulta sugerida o radicado.
+- Con 2 solicitudes del documento en 24 horas, el botón ya no aparece y una tercera se rechaza con la fecha y hora desde la que se puede volver a pedir.
+- El formulario nuevo sigue permitiendo una sola solicitud por documento en 24 horas.
+
+**Diseño.**
+- `Application::assertNoRecentRequest($data, $allowed = 1)` cuenta las solicitudes del documento en `request_cooldown_hours`, sean del formulario o del bot. Con `$allowed` = 2 el aviso dice «Ya hiciste las 2 solicitudes de historia clínica permitidas para este documento…».
+- `Application::REQUESTS_PER_WINDOW` = 2.
+- `Application::canRequestAnother($id)`: hay cupo para el documento de esa solicitud.
+- `Application::requestAnother($id, $data, $ip)`:
+  - toma documento, nombre y correo de la solicitud de la sesión, no del formulario;
+  - copia el WhatsApp solo si la primera ya lo tenía (el escrito en la web o el del bot); un número sin confirmar no se copia;
+  - valida la fecha y la especialidad antes de comprobar el cupo, para que un error no lo gaste;
+  - crea la solicitud con `createRequest(..., directSearch: true)` y deja el evento `another_request` con `after:<id de la primera>`.
+- `index.php`: acción `another`, protegida con `requirePatient()`. Solo se puede usar desde la sesión que creó la primera solicitud, así nadie la usa con un documento ajeno. Al terminar, la sesión pasa a la nueva solicitud.
+- `layout.php`: la sección y el modal (`another-modal`). «Hacer otra solicitud» pasa a ser el enlace «Hacer una solicitud con otros datos», que sigue limpiando la sesión para otro paciente.
+- `app.js`: «No recuerdo la fecha» desactiva la fecha del modal. La recarga automática de la página de estado espera mientras haya un modal abierto.
+- Sin cambios en la base de datos, en el bot ni en n8n.
+
+**Validación.**
+- `requests-admin` 64 en verde (9 nuevas): se ofrece después de la primera; exige fecha o «No recuerdo la fecha»; un error no gasta el cupo; conserva paciente, correo y WhatsApp aunque el formulario traiga otros; usa la nueva fecha y especialidad; con 2 ya no se ofrece; la tercera se rechaza; el formulario sigue con 1; desde una solicitud del bot llega al mismo WhatsApp.
+- `run` 170, `whatsapp` 95, `n8n-api` 30, `support` 85 y `resend-ui` 19 en verde.
+- En local, en el navegador: se envió el formulario con un documento de prueba (quedó radicada), se abrió el modal, se marcó «No recuerdo la fecha» (la fecha se desactivó) y se radicó la segunda con un radicado nuevo y el aviso «Radicamos tu segunda solicitud…». Después el botón ya no aparece.
+- Pendiente: commit, despliegue en el VPS y prueba en producción.

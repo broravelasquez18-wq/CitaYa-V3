@@ -77,20 +77,57 @@ final class Application
 
     /** $whatsappPhone: número escrito en el formulario web; se usa directamente, sin confirmación desde el chat. */
     /**
-     * Una solicitud por documento cada `request_cooldown_hours` (24 h) desde el formulario: si ya hay una más reciente
-     * (del formulario o del bot), se rechaza y se dice desde cuándo se puede volver a pedir. No revela el radicado
-     * anterior: cualquiera que escriba un número de documento lo vería; quien la hizo lo recibió por correo o WhatsApp.
+     * Solicitudes por documento cada `request_cooldown_hours` (24 h): `$allowed` es cuántas puede haber en ese lapso.
+     * El formulario permite una; «Solicitar otra historia clínica» permite una más (`requestAnother`).
+     * Cuentan las del formulario y las del bot. No revela el radicado anterior: cualquiera que escriba un número de
+     * documento lo vería; quien la hizo lo recibió por correo o WhatsApp.
      */
-    public function assertNoRecentRequest(array $data): void
+    public function assertNoRecentRequest(array $data, int $allowed = 1): void
     {
         [$type, $number] = $this->identity($data);
         $hours = max(1, (int)($this->config['request_cooldown_hours'] ?? 24));
-        $recent = $this->db->one('SELECT created_at FROM requests WHERE claimed_document_type=? AND claimed_document_number=? AND created_at>? ORDER BY created_at DESC LIMIT 1',
-            [$type, $number, date('Y-m-d H:i:s', time() - $hours * 3600)]);
-        if (!$recent) return;
-        $next = strtotime($recent['created_at']) + $hours * 3600;
+        $recent = $this->recentRequestTimes($type, $number, $hours);
+        if (count($recent) < $allowed) return;
+        $next = strtotime($recent[$allowed - 1]) + $hours * 3600;
         $hour = date('g:i', $next) . ' ' . (date('A', $next) === 'AM' ? 'a. m.' : 'p. m.');
-        throw new \DomainException('Ya hay una solicitud de historia clínica para este documento hecha en las últimas ' . $hours . ' horas. Revisa el correo o el WhatsApp donde recibiste el radicado. Podrás hacer otra solicitud a partir del ' . date('d/m/Y', $next) . ' a las ' . $hour);
+        $what = $allowed > 1 ? 'Ya hiciste las ' . $allowed . ' solicitudes de historia clínica permitidas para este documento' : 'Ya hay una solicitud de historia clínica para este documento hecha';
+        throw new \DomainException($what . ' en las últimas ' . $hours . ' horas. Revisa el correo o el WhatsApp donde recibiste el radicado. Podrás hacer otra solicitud a partir del ' . date('d/m/Y', $next) . ' a las ' . $hour);
+    }
+
+    /** Fechas de creación de las solicitudes del documento dentro del lapso, de la más reciente a la más antigua. */
+    private function recentRequestTimes(string $type, string $number, int $hours): array
+    {
+        return array_column($this->db->all('SELECT created_at FROM requests WHERE claimed_document_type=? AND claimed_document_number=? AND created_at>? ORDER BY created_at DESC',
+            [$type, $number, date('Y-m-d H:i:s', time() - $hours * 3600)]), 'created_at');
+    }
+
+    /** Máximo de solicitudes por documento en 24 h contando la adicional de «Solicitar otra historia clínica». */
+    public const REQUESTS_PER_WINDOW = 2;
+
+    /** ¿Desde el estado de esta solicitud se puede pedir otra historia del mismo paciente? */
+    public function canRequestAnother(int $requestId): bool
+    {
+        $request = $this->request($requestId);
+        if (!$request['claimed_document_type'] || !$request['claimed_document_number']) return false;
+        $hours = max(1, (int)($this->config['request_cooldown_hours'] ?? 24));
+        return count($this->recentRequestTimes($request['claimed_document_type'], $request['claimed_document_number'], $hours)) < self::REQUESTS_PER_WINDOW;
+    }
+
+    /**
+     * Segunda historia clínica del mismo paciente: conserva documento, nombre, correo y WhatsApp de la solicitud
+     * de esta sesión; solo cambian la fecha aproximada y la especialidad. El WhatsApp sin confirmar no se copia.
+     */
+    public function requestAnother(int $requestId, array $data, string $ip): int
+    {
+        $first = $this->request($requestId);
+        $form = ['document_type' => $first['claimed_document_type'], 'document_number' => $first['claimed_document_number'],
+            'full_name' => $first['claimed_name'], 'email' => $first['contact_email'],
+            'approximate_date' => $data['approximate_date'] ?? '', 'date_unknown' => $data['date_unknown'] ?? '', 'specialty_id' => $data['specialty_id'] ?? ''];
+        $this->filters($form, true); // Fecha y especialidad válidas antes de gastar el cupo.
+        $this->assertNoRecentRequest($form, self::REQUESTS_PER_WINDOW);
+        $id = $this->createRequest($form, $ip, true, null, $first['whatsapp_phone'] ?: null);
+        $this->event($id, 'another_request', 'after:' . $requestId);
+        return $id;
     }
 
     public function createRequest(array $data, string $ip, bool $directSearch = false, ?int $whatsappLinkId = null, ?string $whatsappPhone = null): int

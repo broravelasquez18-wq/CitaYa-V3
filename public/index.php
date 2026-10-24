@@ -103,6 +103,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['flash'] = 'Solicitaste el reenvío de tu historia al mismo correo. Estamos preparando el mensaje.';
                 go('status');
             case 'confirm': $app->confirm(requirePatient(), (int) ($_POST['encounter_id'] ?? 0)); go('status');
+            case 'another':
+                // Segunda historia del mismo paciente: los datos salen de la solicitud de esta sesión, no del formulario.
+                $id = $app->requestAnother(requirePatient(), $_POST, $ip);
+                $_SESSION['request_access'] = $id;
+                $_SESSION['request_id'] = $id;
+                unset($_SESSION['date_given']);
+                $_SESSION['csrf'] = bin2hex(random_bytes(32));
+                $_SESSION['flash'] = 'Radicamos tu segunda solicitud de historia clínica. Te enviaremos la respuesta a los mismos datos de contacto.';
+                go($app->request($id)['status'] === 'awaiting_selection' ? 'appointments' : 'status');
             case 'new': unset($_SESSION['request_id'], $_SESSION['request_access']); go('home');
             case 'login':
                 $app->limit('admin-login:' . $ip, 10, 900);
@@ -401,7 +410,7 @@ if (in_array($page, ['deliveries','delivery','case-history','history'], true)) {
     }
 }
 $specialties = $app->db->all('SELECT * FROM specialties WHERE active=1 ORDER BY name');
-$request = null; $encounters = []; $historyResend = null; $recentSuggestion = null;
+$request = null; $encounters = []; $historyResend = null; $recentSuggestion = null; $canRequestAnother = false;
 if ($page === 'verify' && empty($_SESSION['request_id'])) go('home');
 if (in_array($page, ['appointments','status'], true)) {
     $id = requirePatient();
@@ -410,6 +419,7 @@ if (in_array($page, ['appointments','status'], true)) {
         if (!$request['direct_search'] || $page === 'appointments') $request=$app->requireVerified($id);
         if ($page === 'status') $historyResend = $app->historyResendInfo($id);
         if ($page === 'status') $recentSuggestion = $app->recentSuggestion($id);
+        if ($page === 'status') $canRequestAnother = $app->canRequestAnother($id);
         $dateGiven = ($_SESSION['date_given'] ?? null) === $id;
         if ($dateGiven) $recentSuggestion = null;
         if ($page === 'appointments') {

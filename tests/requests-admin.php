@@ -195,6 +195,26 @@ try {
     $app->respondCase($reasonCase, 1, 'not_registered', $reasonText, []);
     $sentReason = waText($reasonCase, 'not_registered');
     check($sentReason === $reasonText && substr_count($sentReason, $app->request($reasonCase)['reference']) === 1, 'WhatsApp envía el motivo sin repetir el radicado');
+
+    // --- Segunda historia clínica desde el estado de la solicitud ---
+    $db->run('DELETE FROM rate_limits');
+    $twoForm = ['document_number' => '1066666666', 'full_name' => 'Luis Gómez Ríos', 'email' => 'luis@example.test'] + $form;
+    $first = $app->createRequest($twoForm, 'ip-two1', true, null, '573007776655');
+    check($app->canRequestAnother($first), 'Después de la primera solicitud se ofrece pedir otra historia');
+    $before = (int)$db->one('SELECT COUNT(*) n FROM requests')['n'];
+    rejects(fn() => $app->requestAnother($first, ['approximate_date' => '', 'specialty_id' => 0], 'ip-two2'), 'La otra historia exige fecha o «No recuerdo la fecha»', 'fecha válida');
+    check((int)$db->one('SELECT COUNT(*) n FROM requests')['n'] === $before, 'Un error en la fecha no gasta el cupo');
+    $second = $app->requestAnother($first, ['date_unknown' => '1', 'specialty_id' => (string)$specialty, 'document_number' => '1099999999', 'email' => 'otro@example.test'], 'ip-two2');
+    $two = $app->request($second); $one = $app->request($first);
+    check($second !== $first && $two['claimed_document_number'] === $one['claimed_document_number'] && $two['claimed_name'] === $one['claimed_name']
+        && $two['contact_email'] === 'luis@example.test' && $two['whatsapp_phone'] === '573007776655', 'La otra historia conserva paciente, correo y WhatsApp aunque el formulario traiga otros');
+    check($two['approximate_date'] === null && (int)$two['specialty_id'] === $specialty && (int)$two['direct_search'] === 1, 'La otra historia usa la nueva fecha y especialidad');
+    check(!$app->canRequestAnother($second) && !$app->canRequestAnother($first), 'Con dos solicitudes en 24 horas ya no se ofrece otra');
+    rejects(fn() => $app->requestAnother($second, ['date_unknown' => '1', 'specialty_id' => 0], 'ip-two3'), 'La tercera solicitud en 24 horas se rechaza', 'las 2 solicitudes');
+    rejects(fn() => $app->assertNoRecentRequest($twoForm), 'El formulario sigue permitiendo una sola solicitud nueva en 24 horas', 'Podrás hacer otra solicitud');
+    $bot1 = viaWhatsApp(['document_number' => '1077777777'] + $form, '573006667788', 'two-w');
+    $botSecond = $app->requestAnother($bot1, ['date_unknown' => '1', 'specialty_id' => 0], 'ip-two4');
+    check($app->request($bot1)['whatsapp_phone'] === '573006667788' && $app->request($botSecond)['whatsapp_phone'] === '573006667788', 'Desde una solicitud del bot, la otra historia también llega a ese WhatsApp');
     echo "\nPASS: $checks comprobaciones. Sin envíos externos.\n";
 } finally {
     if (!preg_match('/^citaya_test_[a-f0-9]{10}$/', $databaseName)) throw new RuntimeException('Invalid test database name');

@@ -90,7 +90,16 @@ $botNumber = (string)$app->config['whatsapp_bot_number']; $confirmText = 'CONFIR
 <p class="muted" data-resend-countdown aria-live="polite"><?= $historyResend['wait'] > 0 ? 'Podrás reenviar en ' . (int)$historyResend['wait'] . ' segundos.' : 'Puedes solicitar el reenvío ahora.' ?></p><p class="capacity" aria-label="Reenvíos disponibles: <?= (int)$historyResend['remaining'] ?>"><span>Reenvíos disponibles</span><strong><?= (int)$historyResend['remaining'] ?></strong></p>
 <?php else: ?><p class="muted">Alcanzaste el máximo de reenvíos de esta solicitud.</p><?php endif ?></section>
 <?php endif ?>
-<form method="post" class="spaced"><?= csrf() ?><input type="hidden" name="action" value="new"><button class="button secondary">Hacer otra solicitud</button></form></div>
+<?php if ($canRequestAnother): $anotherUnknown = ui_reopen('another') && ($_POST['date_unknown'] ?? '') === '1'; ?>
+<section class="another" aria-label="Otra historia clínica"><h3>¿Necesitas otra historia clínica?</h3><p class="muted">Pide otra historia de <strong><?= h($request['claimed_name']) ?></strong> sin volver a escribir sus datos. La respuesta llegará al correo <strong><?= h($request['contact_email']) ?></strong><?= $request['whatsapp_phone'] ? ' y al mismo WhatsApp' : '' ?>. Puedes hacer hasta <?= App\Application::REQUESTS_PER_WINDOW ?> solicitudes por documento cada <?= (int)$app->config['request_cooldown_hours'] ?> horas.</p>
+<a class="button secondary" href="#another-modal" data-open="another-modal"><?= ui_icon('file', 18) ?>Solicitar otra historia clínica</a></section>
+<dialog <?= ui_dialog_attrs('another-modal', 'modal', ui_reopen('another')) ?>><?= ui_sheet_head('another-modal', 'Otra historia clínica', 'Usaremos los mismos datos del paciente y de contacto. Indica la atención que necesitas.') ?><form method="post" action="?page=status" class="sheet-body" data-another-form><?= csrf() ?><input type="hidden" name="action" value="another">
+<label>Fecha aproximada de la atención<input type="date" name="approximate_date" max="<?= date('Y-m-d') ?>" value="<?= h(ui_reopen('another') ? ($_POST['approximate_date'] ?? '') : '') ?>" <?= $anotherUnknown ? 'disabled' : 'required' ?>></label>
+<label class="toggle-card"><input type="checkbox" name="date_unknown" value="1" <?= $anotherUnknown ? 'checked' : '' ?>><span><strong>No recuerdo la fecha</strong><small>Buscaremos la consulta más reciente del paciente.</small></span></label>
+<label>Especialidad<select name="specialty_id" required><option value="0">No recuerdo la especialidad</option><?php foreach ($specialties as $specialty): ?><option value="<?= $specialty['id'] ?>" <?= ui_reopen('another') && ($_POST['specialty_id'] ?? '') === (string)$specialty['id'] ? 'selected' : '' ?>><?= h($specialty['name']) ?></option><?php endforeach ?></select></label>
+<div class="sheet-foot"><a class="button secondary" href="#" data-close>Cancelar</a><button class="button primary"><?= ui_icon('send', 18) ?>Radicar otra solicitud</button></div></form></dialog>
+<?php endif ?>
+<form method="post" class="spaced"><?= csrf() ?><input type="hidden" name="action" value="new"><button class="text-button">Hacer una solicitud con otros datos</button></form></div>
 <?php endif ?>
 </section><?php if ($page !== 'home'): ?><aside class="sidebar" aria-label="Ayuda para la solicitud"><div class="side-card request-help"><h3>Ayuda</h3>
 <details open><summary>¿Qué incluye la historia?</summary><p>El paquete completo de una atención: notas médicas, órdenes, fórmulas y anexos.</p></details>

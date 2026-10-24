@@ -269,8 +269,16 @@ if (queueProgress && typeof queueProgress.showModal === 'function') {
   };
   setTimeout(pollQueue, 5000);
 } else if (document.querySelector('[data-refresh]')) {
-  setTimeout(() => window.location.reload(), 5000);
+  // No recarga mientras el paciente llena un modal (p. ej. «Solicitar otra historia clínica»).
+  const refresh = () => document.querySelector('dialog[open]') ? setTimeout(refresh, 5000) : window.location.reload();
+  setTimeout(refresh, 5000);
 }
+// «Solicitar otra historia clínica»: «No recuerdo la fecha» desactiva la fecha.
+document.querySelectorAll('[data-another-form]').forEach(form => {
+  const sync = () => { form.elements.approximate_date.disabled = form.elements.date_unknown.checked; form.elements.approximate_date.required = !form.elements.date_unknown.checked; };
+  form.elements.date_unknown.addEventListener('change', sync);
+  sync();
+});
 // Formulario de solicitud del paciente: validación en lenguaje claro, ayudas al escribir y revisión antes de radicar.
 (() => {
   const form = document.querySelector('[data-request-form]');
