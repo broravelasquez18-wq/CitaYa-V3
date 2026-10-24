@@ -1326,3 +1326,4 @@ body.console-ambient .theme-toggle:hover{border-color:var(--brand-hover);color:v
 form.is-live [data-live-submit]{display:none}
 form.is-live[aria-busy=true] .input-icon svg,form.is-live[aria-busy=true] input[type=search]{opacity:.7}
 [data-another-form] .toggle-card{margin-bottom:var(--s4)}
+.new-request{margin-top:var(--s5);padding-top:var(--s5);border-top:1px solid var(--line)}.new-request p{margin:0 0 var(--s3)}

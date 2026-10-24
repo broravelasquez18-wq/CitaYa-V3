@@ -1603,3 +1603,8 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
 - `run` 170, `whatsapp` 95, `n8n-api` 30, `support` 85 y `resend-ui` 19 en verde.
 - En local, en el navegador: se envió el formulario con un documento de prueba (quedó radicada), se abrió el modal, se marcó «No recuerdo la fecha» (la fecha se desactivó) y se radicó la segunda con un radicado nuevo y el aviso «Radicamos tu segunda solicitud…». Después el botón ya no aparece.
 - Desplegado el 2026-10-24 (commit `f7d5adb`, autodeploy de Dokploy). Pendiente: probarlo con una solicitud real en producción.
+
+**Ajuste (2026-10-24, pedido del titular): «Hacer una solicitud con otros datos» más clara.**
+- **Antes.** Un enlace subrayado sin contexto al final de la página de estado.
+- **Ahora.** Un bloque separado con la pregunta «¿Es para otro paciente o te equivocaste en los datos?» y el botón «Nueva solicitud con otros datos», con ícono y sin subrayado. Hace lo mismo: limpia la sesión y vuelve al formulario.
+- **Validación.** En local se ve el bloque nuevo en la página de estado.

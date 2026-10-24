@@ -99,7 +99,7 @@ $botNumber = (string)$app->config['whatsapp_bot_number']; $confirmText = 'CONFIR
 <label>Especialidad<select name="specialty_id" required><option value="0">No recuerdo la especialidad</option><?php foreach ($specialties as $specialty): ?><option value="<?= $specialty['id'] ?>" <?= ui_reopen('another') && ($_POST['specialty_id'] ?? '') === (string)$specialty['id'] ? 'selected' : '' ?>><?= h($specialty['name']) ?></option><?php endforeach ?></select></label>
 <div class="sheet-foot"><a class="button secondary" href="#" data-close>Cancelar</a><button class="button primary"><?= ui_icon('send', 18) ?>Radicar otra solicitud</button></div></form></dialog>
 <?php endif ?>
-<form method="post" class="spaced"><?= csrf() ?><input type="hidden" name="action" value="new"><button class="text-button">Hacer una solicitud con otros datos</button></form></div>
+<form method="post" class="new-request"><?= csrf() ?><input type="hidden" name="action" value="new"><p class="muted">¿Es para otro paciente o te equivocaste en los datos?</p><button class="button secondary"><?= ui_icon('users', 18) ?>Nueva solicitud con otros datos</button></form></div>
 <?php endif ?>
 </section><?php if ($page !== 'home'): ?><aside class="sidebar" aria-label="Ayuda para la solicitud"><div class="side-card request-help"><h3>Ayuda</h3>
 <details open><summary>¿Qué incluye la historia?</summary><p>El paquete completo de una atención: notas médicas, órdenes, fórmulas y anexos.</p></details>
