@@ -1608,3 +1608,16 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
 - **Antes.** Un enlace subrayado sin contexto al final de la página de estado.
 - **Ahora.** Un bloque separado con la pregunta «¿Es para otro paciente o te equivocaste en los datos?» y el botón «Nueva solicitud con otros datos», con ícono y sin subrayado. Hace lo mismo: limpia la sesión y vuelve al formulario.
 - **Validación.** En local se ve el bloque nuevo en la página de estado.
+
+**Corrección (2026-10-24, reporte del titular): «hice otra solicitud para la misma persona pero no se creó».**
+- **Diagnóstico en producción** (base y registros de Apache en Dokploy, solo lectura):
+  - La solicitud 37 se creó a las 12:54. A las 13:00:08 la página de estado cargó con la sesión intacta. A las 13:00:42 y 13:00:57 hubo dos `POST /?page=status` que redirigieron al formulario, y no se creó ninguna solicitud ni evento.
+  - Ese registro es idéntico al del botón «Nueva solicitud con otros datos» (su formulario no tiene `action`, y `clean-url.js` le pone `/?page=status`). Tras ese botón, la sesión ya no tiene la solicitud, y el segundo intento desde la página anterior también vuelve al formulario sin aviso.
+  - Una prueba en producción con un paciente ficticio (HC-261024-D108E37345 y HC-261024-B1BCB91FAA) creó la segunda solicitud sin problema: el botón del modal funciona.
+  - Causa: los dos botones se veían iguales (secundarios, con ícono, uno debajo del otro), y volver al formulario no decía nada.
+- **Arreglo:**
+  - «Solicitar otra historia del mismo paciente» es ahora el botón principal (relleno, con ícono +).
+  - El de abajo es «Solicitud para otro paciente» (contorno), con el texto «¿La historia es de **otro paciente** o escribiste mal algún dato? Empieza de nuevo con el formulario vacío.».
+  - Al usarlo aparece el aviso «Formulario listo para una solicitud nueva. La solicitud anterior sigue radicada.».
+  - `requirePatient()`: si un botón de la página de la solicitud llega sin la solicitud en la sesión, avisa «Esta página ya no está conectada a tu solicitud, así que no hicimos ningún cambio. Tu radicado sigue vigente…» en vez de volver en silencio. Decisión del titular: si la sesión vence, solo se avisa; la segunda historia no se habilita por el formulario.
+- **Validación.** En local: los dos botones se distinguen, el aviso del formulario nuevo aparece y un `POST another` sin la solicitud en la sesión muestra el aviso. `requests-admin` 64, `resend-ui` 19 y `run` 170 en verde.

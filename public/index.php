@@ -36,7 +36,11 @@ function requireStaff(): void { if (empty($_SESSION['admin_id'])) go('admin-logi
 function requireAdmin(): void { requireStaff(); if (($_SESSION['admin_role'] ?? 'admin') !== 'admin') { $_SESSION['flash'] = 'Esa sección es solo para administradores.'; $_SESSION['flash_tone'] = 'error'; go('deliveries'); } }
 function currentStaff(): array { return ['id' => (int)$_SESSION['admin_id'], 'role' => (string)($_SESSION['admin_role'] ?? 'admin'), 'name' => (string)($_SESSION['admin_name'] ?? '')]; }
 function requirePatient(): int {
-    if (empty($_SESSION['request_access']) || $_SESSION['request_access'] !== ($_SESSION['request_id'] ?? null)) go('home');
+    if (empty($_SESSION['request_access']) || $_SESSION['request_access'] !== ($_SESSION['request_id'] ?? null)) {
+        // Un botón de la página de la solicitud sin la solicitud en la sesión: se explica en vez de volver al formulario en silencio.
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') { $_SESSION['flash'] = 'Esta página ya no está conectada a tu solicitud, así que no hicimos ningún cambio. Tu radicado sigue vigente: revisa el correo o el WhatsApp donde lo recibiste.'; $_SESSION['flash_tone'] = 'info'; }
+        go('home');
+    }
     return (int) $_SESSION['request_access'];
 }
 if (isset($_SESSION['last_activity']) && time() - $_SESSION['last_activity'] > $app->config['session_seconds']) {
@@ -112,7 +116,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['csrf'] = bin2hex(random_bytes(32));
                 $_SESSION['flash'] = 'Radicamos tu segunda solicitud de historia clínica. Te enviaremos la respuesta a los mismos datos de contacto.';
                 go($app->request($id)['status'] === 'awaiting_selection' ? 'appointments' : 'status');
-            case 'new': unset($_SESSION['request_id'], $_SESSION['request_access']); go('home');
+            case 'new':
+                unset($_SESSION['request_id'], $_SESSION['request_access']);
+                $_SESSION['flash'] = 'Formulario listo para una solicitud nueva. La solicitud anterior sigue radicada.'; $_SESSION['flash_tone'] = 'info';
+                go('home');
             case 'login':
                 $app->limit('admin-login:' . $ip, 10, 900);
                 $admin = $app->db->one('SELECT * FROM admins WHERE email=? AND active=1 AND deleted_at IS NULL', [trim((string) ($_POST['email'] ?? ''))]);
