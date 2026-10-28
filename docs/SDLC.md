@@ -1678,3 +1678,5 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
 **Validación.**
 - `support` 90 en verde, con 5 nuevas: en charla activa no avisa; tras 2 h de silencio el mensaje llega al chat y sale el aviso; seguir escribiendo no repite el aviso; MENU recuerda el caso sin entrar al chat; HISTORIA la atiende el bot y el reporte sigue abierto.
 - `run` 170, `whatsapp` 103, `n8n-api` 30, `requests-admin` 67, `resend-ui` 19, `whatsapp-qr` 8 y las pruebas de los flujos de n8n en verde.
+
+**Despliegue (2026-10-28).** Push de `bb0c8b5` a main; Dokploy marcó el despliegue como *Done* en 1 min 19 s y el sitio responde. Falta probarlo en una conversación real con un reporte abierto.
