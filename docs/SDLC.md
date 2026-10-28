@@ -1658,3 +1658,23 @@ Reemplaza al azul noche y ámbar de «Tablero de turnos». La estructura (drawer
 **Validación.**
 - `whatsapp` 103 en verde, con 8 nuevas: ofrece otra al radicar; solo acepta 1 o 2; con 2 termina; ofrece otra tras rechazar la sugerencia; con 1 pide solo la fecha; con 2 esperando respuesta no ofrece otra; HISTORIA no radica y explica hasta cuándo; cuando el personal responde una, vuelve a permitir.
 - `run` 170, `requests-admin` 67, `n8n-api` 30, `support` 85, `resend-ui` 19 y las pruebas de los flujos de n8n en verde.
+
+## Bot de WhatsApp: aviso y comandos con un reporte abierto (RF-34, SCRUM-75)
+
+**Alcance.** Hallazgo del 2026-10-28: el titular reportó que el bot no respondía. En producción, el número tenía abierto el reporte #6 desde el 27 oct. Con un reporte abierto, cada mensaje iba en silencio al chat del personal, incluidos HISTORIA y MENU. El QR, n8n (mismo código que el repo) y la cola de salida funcionaban. Pedido del titular: que el paciente reciba un aviso y que MENU/HISTORIA sigan funcionando.
+
+**Requisito RF-34.**
+- Con un reporte abierto, el mensaje del paciente sigue llegando al chat del caso.
+- Si el chat del caso llevaba 2 h o más sin mensajes, el bot responde «Recibimos tu mensaje. Tu reporte *REF* sigue abierto y el personal te responderá por este chat…» y recuerda *HISTORIA*. En una charla activa no repite el aviso.
+- Un mensaje que es solo *HISTORIA* (o «historia clínica») lo atiende el bot y no entra al chat; el reporte sigue abierto.
+- *MENU* no muestra el menú (sus opciones 1 y 2 irían al chat): responde el mismo aviso del reporte abierto, sin entrar al chat.
+
+**Diseño.**
+- `SupportDesk::handle`: la conversación de solicitud (`intake_*`) se atiende antes que el caso abierto, para que los pasos de HISTORIA no se desvíen al chat.
+- Nuevo `whileOpen` con la regla del caso abierto; constante `OPEN_NOTICE_HOURS = 2`.
+- Sin cambios en n8n: con `handled=false` el flujo ya sigue con HISTORIA.
+- Pendiente: el diagrama del bot (`docs/diagramas/bot-whatsapp.drawio`) aún no está en el repositorio.
+
+**Validación.**
+- `support` 90 en verde, con 5 nuevas: en charla activa no avisa; tras 2 h de silencio el mensaje llega al chat y sale el aviso; seguir escribiendo no repite el aviso; MENU recuerda el caso sin entrar al chat; HISTORIA la atiende el bot y el reporte sigue abierto.
+- `run` 170, `whatsapp` 103, `n8n-api` 30, `requests-admin` 67, `resend-ui` 19, `whatsapp-qr` 8 y las pruebas de los flujos de n8n en verde.

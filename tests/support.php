@@ -28,7 +28,7 @@ function rejects(callable $fn, string $label, string $contains = ''): void {
     throw new RuntimeException('FAIL (no rechazó): ' . $label);
 }
 /** Último texto encolado para un número. */
-function lastTo(string $phone): string { global $db, $config; $row = $db->one("SELECT encrypted_body FROM whatsapp_outbox WHERE phone=? AND kind='text' ORDER BY id DESC LIMIT 1", [$phone]); return $row ? App\Crypto::open($row['encrypted_body'], $config['app_key']) : ''; }
+function lastTo(string $phone): string { global $db, $config; $row = $db->one("SELECT encrypted_body FROM whatsapp_outbox WHERE phone=? AND kind='text' AND encrypted_body IS NOT NULL ORDER BY id DESC LIMIT 1", [$phone]); return $row ? App\Crypto::open($row['encrypted_body'], $config['app_key']) : ''; }
 function inbound(string $id, string $phone, string $text): array { return ['entry' => [['changes' => [['value' => ['messages' => [['id' => $id, 'from' => $phone, 'type' => 'text', 'text' => ['body' => $text]]]]]]]]]; }
 function say(string $phone, string $text): void { global $bot; static $n = 0; $bot->receive(inbound('msg-' . (++$n) . '-' . bin2hex(random_bytes(3)), $phone, $text)); }
 /** Solicitud por WhatsApp para un documento sin historia (queda pendiente). */
@@ -165,6 +165,24 @@ try {
     file_put_contents($config['storage_path'] . '/foto.png', $png);
     rejects(fn() => $desk->send((int)$ticket['id'], $employeeView, 'foto', ['path' => $config['storage_path'] . '/foto.png', 'name' => 'foto.pdf']), 'El personal solo puede enviar PDF (se revisa el contenido, no el nombre)', 'PDF');
     rejects(fn() => $desk->send((int)$ticket['id'], $employeeView, '  '), 'Sin texto ni PDF no se envía nada', 'adjunta un PDF');
+    // --- Reporte abierto: aviso tras el silencio, MENU y HISTORIA (RF-34) ---
+    $chatSize = fn() => count($desk->ticket((int)$ticket['id'], $adminView, false)['messages']);
+    $before = $chatSize();
+    say($phone, '¿Ya quedó?');
+    check($chatSize() === $before + 1 && !str_contains(lastTo($phone), 'sigue abierto'), 'En una charla activa el mensaje va al chat y el bot no repite el aviso');
+    $db->run('UPDATE support_messages SET created_at=? WHERE ticket_id=?', [date('Y-m-d H:i:s', time() - 3 * 3600), $ticket['id']]);
+    say($phone, 'Hola, sigo esperando');
+    check($chatSize() === $before + 2 && str_contains(lastTo($phone), "Tu reporte *{$ticket['reference']}* sigue abierto") && str_contains(lastTo($phone), 'Recibimos tu mensaje'), 'Tras 2 h de silencio el mensaje llega al chat y el paciente recibe el aviso del reporte abierto');
+    $sentTexts = fn() => (int)$db->one("SELECT COUNT(*) n FROM whatsapp_outbox WHERE phone=? AND kind='text'", [$phone])['n'];
+    $sentBefore = $sentTexts();
+    say($phone, 'Gracias');
+    check($chatSize() === $before + 3 && $sentTexts() === $sentBefore, 'Seguir escribiendo después del aviso no genera otro');
+    say($phone, 'MENU');
+    check($chatSize() === $before + 3 && str_contains(lastTo($phone), 'sigue abierto') && str_contains(lastTo($phone), '*HISTORIA*') && !str_contains(lastTo($phone), 'Recibimos'), 'MENU con el reporte abierto recuerda el caso y cómo pedir otra historia, sin entrar al chat');
+    say($phone, 'Historia');
+    check($chatSize() === $before + 3 && !str_contains(lastTo($phone), 'sigue abierto') && $db->one('SELECT status FROM support_tickets WHERE id=?', [$ticket['id']])['status'] === 'open', 'HISTORIA con el reporte abierto la atiende el bot y el reporte sigue abierto');
+    $db->run('DELETE FROM whatsapp_sessions WHERE phone=?', [$phone]);
+
     $desk->close((int)$ticket['id'], $employeeView);
     check($db->one('SELECT status FROM support_tickets WHERE id=?', [$ticket['id']])['status'] === 'closed' && str_contains(lastTo($phone), 'quedó resuelto') && $staff->progress($employee)['day']['reports'] === 1, 'Cerrar el reporte avisa al paciente y cuenta en el avance del empleado');
     say($phone, 'hola');

@@ -9,7 +9,8 @@ namespace App;
  * solo se listan las historias enviadas a este WhatsApp para ese documento. «No me llegó / no abre» lo resuelve solo
  * reenviando la historia; lo demás abre un caso para el empleado que respondió esa historia (o el de menor carga)
  * y se le avisa en el panel (contador y aviso en pantalla). Mientras el caso está abierto, lo que escribe el paciente llega al chat del caso en el sistema y
- * el personal le contesta por el mismo número del bot. Los textos de los mensajes se guardan cifrados.
+ * el personal le contesta por el mismo número del bot. Si el chat llevaba horas en silencio, el bot le avisa que el caso
+ * sigue abierto; HISTORIA sigue llegando al bot y MENU recuerda el caso (RF-34). Los textos de los mensajes se guardan cifrados.
  * El paciente puede mandar fotos o PDF al chat del caso y el personal puede responder con un PDF (storage/support).
  */
 final class SupportDesk
@@ -23,6 +24,8 @@ final class SupportDesk
         '5' => ['other', 'Otro problema', true],
     ];
     private const SESSION_MINUTES = 30;
+    /** Horas de silencio en el chat del caso tras las que el bot avisa que el mensaje llegó al personal. */
+    private const OPEN_NOTICE_HOURS = 2;
     private const DOCUMENT_TRIES = 3;
     private const DELIVERED = ['sent', 'simulated', 'queued', 'sending', 'retry', 'uncertain', 'failed'];
     /** Adjuntos del chat: lo que puede mandar el paciente y lo que puede enviar el personal. */
@@ -42,19 +45,15 @@ final class SupportDesk
         $phone = preg_replace('/\D/', '', $phone);
         $text = trim($text);
         if ($phone === '') return false;
-        $ticket = $this->app->db->one("SELECT * FROM support_tickets WHERE phone=? AND status='open' ORDER BY id DESC LIMIT 1", [$phone]);
-        if ($ticket) {
-            if ($text === '' && !$media) return true;
-            $this->addMessage((int)$ticket['id'], 'in', $text, null, $messageId, $this->patientAttachment($media));
-            $this->app->db->run('UPDATE support_tickets SET unread=unread+1,updated_at=? WHERE id=?', [$this->app->now(), $ticket['id']]);
-            return true;
-        }
         $session = $this->app->db->one('SELECT * FROM whatsapp_sessions WHERE phone=? AND updated_at>?', [$phone, date('Y-m-d H:i:s', time() - 60 * self::SESSION_MINUTES)]);
         // Solicitud de historia conversando con el bot (WhatsAppIntake): tiene sus propias opciones y su cancelación.
+        // Va antes del caso abierto: el paciente pudo escribir HISTORIA con un reporte en curso.
         if ($session && str_starts_with($session['state'], 'intake_')) {
             return (new WhatsAppIntake($this->app))->step($phone, $messageId, $text, $session['state'], json_decode((string)$session['data'], true) ?: []);
         }
         $words = self::words($text);
+        $ticket = $this->app->db->one("SELECT * FROM support_tickets WHERE phone=? AND status='open' ORDER BY id DESC LIMIT 1", [$phone]);
+        if ($ticket) return $this->whileOpen($ticket, $phone, $messageId, $text, $words, $media);
         if ($session && (in_array('cancelar', $words, true) || in_array('menu', $words, true) || $text === '0')) {
             $this->endSession($phone);
             $this->reply($phone, 'Reporte cancelado.', $messageId, 'cancel');
@@ -66,6 +65,25 @@ final class SupportDesk
             return true;
         }
         return false;
+    }
+
+    /**
+     * Mensaje con un caso abierto (RF-34). HISTORIA sola la atiende el bot y MENU recuerda el caso; lo demás va al chat.
+     * Si el chat llevaba un rato en silencio, el paciente recibe el aviso de que su mensaje llegó al personal.
+     */
+    private function whileOpen(array $ticket, string $phone, string $messageId, string $text, array $words, ?array $media): bool
+    {
+        $command = $media ? '' : implode(' ', $words);
+        if (in_array($command, ['historia', 'historia clinica'], true)) return false;
+        $notice = "Tu reporte *{$ticket['reference']}* sigue abierto y el personal te responderá por este chat.\n\nSi necesitas otra historia clínica, escribe *HISTORIA*.";
+        if ($command === 'menu') { $this->reply($phone, $notice, $messageId, 'open-menu'); return true; }
+        if ($text === '' && !$media) return true;
+        $quiet = !$this->app->db->one('SELECT id FROM support_messages WHERE ticket_id=? AND created_at>? LIMIT 1',
+            [$ticket['id'], date('Y-m-d H:i:s', time() - 3600 * self::OPEN_NOTICE_HOURS)]);
+        $this->addMessage((int)$ticket['id'], 'in', $text, null, $messageId, $this->patientAttachment($media));
+        $this->app->db->run('UPDATE support_tickets SET unread=unread+1,updated_at=? WHERE id=?', [$this->app->now(), $ticket['id']]);
+        if ($quiet) $this->reply($phone, "Recibimos tu mensaje. $notice", $messageId, 'open-notice');
+        return true;
     }
 
     private function start(string $phone, string $messageId): void
